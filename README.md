@@ -2,7 +2,7 @@
 Made possible through funding provided by the Michael & Susan Dell Foundation and the efforts of:<br/>
 ![](images/brought-to-you-by.png)
 ## Introduction
-The Ed-Fi API Publisher is a utility that can be used to move data from one Ed-Fi ODS API v3.x instance to another. It operates as a standard API client against both API endpoints (source and target) and thus it does not require any special network configuration or direct ODS database access, and is also subject to all authorization and data policies (i.e. API Profiles) defined by the Ed-Fi ODS API endpoints with which it communicates.
+The Ed-Fi API Publisher is a utility that can be used to move data from one Ed-Fi ODS API v3.x instance to another. It operates as a standard API client against both API endpoints (source and target) and thus it does not require any special network configuration or direct ODS database access, and is also subject to all authorization performed by the Ed-Fi ODS API endpoints with which it communicates.
 
 Operationally, it can be used in a "Pull" model where it is deployed alongside a target (central) API and gathers data from multiple source APIs.
 <br/>
@@ -24,7 +24,7 @@ Currently the Ed-Fi API Publisher has the following known limitations:
 * Even with delete support added by exposing the primary key values, tracking and publishing deletions of Descriptors will still not be possible due to internal implementation details within the API.
 * Changes to primary keys in source API resources will currently result in stale copies of the "old" version of the resources (and all impacted dependencies) remaining in the target API.
 * Student/Staff/Parent UniqueId changes in the source API could result in the inability of the Ed-Fi API Publisher to continue publishing to the target API.
-* Profiles (for defining resource/property level data policies for API clients) are not yet supported by the API.
+* Profiles (for defining resource/property level data policies for API clients) are not yet supported by the Ed-Fi API Publisher.
 * Configuration support is only currently provided for:
     * SQL Server
     * Amazon AWS (using Systems Manager Parameter Store).
