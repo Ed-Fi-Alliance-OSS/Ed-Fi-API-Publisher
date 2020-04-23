@@ -1,0 +1,16 @@
+{
+  "connections": [
+    {
+      "name": "devSource",
+      "url": "http://localhost:54746/",
+      "key": "RDnTsr7bO8Wm6FiyhBMup",
+      "secret": "vEJ4iaMLfVp6FdQ7RTP9U"
+    },
+    {
+      "name": "devTarget",
+      "url": "http://localhost:54746/",
+      "key": "fK2aPG5ihEprXBDcj0WtL",
+      "secret": "IlBjywACL2r1YVHdZTDaO"
+    }
+  ]
+}
