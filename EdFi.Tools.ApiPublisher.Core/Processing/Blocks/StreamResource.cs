@@ -93,31 +93,44 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     // Allow processing to continue with no additional work on this resource
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                 }
-                
-                string totalCountHeaderValue = apiResponse.Headers.GetValues("total-count").FirstOrDefault();
 
-                if (totalCountHeaderValue == null)
+                // Try to get the count header from the response
+                if (!apiResponse.Headers.TryGetValues("total-count", out IEnumerable<string> headerValues))
                 {
-                    string responseContent = await apiResponse.Content.ReadAsStringAsync();
+                    // Publish an error for the resource to allow processing to continue. Feature is not supported
+                    _logger.Warn($"{message.ResourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing.");
+                    
+                    // Allow processing to continue with no additional work on this resource
+                    return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+                }
+                
+                string totalCountHeaderValue = headerValues.First();
+                _logger.Debug($"{message.ResourceUrl}: Total count header value = {totalCountHeaderValue}");
 
+                long totalCount;
+
+                try
+                {
+                    totalCount = long.Parse(totalCountHeaderValue);
+                }
+                catch (Exception)
+                {
                     // Publish an error for the resource to allow processing to continue, but to force failure.
-                    _logger.Error($"{message.ResourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing. Response: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                    _logger.Error($"{message.ResourceUrl}: Unable to convert Total-Count header value of '{totalCountHeaderValue}'  returned by the source API to an integer.");
                     
                     errorHandlingBlock.Post(new ErrorItemMessage
                     {
                         ResourceUrl = message.ResourceUrl,
                         Method = HttpMethod.Get.ToString(),
                         ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = responseContent,
+                        ResponseContent = $"Total-Count: {totalCountHeaderValue}",
                     });
                     
                     // Allow processing to continue without performing additional work on this resource.
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                 }
-                
-                _logger.Info($"{message.ResourceUrl}: Total count = {totalCountHeaderValue}");
 
-                long totalCount = long.Parse(totalCountHeaderValue);
+                _logger.Info($"{message.ResourceUrl}: Total count = {totalCount}");
 
                 long offset = 0;
                 int limit = message.PageSize;
