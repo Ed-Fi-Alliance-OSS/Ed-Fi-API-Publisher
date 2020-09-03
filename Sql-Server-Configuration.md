@@ -186,7 +186,6 @@ GO
 GRANT EXECUTE ON [dbo].[GetConfigurationValues] TO [<Domain or Machine Name, nvarchar, DOMAIN_OR_MACHINE>\<User Name, nvarchar, EdFiApiPublisher>]
 GRANT EXECUTE ON [dbo].[SetConfigurationValue] TO [<Domain or Machine Name, nvarchar, DOMAIN_OR_MACHINE>\<User Name, nvarchar, EdFiApiPublisher>]
 ```
-TODO: Review the `GRANT EXECUTE` statements here for accuracy (should just use EdFiApiPublisher user?).
 
 ## Configure API Connections
 
