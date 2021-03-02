@@ -210,3 +210,16 @@ Since the resource `id` values are not portable between Ed-Fi ODS databases, API
 When an API Profile is defined, it introduces an intentional requirement on the part of the API client to communicate with the Ed-Fi ODS API using profile-specific content types (e.g. _application/vnd.ed-fi.{resource}.{profile}.readable+json_). The reason for this behavior is that it is important for an API client to acknowledge that they are aware that they are reading or writing only _part_ of a resource rather than operating on the resource as a _whole_.  When extra JSON data is supplied in a POST request to the Ed-Fi ODS API, the request will be processed and the extraneous data will just be ignored. Without the explicit use of the content types, unexpected data loss could result.
 
 The Ed-Fi API Publisher does not currently automatically identify that use of a profile-based content type is required after interacting with either the source or target APIs. Thus, requests against such an API endpoint will currently fail.
+
+## Legal Information
+
+Copyright (c) 2020 Ed-Fi Alliance, LLC and contributors.
+
+Licensed under the [Apache License, Version 2.0](LICENSE) (the "License").
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+See [NOTICES](NOTICES.md) for additional copyright and license notifications.
