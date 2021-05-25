@@ -164,10 +164,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             string[] targetApiVersionParts = targetApiVersion.Split('.');
 
             // Try comparing Ed-Fi versions
-            if (Convert.ToInt32(sourceApiVersionParts[0]) >= 3 
-                && Convert.ToInt32(sourceApiVersionParts[1]) >= 1
-                && Convert.ToInt32(targetApiVersionParts[0]) >= 3 
-                && Convert.ToInt32(targetApiVersionParts[1]) >= 1)
+            if (IsAtLeastV31(sourceApiVersionParts) && IsAtLeastV31(targetApiVersionParts))
             {
                 var sourceEdFiVersion = GetEdFiStandardVersion(sourceVersionObject);
                 var targetEdFiVersion = GetEdFiStandardVersion(targetVersionObject);
@@ -182,7 +179,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 throw new NotSupportedException("The Ed-Fi API Publisher is not compatible with Ed-Fi ODS API versions prior to v3.1.");
                 // Consider: _logger.Warn("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
             }
-            
+
+            bool IsAtLeastV31(string[] apiVersionParts)
+            {
+                return Convert.ToInt32(apiVersionParts[0]) > 3 || (Convert.ToInt32(apiVersionParts[0]) == 3 && Convert.ToInt32(apiVersionParts[1]) >= 1);
+            }
+
             /*
              Sample responses:
              
