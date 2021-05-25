@@ -55,7 +55,11 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
                             
                             if (await reader.ReadAsync())
                             {
+#if NETCOREAPP
+                                string changeVersionsJson = reader.GetString(reader.GetOrdinal("ConfigurationValue"));
+#elif NETCOREAPP3_1
                                 string changeVersionsJson = reader.GetString("ConfigurationValue");
+#endif
                                 currentParameter = JObject.Parse(string.IsNullOrEmpty(changeVersionsJson) ? "{}" : changeVersionsJson);
                             }
 
