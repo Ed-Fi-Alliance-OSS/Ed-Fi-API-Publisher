@@ -59,6 +59,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             // Check connection configurations
             var connections = configuration.Get<ConnectionConfiguration>().Connections;
 
+            if (connections == null)
+            {
+                throw new ArgumentException("Connections have not been configured.");
+            }
+
             // If source and target connections are fully defined, we're done
             if (connections.Source.IsFullyDefined() && connections.Target.IsFullyDefined())
             {
