@@ -41,7 +41,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _errorPublisher = errorPublisher;
         }
         
-        public void ProcessChanges(ChangeProcessorRuntimeConfiguration configuration)
+        public async Task ProcessChangesAsync(ChangeProcessorRuntimeConfiguration configuration)
         {
             var processStopwatch = new Stopwatch();
             processStopwatch.Start();
@@ -56,13 +56,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             try
             {
                 // Check Ed-Fi API and Standard versions for compatibility
-                CheckApiVersions(sourceApiClient, targetApiClient).ConfigureAwait(false).GetAwaiter().GetResult();
+                await CheckApiVersionsAsync(configuration).ConfigureAwait(false);
 
                 // Determine if source API provides a snapshot, and apply the HTTP header to the client 
-                ApplySourceSnapshotIdentifier(sourceApiClient, sourceApiConnectionDetails);
+                await ApplySourceSnapshotIdentifierAsync(sourceApiClient, sourceApiConnectionDetails, configuration.SourceApiVersion)
+                    .ConfigureAwait(false);
 
                 // Establish the change window we're processing, if any.
-                var changeWindow = EstablishChangeWindow(sourceApiClient, sourceApiConnectionDetails, targetApiConnectionDetails);
+                var changeWindow = await EstablishChangeWindow(sourceApiClient, sourceApiConnectionDetails, targetApiConnectionDetails)
+                    .ConfigureAwait(false);
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
@@ -71,7 +73,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     return;
                 }
 
-                var postDependencyKeysByResourceKey = PrepareResourceDependencies(targetApiClient, options, authorizationFailureHandling, sourceApiConnectionDetails);
+                var postDependencyKeysByResourceKey = await PrepareResourceDependenciesAsync(targetApiClient, options, authorizationFailureHandling, sourceApiConnectionDetails)
+                    .ConfigureAwait(false);
 
                 // If we just wanted to know what resources are to be published, quit now.
                 if (options.WhatIf)
@@ -93,13 +96,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     publishErrorsIngestionBlock);
 
                 // Process all the deletions
-                var deleteTaskStatuses = ProcessDeletesToCompletion(
+                var deleteTaskStatuses = await ProcessDeletesToCompletionAsync(
                     changeWindow, 
                     postDependencyKeysByResourceKey, 
                     sourceApiClient, 
                     targetApiClient, 
                     options, 
-                    publishErrorsIngestionBlock);
+                    publishErrorsIngestionBlock)
+                    .ConfigureAwait(false);
 
                 // Indicate to the error handling that we're done feeding it errors.
                 publishErrorsIngestionBlock.Complete();
@@ -110,10 +114,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 EnsureProcessingWasSuccessful(postTaskStatuses, deleteTaskStatuses);
 
-                UpdateChangeVersionAsync(sourceApiConnectionDetails, targetApiConnectionDetails, changeWindow)
-                    .ConfigureAwait(false)
-                    .GetAwaiter()
-                    .GetResult();
+                await UpdateChangeVersionAsync(sourceApiConnectionDetails, targetApiConnectionDetails, changeWindow)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -126,14 +128,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private async Task CheckApiVersions(EdFiApiClient sourceApiClient, EdFiApiClient targetApiClient)
+        private async Task CheckApiVersionsAsync(ChangeProcessorRuntimeConfiguration configuration)
         {
+            var sourceApiClient = configuration.SourceApiClient;
+            var targetApiClient = configuration.TargetApiClient;
+            
             _logger.Debug($"Loading source and target API version information...");
             
             var sourceResponse = sourceApiClient.HttpClient.GetAsync("");
             var targetResponse = targetApiClient.HttpClient.GetAsync("");
 
-            await Task.WhenAll(sourceResponse, targetResponse);
+            await Task.WhenAll(sourceResponse, targetResponse).ConfigureAwait(false);
 
             if (!sourceResponse.Result.IsSuccessStatusCode)
             {
@@ -145,8 +150,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 throw new Exception($"Target API at '{targetApiClient.HttpClient.BaseAddress}' returned status code '{targetResponse.Result.StatusCode}' for request for version information.");
             }
             
-            string sourceJson = await sourceResponse.Result.Content.ReadAsStringAsync();
-            string targetJson = await targetResponse.Result.Content.ReadAsStringAsync();
+            string sourceJson = await sourceResponse.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
+            string targetJson = await targetResponse.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
 
             var sourceVersionObject = GetVersionObject(sourceJson, "Source");
             var targetVersionObject = GetVersionObject(targetJson, "Target");
@@ -325,16 +330,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private IDictionary<string, string[]> PrepareResourceDependencies(
+        private async Task<IDictionary<string, string[]>> PrepareResourceDependenciesAsync(
             EdFiApiClient targetApiClient, 
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling, 
             ApiConnectionDetails sourceApiConnectionDetails)
         {
             // Get the dependencies
-            var postDependencyKeysByResourceKey = _resourceDependencyProvider.GetDependenciesByResourcePath(
-                targetApiClient.HttpClient,
-                options.IncludeDescriptors);
+            var postDependencyKeysByResourceKey = 
+                await _resourceDependencyProvider.GetDependenciesByResourcePathAsync(
+                    targetApiClient.HttpClient,
+                    options.IncludeDescriptors)
+                .ConfigureAwait(false);
 
             // Remove the Publishing extension, if present on target -- we don't want to publish snapshots
             postDependencyKeysByResourceKey.Remove("/publishing/snapshots");
@@ -479,12 +486,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private void ApplySourceSnapshotIdentifier(
+        private async Task ApplySourceSnapshotIdentifierAsync(
             EdFiApiClient sourceApiClient,
-            ApiConnectionDetails sourceApiConnectionDetails)
+            ApiConnectionDetails sourceApiConnectionDetails,
+            Version sourceApiVersion)
         {
-            string snapshotIdentifier = GetSourceSnapshotIdentifierAsync(sourceApiClient)
-                .GetResultSafely();
+            string snapshotIdentifier = await GetSourceSnapshotIdentifierAsync(sourceApiClient, sourceApiVersion).ConfigureAwait(false);
 
             // Confirm that a snapshot exists or --force has been provided
             if (snapshotIdentifier == null)
@@ -502,14 +509,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private ChangeWindow EstablishChangeWindow(
+        private async Task<ChangeWindow> EstablishChangeWindow(
             EdFiApiClient sourceApiClient,
             ApiConnectionDetails sourceApiConnectionDetails,
             ApiConnectionDetails targetApiConnectionDetails)
         {
             // Get the current change version of the source database (or snapshot database)
-            long? currentSourceChangeVersion = GetCurrentSourceChangeVersionAsync(sourceApiClient)
-                .GetResultSafely();
+            long? currentSourceChangeVersion = await GetCurrentSourceChangeVersionAsync(sourceApiClient).ConfigureAwait(false);
 
             // Establish change window
             ChangeWindow changeWindow = null;
@@ -564,7 +570,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             return postTaskStatuses;
         }
 
-        private TaskStatus[] ProcessDeletesToCompletion(
+        private async Task<TaskStatus[]> ProcessDeletesToCompletionAsync(
             ChangeWindow changeWindow, 
             IDictionary<string, string[]> postDependenciesByResourcePath,
             EdFiApiClient sourceApiClient, 

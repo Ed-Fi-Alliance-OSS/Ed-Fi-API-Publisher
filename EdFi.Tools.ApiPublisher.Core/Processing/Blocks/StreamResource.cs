@@ -88,7 +88,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                 if (!apiResponse.IsSuccessStatusCode)
                 {
-                    await HandleResourceCountRequestError<TItemActionMessage>(message, errorHandlingBlock, apiResponse);
+                    await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
+                        .ConfigureAwait(false);
                     
                     // Allow processing to continue with no additional work on this resource
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
@@ -171,7 +172,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             }
         }
 
-        private static async Task HandleResourceCountRequestError<TItemActionMessage>(StreamResourceMessage message,
+        private static async Task HandleResourceCountRequestErrorAsync<TItemActionMessage>(StreamResourceMessage message,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock, HttpResponseMessage apiResponse)
         {
             string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -198,7 +199,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 ResourceUrl = message.ResourceUrl,
                 Method = HttpMethod.Get.ToString(),
                 ResponseStatus = apiResponse.StatusCode,
-                ResponseContent = apiResponse.Content.ReadAsStringAsync().GetResultSafely(),
+                ResponseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false),
             });
         }
     }

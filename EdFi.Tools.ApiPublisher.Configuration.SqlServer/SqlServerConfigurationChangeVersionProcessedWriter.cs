@@ -40,7 +40,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
             {
                 using (var conn = new SqlConnection(_connectionString.Value))
                 {
-                    await conn.OpenAsync();
+                    await conn.OpenAsync().ConfigureAwait(false);
 
                     string newParameterJson;
 
@@ -49,11 +49,11 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
                         cmd.CommandType = CommandType.StoredProcedure;
                         cmd.Parameters.Add(new SqlParameter("@configurationKeyPrefix", lastChangeVersionProcessedKey));
 
-                        using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow))
+                        using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow).ConfigureAwait(false))
                         {
                             var currentParameter = new JObject();
                             
-                            if (await reader.ReadAsync())
+                            if (await reader.ReadAsync().ConfigureAwait(false))
                             {
 #if NETCOREAPP
                                 string changeVersionsJson = reader.GetString(reader.GetOrdinal("ConfigurationValue"));

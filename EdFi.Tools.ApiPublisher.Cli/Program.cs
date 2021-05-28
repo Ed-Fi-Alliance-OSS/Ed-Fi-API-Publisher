@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Castle.MicroKernel.Registration;
 using Castle.Windsor;
 using EdFi.Tools.ApiPublisher.Core._Installers;
@@ -17,7 +18,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
     {
         private static readonly ILog Logger = LogManager.GetLogger(typeof(Program));
 
-        private static int Main(string[] args)
+        private static async Task<int> Main(string[] args)
         {
             InitializeLogging();
 
@@ -33,6 +34,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             catch (Exception ex)
             {
                 Logger.Error($"Configuration failed: {ex.Message}");
+
                 return -1;
             }
 
@@ -46,7 +48,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
                 Logger.Info($"Processing started.");
 
-                changeProcessor.ProcessChanges(changeProcessorConfiguration);
+                await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration).ConfigureAwait(false);
 
                 Logger.Info($"Processing complete.");
                 return 0;
