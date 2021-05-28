@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -54,6 +53,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             var targetApiClient = configuration.TargetApiClient;
             var options = configuration.Options;
 
+            _logger.Debug($"Options for processing:{Environment.NewLine}{JsonConvert.SerializeObject(options, Formatting.Indented)}");
+            
             try
             {
                 // Check Ed-Fi API and Standard versions for compatibility
@@ -344,6 +345,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 .ConfigureAwait(false);
 
             // Remove the Publishing extension, if present on target -- we don't want to publish snapshots
+            // This logic is obsolete starting with Ed-Fi ODS API v5.2
             postDependencyKeysByResourceKey.Remove("/publishing/snapshots");
             
             AdjustDependenciesForConfiguredAuthorizationConcerns();
@@ -722,22 +724,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             return deleteTaskStatuses;
         }
 
-        private bool DeleteResponseHasKeyValues(HttpResponseMessage getDeletesResponse)
-        {
-            // Inspect response body for presence of keyValues
-            var probeResponseContent = getDeletesResponse.Content.ReadAsStringAsync().GetResultSafely();
-
-            bool hasKeyValues = JArray.Parse(probeResponseContent).Any(x => x[EdFiApiConstants.KeyValuesPropertyName] != null);
-
-            if (!hasKeyValues)
-            {
-                _logger.Warn(
-                    "Unable to perform delete processing because response did not contain the natural key values which is required for inter-ODS operations.");
-            }
-
-            return hasKeyValues;
-        }
-
         private void EnsureProcessingWasSuccessful(TaskStatus[] postTaskStatuses, TaskStatus[] deleteTaskStatuses)
         {
             bool success = true;
@@ -1108,7 +1094,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     
                     if (blockCompletion.IsFaulted)
                     {
-                        _logger.Fatal($"Streaming task failure for {resourcePath}: {blockCompletion.Exception.ToString()}");
+                        _logger.Fatal($"Streaming task failure for {resourcePath}: {blockCompletion.Exception}");
                     }
                     
                     completedStreamingPagesByResourcePath.Add(resourcePaths[completedIndex],
