@@ -690,7 +690,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 _logger.Debug($"Probing source API for deletes support at '{probeUrl}'.");
                 
-                var probeResponse = sourceApiClient.HttpClient.GetAsync($"{probeUrl}?limit=1").GetResultSafely();
+                var probeResponse = await sourceApiClient.HttpClient.GetAsync($"{probeUrl}?limit=1").ConfigureAwait(false);
 
                 if (probeResponse.IsSuccessStatusCode)
                 {
