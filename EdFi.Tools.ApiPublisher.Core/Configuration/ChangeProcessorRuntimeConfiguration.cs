@@ -1,6 +1,7 @@
 using System;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using log4net;
+using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
@@ -62,5 +63,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public Options Options { get; }
         
         public string[] CommandLineArgs { get; set; }
+        
+        public Version SourceApiVersion { get; set; }
+        public Version TargetApiVersion { get; set; }
     }
 }

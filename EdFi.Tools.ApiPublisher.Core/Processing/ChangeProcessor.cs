@@ -18,6 +18,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
@@ -156,20 +157,24 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             var sourceVersionObject = GetVersionObject(sourceJson, "Source");
             var targetVersionObject = GetVersionObject(targetJson, "Target");
 
-            string sourceApiVersion = sourceVersionObject["version"].Value<string>();
-            string targetApiVersion = targetVersionObject["version"].Value<string>();
+            string sourceApiVersionText = sourceVersionObject["version"].Value<string>();
+            string targetApiVersionText = targetVersionObject["version"].Value<string>();
 
+            var sourceApiVersion = new Version(sourceApiVersionText);
+            var targetApiVersion = new Version(targetApiVersionText);
+
+            // Apply resolved API version number to the runtime configuration
+            configuration.SourceApiVersion = sourceApiVersion;
+            configuration.TargetApiVersion = targetApiVersion;
+            
             // Warn if API versions don't match
-            if (sourceApiVersion != targetApiVersion)
+            if (!sourceApiVersion.Equals(targetApiVersion))
             {
                 _logger.Warn($"Source API version {sourceApiVersion} and target API version {targetApiVersion} do not match.");
             }
-
-            string[] sourceApiVersionParts = sourceApiVersion.Split('.');
-            string[] targetApiVersionParts = targetApiVersion.Split('.');
-
+            
             // Try comparing Ed-Fi versions
-            if (IsAtLeastV31(sourceApiVersionParts) && IsAtLeastV31(targetApiVersionParts))
+            if (sourceApiVersion.IsAtLeast(3, 1) && targetApiVersion.IsAtLeast(3, 1))
             {
                 var sourceEdFiVersion = GetEdFiStandardVersion(sourceVersionObject);
                 var targetEdFiVersion = GetEdFiStandardVersion(targetVersionObject);
@@ -183,11 +188,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             {
                 throw new NotSupportedException("The Ed-Fi API Publisher is not compatible with Ed-Fi ODS API versions prior to v3.1.");
                 // Consider: _logger.Warn("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
-            }
-
-            bool IsAtLeastV31(string[] apiVersionParts)
-            {
-                return Convert.ToInt32(apiVersionParts[0]) > 3 || (Convert.ToInt32(apiVersionParts[0]) == 3 && Convert.ToInt32(apiVersionParts[1]) >= 1);
             }
 
             /*
@@ -808,10 +808,19 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             return deleteDependenciesByResourcePath;
         }
         
-        private async Task<string> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient)
+        private async Task<string> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)
         {
+            string snapshotsRelativePath;
+
             // Get available snapshot information
-            string snapshotsRelativePath = $"{EdFiApiConstants.DataManagementApiSegment}/publishing/snapshots";
+            if (sourceApiVersion.IsAtLeast(5, 2))
+            {
+                snapshotsRelativePath = $"{EdFiApiConstants.ChangeQueriesApiSegment}/snapshots";
+            }
+            else
+            {
+                snapshotsRelativePath = $"{EdFiApiConstants.DataManagementApiSegment}/publishing/snapshots";
+            }
             
             var snapshotsResponse = await sourceApiClient.HttpClient.GetAsync(snapshotsRelativePath)
                 .ConfigureAwait(false);
@@ -842,25 +851,31 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     return null;
                 }
                 
-                var snapshotTuple = 
+                var snapshot = 
                     snapshotResponseArray
-                    .OrderByDescending(jt =>
+                    .Select(jt =>
                     {
+                        string snapshotIdentifier = jt["snapshotIdentifier"].Value<string>();
                         string snapshotDateTimeText = jt["snapshotDateTime"].Value<string>();
 
-                        if (DateTime.TryParse(snapshotDateTimeText, out var snapshotDateTime))
+                        if (!DateTime.TryParse(snapshotDateTimeText, out var snapshotDateTimeValue))
                         {
-                            return snapshotDateTime;
+                            snapshotDateTimeValue = DateTime.MinValue;
                         }
-
-                        return DateTime.MinValue;
+                        
+                        return new
+                        {
+                            SnapshotIdentifier = snapshotIdentifier, 
+                            SnapshotDateTime = snapshotDateTimeValue,
+                            SnapshotDateTimeText = snapshotDateTimeText
+                        };
                     })
-                    .Select(jt => (jt["snapshotIdentifier"].Value<string>(), jt["snapshotDateTime"].Value<string>()))
-                    .FirstOrDefault();
+                    .OrderByDescending(x => x.SnapshotDateTime)
+                    .First();
 
-                _logger.Info($"Using snapshot identifier '{snapshotTuple.Item1}' created at '{snapshotTuple.Item2}'.");
+                _logger.Info($"Using snapshot identifier '{snapshot.SnapshotIdentifier}' created at '{snapshot.SnapshotDateTime}'.");
                 
-                return snapshotTuple.Item1;
+                return snapshot.SnapshotIdentifier;
             }
 
             string errorResponseText = await snapshotsResponse.Content.ReadAsStringAsync()
