@@ -49,6 +49,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
                     ["--resources"] = "Connections:Source:Resources",
+                    ["--excludeResources"] = "Connections:Source:ExcludeResources",
                     ["--treatForbiddenPostAsWarning"] = "Connections:Target:TreatForbiddenPostAsWarning",
                     ["--force"] = "Connections:Source:Force",
                 });
@@ -211,6 +212,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 yield return new KeyValuePair<string, string>(
                     $"Connections:{connectionType.ToString()}:Resources", 
                     namedApiConnectionDetails.Resources);
+            }
+            
+            if (!string.IsNullOrEmpty(namedApiConnectionDetails.ExcludeResources))
+            {
+                yield return new KeyValuePair<string, string>(
+                    $"Connections:{connectionType.ToString()}:ExcludeResources", 
+                    namedApiConnectionDetails.ExcludeResources);
             }
 
             // Treating Forbidden response as warning is only applicable for "target" connections

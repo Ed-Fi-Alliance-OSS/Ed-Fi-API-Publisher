@@ -382,6 +382,39 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     _logger.Debug(resourceListMessage);
                 }
             }
+            else if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.ExcludeResources))
+            {
+                _logger.Info($"Filtering processing to the following configured exclusion of source API resources: {sourceApiConnectionDetails.ExcludeResources}");
+
+                var configuredSourceApiResourcePathsExcluded = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.ExcludeResources);
+                
+                // Evaluate whether any of the included resources have a "retry" dependency
+                var retryDependenciesForConfiguredResourcePaths = configuredSourceApiResourcePathsExcluded
+                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
+                    .Select(p => $"{p}{RetryKeySuffix}")
+                    .ToArray();
+                
+                postDependencyKeysByResourceKey = FilterOutExcludedResourcesAndDependents(
+                    postDependencyKeysByResourceKey,
+                    configuredSourceApiResourcePathsExcluded
+                        .Concat(retryDependenciesForConfiguredResourcePaths).ToArray());
+
+                _logger.Info(
+                    $"{postDependencyKeysByResourceKey.Count} resources to be processed after removing dependent Ed-Fi resources.");
+
+                var reportableResources = GetReportableResources();
+
+                var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Select(x => Environment.NewLine + "\t" + x))))}";
+                
+                if (options.WhatIf)
+                {
+                    _logger.Info(resourceListMessage);
+                }
+                else
+                {
+                    _logger.Debug(resourceListMessage);
+                }
+            }
             else
             {
                 // Was non-filtered list of resources to be published requested?
@@ -429,6 +462,58 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
             }
 
+            IDictionary<string, string[]> FilterOutExcludedResourcesAndDependents(
+                IDictionary<string, string[]> dependenciesByResourcePath,
+                string[] excludedResourcePaths)
+            {
+                var resourcesToInclude = new HashSet<string>(dependenciesByResourcePath.Keys, StringComparer.OrdinalIgnoreCase);
+                var allExclusionTraceEntries = new List<string>();
+
+                foreach (string excludedResourcePath in excludedResourcePaths)
+                {
+                    allExclusionTraceEntries.Add(
+                        $"Processing dependencies for specifically requested resource '{excludedResourcePath}'...");
+                    
+                    var exclusionTraceEntries = new List<string>();
+                    
+                    RemoveDependentResources(excludedResourcePath, exclusionTraceEntries);
+
+                    allExclusionTraceEntries.AddRange(exclusionTraceEntries.Distinct());
+                }
+                
+                var filteredResources = new Dictionary<string, string[]>(
+                    dependenciesByResourcePath.Where(kvp => resourcesToInclude.Contains(kvp.Key)),
+                    StringComparer.OrdinalIgnoreCase);
+
+                if (_logger.IsDebugEnabled)
+                {
+                    _logger.Debug(
+                        $"Dependent resources were excluded, as follows:{Environment.NewLine}{string.Join(Environment.NewLine, allExclusionTraceEntries)}");
+                }
+
+                return filteredResources;
+
+                void RemoveDependentResources(string resourcePath, List<string> exclusionTraceEntries)
+                {
+                    resourcesToInclude.Remove(resourcePath);
+
+                    var dependentResourcePaths = dependenciesByResourcePath
+                        .Where(kvp => kvp.Value.Contains(resourcePath))
+                        .Select(kvp => kvp.Key);
+                    
+                    foreach (string dependentResourcePath in dependentResourcePaths)
+                    {
+                        if (!dependentResourcePath.EndsWith("Descriptors"))
+                        {
+                            exclusionTraceEntries.Add(
+                                $"   Removing dependent '{dependentResourcePath}' of '{resourcePath}'...");
+                        }
+
+                        RemoveDependentResources(dependentResourcePath, exclusionTraceEntries);
+                    }
+                }
+            }
+            
             IDictionary<string, string[]> FilterToRequestedResourcesAndDependencies(
                 IDictionary<string, string[]> dependenciesByResourcePath,
                 string[] requestedResourcePaths)
@@ -443,7 +528,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                     var inclusionTraceEntries = new List<string>();
 
-                    AddDependentResources(requestedResourcePath, inclusionTraceEntries);
+                    AddDependencyResources(requestedResourcePath, inclusionTraceEntries);
 
                     allInclusionTraceEntries.AddRange(inclusionTraceEntries.Distinct());
                 }
@@ -460,7 +545,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 return filteredResources;
 
-                void AddDependentResources(string resourcePath, List<string> inclusionTraceEntries)
+                void AddDependencyResources(string resourcePath, List<string> inclusionTraceEntries)
                 {
                     resourcesToInclude.Add(resourcePath);
 
@@ -472,7 +557,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                                 $"   Adding dependency '{dependencyResourcePath}' of '{resourcePath}'...");
                         }
 
-                        AddDependentResources(dependencyResourcePath, inclusionTraceEntries);
+                        AddDependencyResources(dependencyResourcePath, inclusionTraceEntries);
                     }
                 }
             }
