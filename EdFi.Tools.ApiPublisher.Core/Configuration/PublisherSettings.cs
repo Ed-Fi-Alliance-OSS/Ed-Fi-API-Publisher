@@ -27,7 +27,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         
         public int MaxRetryAttempts { get; set; } = 5;
 
-        private int _maxDegreeOfParallelismForPostResourceItem;
+        private int _maxDegreeOfParallelismForPostResourceItem = 20;
         
         public int MaxDegreeOfParallelismForPostResourceItem
         {
@@ -58,7 +58,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             }
         }
 
-        public int MaxDegreeOfParallelismForStreamResourcePages { get; set; } = 10;
+        public int MaxDegreeOfParallelismForStreamResourcePages { get; set; } = 5;
 
         public int StreamingPagesWaitDurationSeconds { get; set; } = 10;
 
