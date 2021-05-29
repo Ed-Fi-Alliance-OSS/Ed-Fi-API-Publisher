@@ -1,0 +1,30 @@
+DECLARE 
+    @applicationId INT, 
+    @applicationEducationOrganizationId INT,
+    @apiClientId INT
+
+-- Get the ApplicationId for the minimal sandbox
+SELECT  @applicationId = ApplicationId
+FROM    EdFi_Admin.dbo.Applications
+WHERE   ApplicationName = 'Default Sandbox Application Minimal'
+
+-- Set the claim set associated with the minimal sandbox to the API Publisher writer
+UPDATE  EdFi_Admin.dbo.Applications
+SET     ClaimSetName = 'Ed-Fi API Publisher - Writer'
+WHERE   ApplicationId = @applicationId
+
+-- Add association of Application to Grand Bend ISD
+INSERT INTO EdFi_Admin.dbo.ApplicationEducationOrganizations(Application_ApplicationId, EducationOrganizationId)
+VALUES (@applicationId, 255901)
+
+SELECT @applicationEducationOrganizationId = SCOPE_IDENTITY()
+
+-- Get the API client for application's minimal sandbox
+SELECT  @apiClientId = ApiClientId
+FROM    EdFi_Admin.dbo.ApiClients
+WHERE   Application_ApplicationId = @applicationId
+        AND Name = 'Minimal Demonstration Sandbox'
+
+-- Associate the API Client with Grand Bend ISD
+INSERT INTO EdFi_Admin.dbo.ApiClientApplicationEducationOrganizations(ApiClient_ApiClientId, ApplicationEducationOrganization_ApplicationEducationOrganizationId)
+VALUES (@apiClientId, @applicationEducationOrganizationId)
