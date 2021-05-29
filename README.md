@@ -22,13 +22,13 @@ If a source API supports the "Change Queries" feature, the Ed-Fi API Publisher w
 
 ## Quick Start
 
-To demonstrate how the API Publisher works, this exercise copies all the data from [the sample hosted Ed-Fi ODS API](https://api.ed-fi.org) to a local sandbox Ed-Fi ODS API using the API client for the "minimal" template.
+To demonstrate how the API Publisher works, this exercise copies all the data from [the sample hosted Ed-Fi ODS API](https://api.ed-fi.org) to a local sandbox Ed-Fi ODS API using the API client for the "minimal" template. (The database scripts are written for SQL Server.)
 
 ### Configure Local Sandbox Environment
 
 Before using the API Publisher on a target ODS, you must create and configure an API client with the appropriate permissions for publishing.
 
-Create and assign a claim set for the API Publisher by running the following SQL Server database scripts:
+Create and assign a claim set for the API Publisher by running the following database scripts:
   * [Create-API-Publisher-Writer-Security-Metadata.sql](QuickStart/SqlServer/Create-API-Publisher-Writer-Security-Metadata.sql)
   * [Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql](QuickStart/SqlServer/Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql)
 
@@ -52,20 +52,28 @@ FROM    EdFi_Admin.dbo.ApiClients
 WHERE   Name = 'Minimal Demonstration Sandbox'
 ```
 
-Execute the Ed-Fi API Publisher using the command-line with the following arguments:
+The following table shows the command-line arguments that will be used for publishing.
+
+> NOTE: Due to the nature of the Quick Start configuration (assuming SQL Server and the Ed-Fi-ODS API are running on a local development machine), we'll limit the parallelism for POST requests to `5`. Server-based architectures should be able to accommodate much higher numbers.
+
+| Parameter                                     |     | Value                             |
+| --------------------------------------------- | --- | --------------------------------- |
+| `--sourceUrl`                                 | `=` | `https://api.ed-fi.org/v5.2/api/` |
+| `--sourceKey`                                 | `=` | `RvcohKz9zHI4`                    |
+| `--sourceSecret`                              | `=` | `E1iEFusaNf81xzCxwHfbolkC`        |
+| `--targetUrl`                                 | `=` | `http://localhost:54746/`         |
+| `--targetKey`                                 | `=` | (Minimal Sandbox API _key_)       |
+| `--targetSecret`                              | `=` | (Minimal Sandbox API _secret_)    |
+| `--force`                                     | `=` | `true`                            |
+| `--maxDegreeOfParallelismForPostResourceItem` | `=` | `5`                               |
+| `--includeDescriptors`                        | `=` | `true`                            |
+| `--excludeResources`                          | `=` | `surveys`                         |
+
+Run the Ed-Fi API Publisher from the folder containing all the binaries by executing the following command (be sure to substitute your own sandbox API client's key/secret):
 ```
-.\EdFiApiPublisher.exe
-    --sourceUrl=https://api.ed-fi.org/v5.2/api/
-    --sourceKey=RvcohKz9zHI4
-    --sourceSecret=E1iEFusaNf81xzCxwHfbolkC
-    --targetUrl=http://localhost:54746/
-    --targetKey=minimal_sandbox_API_key
-    --targetSecret=minimal_sandbox_API_secret
-    --force=true
-    --includeDescriptors=true
-    --excludeResources=surveys
+.\EdFiApiPublisher.exe --sourceUrl=https://api.ed-fi.org/v5.2/api/ --sourceKey=RvcohKz9zHI4 --sourceSecret=E1iEFusaNf81xzCxwHfbolkC --targetUrl=http://localhost:54746/ --targetKey=minimal_sandbox_API_key --targetSecret=minimal_sandbox_API_secret --force=true --maxDegreeOfParallelismForPostResourceItem=5 --includeDescriptors=true --excludeResources=surveys
 ```
-NOTE: The `--excludeResources` flag is used to prevent trying to move any survey data due to an issue with the security metadata (described in [ODS-4974](https://tracker.ed-fi.org/browse/ODS-4974)) in the Ed-Fi ODS API v5.2 release. If you remove this argument, the publishing operation will fail due to unsatisfied dependencies in the data.
+> NOTE: The `--excludeResources` flag is used to prevent trying to move any survey data due to an issue with the security metadata (described in [ODS-4974](https://tracker.ed-fi.org/browse/ODS-4974)) in the Ed-Fi ODS API v5.2 release. If you remove this argument, the publishing operation will fail due to unsatisfied dependencies in the data.
 
 ## Known Limitations / Issues
 

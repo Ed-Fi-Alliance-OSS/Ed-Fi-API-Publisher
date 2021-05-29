@@ -1,3 +1,6 @@
+USE EdFi_Security
+GO
+
 BEGIN
     DECLARE
         @applicationId AS INT,

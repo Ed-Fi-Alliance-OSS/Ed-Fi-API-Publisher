@@ -867,7 +867,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             string errorResponseText = await snapshotsResponse.Content.ReadAsStringAsync()
                 .ConfigureAwait(false);
 
-            _logger.Error($"Unable to get snapshot identifier from API at '{sourceApiClient.HttpClient.BaseAddress}'. Request for available snapshots returned status '{snapshotsResponse.StatusCode}' with message body: {errorResponseText}");
+            _logger.Error($"Unable to get snapshot identifier from API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Request for available snapshots returned status '{snapshotsResponse.StatusCode}' with message body: {errorResponseText}");
 
             return null;
         }

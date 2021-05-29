@@ -40,23 +40,14 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
                 BaseAddress = new Uri(apiConnectionDetails.Url.EnsureSuffixApplied("/"))
             };
 
-            var sourceBearerToken = GetBearerTokenAsync(
-                    _tokenRefreshHttpClient,
-                    apiConnectionDetails.Key,
-                    apiConnectionDetails.Secret,
-                    apiConnectionDetails.Scope)
-                .ConfigureAwait(false)
-                .GetAwaiter()
-                .GetResult();
-
-            _httpClient.DefaultRequestHeaders.Authorization =
-                AuthenticationHeaderValue.Parse($"Bearer {sourceBearerToken}");
-
             // Create a separate HttpClient for token refreshes to avoid possible "Snapshot-Identifier" header presence
             _tokenRefreshHttpClient = new HttpClient(httpClientHandler)
             {
                 BaseAddress = new Uri(apiConnectionDetails.Url.EnsureSuffixApplied("/"))
             };
+
+            // Get initial bearer token for Ed-Fi ODS API
+            RefreshBearerToken(true);
             
             // Refresh the bearer tokens periodically
             _bearerTokenRefreshTimer = new Timer(RefreshBearerToken,
@@ -137,19 +128,41 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
         
         private void RefreshBearerToken(object state)
         {
-            _logger.Info("Refreshing bearer token.");
+            bool isInitializing = ((bool?) state).GetValueOrDefault();
+            
+            if (isInitializing)
+            {
+                _logger.Info("Retrieving initial bearer token.");
+            }
+            else
+            {
+                _logger.Info("Refreshing bearer token.");
+            }
 
             try
             {
-                var bearerToken = GetBearerTokenAsync(_tokenRefreshHttpClient, ConnectionDetails.Key, ConnectionDetails.Secret, ConnectionDetails.Scope);
+                var bearerToken = GetBearerTokenAsync(_tokenRefreshHttpClient, ConnectionDetails.Key, ConnectionDetails.Secret, ConnectionDetails.Scope)
+                    .ConfigureAwait(false).GetAwaiter().GetResult();
 
                 HttpClient.DefaultRequestHeaders.Authorization =
                     AuthenticationHeaderValue.Parse($"Bearer {bearerToken}");
-                
-                _logger.Info("Bearer token refresh successful.");
+
+                if (isInitializing)
+                {
+                    _logger.Info("Bearer token retrieved successfully.");
+                }
+                else
+                {
+                    _logger.Info("Bearer token refreshed successfully.");
+                }
             }
             catch (Exception ex)
             {
+                if (isInitializing)
+                {
+                    throw new Exception("Unable to obtain initial bearer token.", ex);
+                }
+                
                 _logger.Error($"Refresh of bearer token failed. Token may expire soon resulting in 401 responses.{Environment.NewLine}{ex}");
             }
         }
