@@ -10,7 +10,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Plaintext
         
         public Task SetProcessedChangeVersionAsync(string sourceConnectionName, string targetConnectionName, long changeVersion)
         {
-            _logger.Warn("Plaintext connections don't currently support writing back updated change versions.");
+            _logger.Warn("Plaintext connections don't support writing back updated change versions.");
             return Task.FromResult(0);
         }
     }
