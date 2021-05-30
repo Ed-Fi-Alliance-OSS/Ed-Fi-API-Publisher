@@ -875,14 +875,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private async Task<long?> GetCurrentSourceChangeVersionAsync(EdFiApiClient sourceApiClient)
         {
             // Get current source version information
-            const string availableChangeVersionsPath = "changeQueries/v3/availableChangeVersions";
+            string availableChangeVersionsRelativePath = $"{EdFiApiConstants.ChangeQueriesApiSegment}/availableChangeVersions";
             
-            var versionResponse = await sourceApiClient.HttpClient.GetAsync(availableChangeVersionsPath)
+            var versionResponse = await sourceApiClient.HttpClient.GetAsync(availableChangeVersionsRelativePath)
                 .ConfigureAwait(false);
 
             if (!versionResponse.IsSuccessStatusCode)
             {
-                _logger.Warn($"Unable to get current change version from source API at '{sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsPath}' (response status: {versionResponse.StatusCode}). Full synchronization will always be performed against this source, and any concurrent changes made against the source may cause change processing to produce unreliable results.");
+                _logger.Warn($"Unable to get current change version from source API at '{sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath}' (response status: {versionResponse.StatusCode}). Full synchronization will always be performed against this source, and any concurrent changes made against the source may cause change processing to produce unreliable results.");
                 return null;
             }
             
@@ -890,7 +890,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 .ConfigureAwait(false);
 
             _logger.Debug(
-                $"Available change versions request from {sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsPath} returned {versionResponse.StatusCode}: {versionResponseText}");
+                $"Available change versions request from {sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath} returned {versionResponse.StatusCode}: {versionResponseText}");
 
             try
             {
