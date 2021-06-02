@@ -1,32 +1,33 @@
 using System;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using log4net;
+using Microsoft.Extensions.Configuration;
 using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-    public class ChangeProcessorRuntimeConfiguration
+    public class ChangeProcessorConfiguration
     {
         private readonly Lazy<EdFiApiClient> _sourceApiClient;
         private readonly Lazy<EdFiApiClient> _targetApiClient;
 
-        private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeProcessorRuntimeConfiguration));
+        private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeProcessorConfiguration));
         
-        public ChangeProcessorRuntimeConfiguration(
-            string[] commandLineArgs,
+        public ChangeProcessorConfiguration(
             AuthorizationFailureHandling[] authorizationFailureHandling,
             ApiConnectionDetails sourceApiConnectionDetails,
             ApiConnectionDetails targetApiConnectionDetails,
             Func<EdFiApiClient> sourceApiClientFactory,
             Func<EdFiApiClient> targetApiClientFactory,
-            Options options)
+            Options options,
+            IConfigurationSection configurationStoreSection)
         {
-            CommandLineArgs = commandLineArgs;
             AuthorizationFailureHandling = authorizationFailureHandling;
             SourceApiConnectionDetails = sourceApiConnectionDetails;
             TargetApiConnectionDetails = targetApiConnectionDetails;
             Options = options;
-            
+            ConfigurationStoreSection = configurationStoreSection;
+
             _sourceApiClient = new Lazy<EdFiApiClient>(() =>
             {
                 // Establish connection to source API
@@ -61,9 +62,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         }
         
         public Options Options { get; }
-        
-        public string[] CommandLineArgs { get; set; }
-        
+        public IConfigurationSection ConfigurationStoreSection { get; }
+
         public Version SourceApiVersion { get; set; }
         public Version TargetApiVersion { get; set; }
     }

@@ -5,6 +5,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
     public interface IChangeProcessor
     {
-        Task ProcessChangesAsync(ChangeProcessorRuntimeConfiguration configuration);
+        Task ProcessChangesAsync(ChangeProcessorConfiguration configuration);
     }
 }

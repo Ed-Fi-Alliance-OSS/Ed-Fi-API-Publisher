@@ -7,18 +7,10 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 
 namespace EdFi.Tools.ApiPublisher.Configuration.Aws._Installers
 {
-    [ApiConnectionsConfigurationSourceName("aws-parameter-store")]
+    [ApiConnectionsConfigurationSourceName("awsParameterStore")]
 
     public class EdFiToolsApiPublisherConfigurationAwsInstaller : RegistrationMethodsInstallerBase
     {
-        protected virtual void RegisterIAwsOptionsProvider(IWindsorContainer container)
-        {
-            container.Register(
-                Component
-                    .For<IAwsOptionsProvider>()
-                    .ImplementedBy<AwsOptionsProvider>());
-        }
-
         protected virtual void RegisterIChangeVersionProcessedWriter(IWindsorContainer container)
         {
             container.Register(

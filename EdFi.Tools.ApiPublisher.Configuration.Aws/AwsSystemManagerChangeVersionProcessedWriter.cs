@@ -2,8 +2,10 @@ using System;
 using System.Threading.Tasks;
 using Amazon.SimpleSystemsManagement;
 using Amazon.SimpleSystemsManagement.Model;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using log4net;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -11,18 +13,18 @@ namespace EdFi.Tools.ApiPublisher.Configuration.Aws
 {
     public class AwsSystemManagerChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
-        private readonly IAmazonSimpleSystemsManagement _amazonSimpleSystemsManagement;
-
         private readonly ILog _logger = LogManager.GetLogger(typeof(AwsSystemManagerChangeVersionProcessedWriter));
         
-        public AwsSystemManagerChangeVersionProcessedWriter(IAwsOptionsProvider awsOptionsProvider)
+        public async Task SetProcessedChangeVersionAsync(
+            string sourceConnectionName,
+            string targetConnectionName,
+            long changeVersion,
+            IConfigurationSection configurationStoreSection)
         {
-            _amazonSimpleSystemsManagement = awsOptionsProvider.GetOptions().CreateServiceClient<IAmazonSimpleSystemsManagement>();
-        }
-        
-        public async Task SetProcessedChangeVersionAsync(string sourceConnectionName, string targetConnectionName, long changeVersion)
-        {
-            var currentParameter = await GetParameterValueAsync(sourceConnectionName)
+            var awsOptions = configurationStoreSection.GetAWSOptions("awsParameterStore");
+            var amazonSimpleSystemsManagement = awsOptions.CreateServiceClient<IAmazonSimpleSystemsManagement>();
+
+            var currentParameter = await GetParameterValueAsync(amazonSimpleSystemsManagement, sourceConnectionName)
                 .ConfigureAwait(false);
 
             // Assign the new "LastChangeVersionProcessed" value
@@ -31,7 +33,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.Aws
             // Serialize the parameter's values
             string newParameterJson = currentParameter.ToString(Formatting.None);
 
-            string parameterName = $"/ed-fi/publisher/connections/{sourceConnectionName}/lastChangeVersionsProcessed";
+            string parameterName = $"{ConfigurationStoreHelper.Key(sourceConnectionName)}/lastChangeVersionsProcessed";
 
             var putRequest = new PutParameterRequest
             {
@@ -41,7 +43,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.Aws
                 Overwrite = true,
             };
 
-            var response = await _amazonSimpleSystemsManagement.PutParameterAsync(putRequest)
+            var response = await amazonSimpleSystemsManagement.PutParameterAsync(putRequest)
                 .ConfigureAwait(false);
 
             if ((int) response.HttpStatusCode >= 400)
@@ -51,9 +53,11 @@ namespace EdFi.Tools.ApiPublisher.Configuration.Aws
             }
         }
 
-        private async Task<JObject> GetParameterValueAsync(string sourceConnectionName)
+        private async Task<JObject> GetParameterValueAsync(
+            IAmazonSimpleSystemsManagement amazonSimpleSystemsManagement,
+            string sourceConnectionName)
         {
-            string parameterName = $"/ed-fi/publisher/connections/{sourceConnectionName}/lastChangeVersionsProcessed";
+            string parameterName = $"{ConfigurationStoreHelper.Key(sourceConnectionName)}/lastChangeVersionsProcessed";
             
             var getRequest = new GetParameterRequest
             {
@@ -64,7 +68,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.Aws
 
             try
             {
-                getResponse = await _amazonSimpleSystemsManagement.GetParameterAsync(getRequest).ConfigureAwait(false);
+                getResponse = await amazonSimpleSystemsManagement.GetParameterAsync(getRequest).ConfigureAwait(false);
             }
             catch (ParameterNotFoundException)
             {

@@ -16,29 +16,20 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
         private readonly ILog _logger =
             LogManager.GetLogger(typeof(SqlServerConfigurationChangeVersionProcessedWriter));
 
-        private readonly Lazy<string> _connectionString;
-
-        public SqlServerConfigurationChangeVersionProcessedWriter(IAppSettingsConfigurationProvider appSettingsConfigurationProvider)
-        {
-            _connectionString = new Lazy<string>(
-                () =>
-                {
-                    var configuration = appSettingsConfigurationProvider.GetConfiguration();
-                    return configuration.GetConnectionString("SqlServerConfiguration");
-                });
-        }
-
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
             string targetConnectionName,
-            long changeVersion)
+            long changeVersion,
+            IConfigurationSection configurationStoreSection)
         {
+            var sqlServerConfiguration = configurationStoreSection.Get<SqlServerConfigurationStore>().SqlServer;
+
             string lastChangeVersionProcessedKey =
-                $"/ed-fi/publisher/connections/{sourceConnectionName}/lastChangeVersionsProcessed";
+                $"{ConfigurationStoreHelper.Key(sourceConnectionName)}/lastChangeVersionsProcessed";
 
             try
             {
-                using (var conn = new SqlConnection(_connectionString.Value))
+                using (var conn = new SqlConnection(sqlServerConfiguration.ConnectionString))
                 {
                     await conn.OpenAsync().ConfigureAwait(false);
 

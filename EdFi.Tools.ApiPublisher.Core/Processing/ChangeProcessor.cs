@@ -41,7 +41,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _errorPublisher = errorPublisher;
         }
         
-        public async Task ProcessChangesAsync(ChangeProcessorRuntimeConfiguration configuration)
+        public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration)
         {
             var processStopwatch = new Stopwatch();
             processStopwatch.Start();
@@ -116,7 +116,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 EnsureProcessingWasSuccessful(postTaskStatuses, deleteTaskStatuses);
 
-                await UpdateChangeVersionAsync(sourceApiConnectionDetails, targetApiConnectionDetails, changeWindow)
+                await UpdateChangeVersionAsync(configuration, changeWindow)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -130,7 +130,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private async Task CheckApiVersionsAsync(ChangeProcessorRuntimeConfiguration configuration)
+        private async Task CheckApiVersionsAsync(ChangeProcessorConfiguration configuration)
         {
             var sourceApiClient = configuration.SourceApiClient;
             var targetApiClient = configuration.TargetApiClient;
@@ -287,11 +287,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         }
 
         private async Task UpdateChangeVersionAsync(
-            ApiConnectionDetails sourceApiConnectionDetails, 
-            ApiConnectionDetails targetApiConnectionDetails, 
+            ChangeProcessorConfiguration configuration, 
             ChangeWindow changeWindow)
         {
-            // If we have a name for source connection, write the change version
+            var sourceApiConnectionDetails = configuration.SourceApiConnectionDetails;
+            var targetApiConnectionDetails = configuration.TargetApiConnectionDetails;
+            var configurationStoreSection = configuration.ConfigurationStoreSection;
+            
+            // If we have a name for source and target connections, write the change version
             if (!string.IsNullOrEmpty(sourceApiConnectionDetails.Name)
                 && !string.IsNullOrEmpty(targetApiConnectionDetails.Name))
             {
@@ -309,7 +312,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     await _changeVersionProcessedWriter.SetProcessedChangeVersionAsync(
                         sourceApiConnectionDetails.Name,
                         targetApiConnectionDetails.Name,
-                        changeWindow.MaxChangeVersion)
+                        changeWindow.MaxChangeVersion,
+                        configurationStoreSection)
                         .ConfigureAwait(false);
                 }
             }
@@ -580,12 +584,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         {
             string snapshotIdentifier = await GetSourceSnapshotIdentifierAsync(sourceApiClient, sourceApiVersion).ConfigureAwait(false);
 
-            // Confirm that a snapshot exists or --force has been provided
+            // Confirm that a snapshot exists or --ignoreIsolation=true has been provided
             if (snapshotIdentifier == null)
             {
-                if (sourceApiConnectionDetails.Force != true)
+                if (sourceApiConnectionDetails.IgnoreIsolation != true)
                 {
-                    string message = $"Snapshot identifier could not be obtained from API at '{sourceApiConnectionDetails.Url}', and \"force\" option was not specified. Publishing cannot proceed due to lack of guaranteed isolation from ongoing changes at the source. Use --force (or corresponding configuration value) to force processing.";
+                    string message = $"Snapshot identifier could not be obtained from API at '{sourceApiConnectionDetails.Url}', and \"force\" option was not specified. Publishing cannot proceed due to lack of guaranteed isolation from ongoing changes at the source. Use --ignoreIsolation=true (or a corresponding configuration value) to force processing.";
                     throw new Exception(message);
                 }
             }

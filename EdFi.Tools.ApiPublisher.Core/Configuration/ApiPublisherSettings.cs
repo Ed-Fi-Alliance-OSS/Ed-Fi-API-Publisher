@@ -4,7 +4,7 @@ using log4net;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-    public class PublisherSettings
+    public class ApiPublisherSettings
     {
         public Options Options { get; set; }
 

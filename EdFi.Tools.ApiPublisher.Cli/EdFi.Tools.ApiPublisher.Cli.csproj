@@ -21,22 +21,26 @@
       <None Update="log4net.config">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
-      <None Update="publisherSettings.json">
+      <None Update="apiPublisherSettings.json">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
       <None Update="plainTextNamedConnections.json">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
-      <None Update="appsettings.json">
+      <None Update="appSettings.json">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
       <None Update="appSettings.Development.json">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="configurationStoreSettings.json">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
     </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Configuration.Aws\EdFi.Tools.ApiPublisher.Configuration.Aws.csproj" />
+      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Configuration.PostgreSql\EdFi.Tools.ApiPublisher.Configuration.PostgreSql.csproj" />
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Configuration.SqlServer\EdFi.Tools.ApiPublisher.Configuration.SqlServer.csproj" />
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj" />
     </ItemGroup>

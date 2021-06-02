@@ -25,7 +25,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public string Secret { get; set; }
         public string Scope { get; set; }
 
-        public bool? Force { get; set; }
+        public bool? IgnoreIsolation { get; set; }
 
         public long? LastChangeVersionProcessed { get; set; }
         
@@ -69,6 +69,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public bool IsFullyDefined()
         {
             return (Url != null && Key != null && Secret != null);
+        }
+        
+        public bool NeedsResolution()
+        {
+            return !IsFullyDefined() && !string.IsNullOrEmpty(Name);
         }
     }
 }
