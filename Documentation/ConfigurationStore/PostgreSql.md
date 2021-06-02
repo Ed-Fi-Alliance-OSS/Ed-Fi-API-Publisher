@@ -29,22 +29,43 @@ For the API Publisher, the password can be supplied via the command-line using `
 ```sql
 -- Insert plain text values into the 'configuration_value' column
 insert into dbo.configuration_value(configuration_key, configuration_value)
-values ('/ed-fi/publisher/connections/EdFi_Hosted_Sample_v5.2/url', 'https://api.ed-fi.org/v5.2/api/');
+values ('/ed-fi/apiPublisher/connections/EdFi_Hosted_Sample_v5.2/url', 'https://api.ed-fi.org/v5.2/api/');
 
 -- Insert encrypted values into 'configuration_value_encrypted' column
 insert into dbo.configuration_value(configuration_key, configuration_value_encrypted)
-values ('/ed-fi/publisher/connections/EdFi_Hosted_Sample_v5.2/key', pgp_sym_encrypt('RvcohKz9zHI4', 'my-secure-password'));
+values ('/ed-fi/apiPublisher/connections/EdFi_Hosted_Sample_v5.2/key', pgp_sym_encrypt('RvcohKz9zHI4', 'my-secure-password'));
 
 insert into dbo.configuration_value(configuration_key, configuration_value_encrypted)
-values ('/ed-fi/publisher/connections/EdFi_Hosted_Sample_v5.2/secret', pgp_sym_encrypt('E1iEFusaNf81xzCxwHfbolkC', 'my-secure-password'));
+values ('/ed-fi/apiPublisher/connections/EdFi_Hosted_Sample_v5.2/secret', pgp_sym_encrypt('E1iEFusaNf81xzCxwHfbolkC', 'my-secure-password'));
 ```
+
+> NOTE: The name of the connection (`EdFi_Hosted_Sample_v5.2` in the example above) should not contain spaces since a primary usage scenario is to provide the name in a command-line argument to the utility (i.e. `--sourceName=EdFi_Hosted_Sample_v5.2`).
+
 
 ## Configure API Publisher
 
-To use the PostgreSQL Configuration Store, change the `provider` setting in the _configurationStoreSettings.json_ file to `postgreSql`:
+To use the PostgreSQL Configuration Store, change the `provider` setting in the _configurationStoreSettings.json_ file to `postgreSql`, as shown below.
 
 ```json
 {
   "configurationStore": {
     "provider": "postgreSql",
+    "postgreSql": {
+      "connectionString": "Host=localhost;Database=edfi_api_publisher_configuration",
+      "encryptionPassword": ""
+    }
+  }
+}    
 ```
+
+### PostgreSQL Credentials
+
+The Configuration Store implementation uses the Npgsql driver which [provides a few mechanisms](https://www.npgsql.org/doc/connection-string-parameters.html) for providing credentials in a more secure manner than embedding them in the connection string in the configuration file shown above.
+
+Recommendation is to either add the `Username` connection string parameter into the configured connection string above, or to set the `PGUSER` environment variable to contain the user name.
+
+Then, create a [PostgreSQL password file](https://www.postgresql.org/docs/current/libpq-pgpass.html) to supply the _password_ at runtime. The default location for this file is _~/.pgpass_ in Linux, or _%APPDATA%\postgresql\pgpass.conf_ in Microsoft Windows, but an explicit file path can be provided through the `PGPASSFILE` environment variable.
+
+### Encryption Password
+
+While you can set the `encryptionPassword` (in plain text) in the settings file shown above, it is recommended that you manage it externally (and securely) and supply it at runtime using either the `--postgreSqlEncryptionPassword` command-line argument, or by setting it in an environment variable named `EdFi:ApiPublisher:ConfigurationStore:PostgreSql:EncryptionPassword` (in Linux use double underscores `__` as the delimiter rather than `:`).

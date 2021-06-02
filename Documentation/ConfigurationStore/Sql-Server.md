@@ -198,29 +198,36 @@ Create new API connections by pasting the following SQL template into an SSMS qu
 
 ```sql
 EXEC    [dbo].[SetConfigurationValue]
-        @configurationKey = N'/ed-fi/publisher/connections/< ConnectionName, nvarchar, Name >/url',
+        @configurationKey = N'/ed-fi/apiPublisher/connections/< ConnectionName, nvarchar, Name >/url',
         @plaintext = N'< Url, nvarchar, http://localhost:54746/ >'
 GO
 
 EXEC    [dbo].[SetConfigurationValue]
-        @configurationKey = N'/ed-fi/publisher/connections/< ConnectionName, nvarchar, Name >/key',
+        @configurationKey = N'/ed-fi/apiPublisher/connections/< ConnectionName, nvarchar, Name >/key',
         @plaintext = N'<Key, nvarchar, the_key>',
         @encrypt = 1
 GO
 
 EXEC    [dbo].[SetConfigurationValue]
-        @configurationKey = N'/ed-fi/publisher/connections/< ConnectionName, nvarchar, Name >/secret',
+        @configurationKey = N'/ed-fi/apiPublisher/connections/< ConnectionName, nvarchar, Name >/secret',
         @plaintext = N'< Secret, nvarchar, the_secret >',
         @encrypt = 1
 GO
 ```
 
+![SQL Server](../../images/Sql-Server-configuration-store-example.png)
+
 ## Configure API Publisher
 
-To use the SQL Server Configuration Store, change the `provider` setting in the _configurationStoreSettings.json_ file to `sqlServer`:
+To use the SQL Server Configuration Store, change the `provider` setting in the _configurationStoreSettings.json_ file to `sqlServer` and supply the connection string, as shown below:
 
 ```json
 {
   "configurationStore": {
     "provider": "sqlServer",
+    "sqlServer": {
+      "connectionString": "Server=(local);Database=EdFi_API_Publisher_Configuration;Trusted_Connection=True"
+    }
+  }
+}
 ```
