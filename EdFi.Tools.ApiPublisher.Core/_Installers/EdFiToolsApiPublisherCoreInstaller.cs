@@ -1,7 +1,7 @@
 using Castle.MicroKernel.Registration;
 using Castle.Windsor;
-using EdFi.Tools.ApiPublisher.Core.Management;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.InversionOfControl;
 using EdFi.Tools.ApiPublisher.Core.Processing;
@@ -10,14 +10,6 @@ namespace EdFi.Tools.ApiPublisher.Core._Installers
 {
     public class EdFiToolsApiPublisherCoreInstaller : RegistrationMethodsInstallerBase
     {
-        protected virtual void RegisterIChangeProcessorConfigurationProvider(IWindsorContainer container)
-        {
-            container.Register(
-                Component
-                    .For<IChangeProcessorConfigurationProvider>()
-                    .ImplementedBy<ChangeProcessorConfigurationProvider>());
-        }
-        
         protected virtual void RegisterIChangeProcessor(IWindsorContainer container)
         {
             container.Register(
@@ -25,14 +17,13 @@ namespace EdFi.Tools.ApiPublisher.Core._Installers
                     .For<IChangeProcessor>()
                     .ImplementedBy<ChangeProcessor>());
         }
-        
-        protected virtual void RegisterIEdFiPublisherConfigurationProvider(IWindsorContainer container)
+
+        protected virtual void RegisterConfigurationBuilderEnhancers(IWindsorContainer container)
         {
             container.Register(
                 Component
-                    .For<IEdFiApiPublisherConfigurationProvider>()
-                    .ImplementedBy<EdFiApiPublisherConfigurationProvider>()
-                );
+                    .For<IConfigurationBuilderEnhancer>()
+                    .ImplementedBy<NamedConnectionsConfigurationEnhancer>());
         }
 
         protected virtual void RegisterIResourceDependencyProvider(IWindsorContainer container)
