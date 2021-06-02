@@ -1,4 +1,6 @@
-# Ed-Fi API Publisher Configuration Using SQL Server
+# SQL Server Configuration Store
+
+Enables management of individual connection settings with encryption support for securely storing keys and secrets using built-in support for symmetric key encryption in a SQL Server database.
 
 ## Create the Ed-Fi API Publisher Configuration Database
 
@@ -211,4 +213,14 @@ EXEC    [dbo].[SetConfigurationValue]
         @plaintext = N'< Secret, nvarchar, the_secret >',
         @encrypt = 1
 GO
+```
+
+## Configure API Publisher
+
+To use the SQL Server Configuration Store, change the `provider` setting in the _configurationStoreSettings.json_ file to `sqlServer`:
+
+```json
+{
+  "configurationStore": {
+    "provider": "sqlServer",
 ```

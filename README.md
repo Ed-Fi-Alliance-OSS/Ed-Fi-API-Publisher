@@ -64,14 +64,14 @@ The following table shows the command-line arguments that will be used for publi
 | `--targetUrl`                                 | `=` | `http://localhost:54746/`         |
 | `--targetKey`                                 | `=` | (Minimal Sandbox API _key_)       |
 | `--targetSecret`                              | `=` | (Minimal Sandbox API _secret_)    |
-| `--force`                                     | `=` | `true`                            |
+| `--ignoreIsolation`                           | `=` | `true`                            |
 | `--maxDegreeOfParallelismForPostResourceItem` | `=` | `5`                               |
 | `--includeDescriptors`                        | `=` | `true`                            |
 | `--excludeResources`                          | `=` | `surveys`                         |
 
 Run the Ed-Fi API Publisher from the folder containing all the binaries by executing the following command (be sure to substitute your own sandbox API client's key/secret):
 ```
-.\EdFiApiPublisher.exe --sourceUrl=https://api.ed-fi.org/v5.2/api/ --sourceKey=RvcohKz9zHI4 --sourceSecret=E1iEFusaNf81xzCxwHfbolkC --targetUrl=http://localhost:54746/ --targetKey=minimal_sandbox_API_key --targetSecret=minimal_sandbox_API_secret --force=true --maxDegreeOfParallelismForPostResourceItem=5 --includeDescriptors=true --excludeResources=surveys
+.\EdFiApiPublisher.exe --sourceUrl=https://api.ed-fi.org/v5.2/api/ --sourceKey=RvcohKz9zHI4 --sourceSecret=E1iEFusaNf81xzCxwHfbolkC --targetUrl=http://localhost:54746/ --targetKey=minimal_sandbox_API_key --targetSecret=minimal_sandbox_API_secret --ignoreIsolation=true --maxDegreeOfParallelismForPostResourceItem=5 --includeDescriptors=true --excludeResources=surveys
 ```
 > NOTE: The `--excludeResources` flag is used to prevent trying to move any survey data due to an issue with the security metadata (described in [ODS-4974](https://tracker.ed-fi.org/browse/ODS-4974)) in the Ed-Fi ODS API v5.2 release. If you remove this argument, the publishing operation will fail due to unsatisfied dependencies in the data.
 
@@ -99,7 +99,7 @@ When you're ready to look further, review these other topics:
 
 ## Legal Information
 
-Copyright (c) 2020 Ed-Fi Alliance, LLC and contributors.
+Copyright (c) 2021 Ed-Fi Alliance, LLC and contributors.
 
 Licensed under the [Apache License, Version 2.0](LICENSE) (the "License").
 
