@@ -1,0 +1,19 @@
+using EdFi.Tools.ApiPublisher.Configuration.PostgreSql;
+
+// ReSharper disable once CheckNamespace
+namespace Microsoft.Extensions.Configuration
+{
+    public static class ConfigurationBuilderExtensions
+    {
+        public static IConfigurationBuilder AddPostgreSqlConfigurationStore(
+            this IConfigurationBuilder builder,
+            string configurationKeyPath,
+            string connectionString,
+            string encryptionPassword)
+        {
+            builder.Sources.Add(new PostgreSqlConfigurationSource(configurationKeyPath, connectionString, encryptionPassword));
+
+            return builder;
+        }
+    }
+}
