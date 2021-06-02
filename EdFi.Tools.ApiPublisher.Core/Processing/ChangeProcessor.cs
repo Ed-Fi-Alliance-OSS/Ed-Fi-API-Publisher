@@ -1081,9 +1081,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     }
                 }
 
-                _logger.Info(
-                    $"Waiting for the {activityDescription} streaming of the following {resourcePaths.Length} source resources to complete:{Environment.NewLine}{itemsMessage}");
-
+                string logMessage = $"Waiting for the {activityDescription} streaming of the following {resourcePaths.Length} source resources to complete:{Environment.NewLine}{itemsMessage}";
+                
+                if (_logger.IsDebugEnabled)
+                {
+                    _logger.Debug(logMessage);
+                }
+                else 
+                {
+                    _logger.Info(logMessage);
+                }
+                
                 int completedIndex = Task.WaitAny(
                     resourcePaths.Select(k => streamingPagesByResourcePath[k].CompletionBlock.Completion).ToArray(),
                     TimeSpan.FromSeconds(options.StreamingPagesWaitDurationSeconds));
