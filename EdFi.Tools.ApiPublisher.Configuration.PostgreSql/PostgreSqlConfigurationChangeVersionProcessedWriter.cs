@@ -57,9 +57,7 @@ VALUES (@configurationKey, @configurationValue)
 ON CONFLICT (configuration_key)
 DO UPDATE SET configuration_value = @configurationValue;
 ";
-                string connectionString = PostgresConnectionStringHelper.ProcessPassfile(postgresConfiguration.ConnectionString);
-
-                await using var conn = new NpgsqlConnection(connectionString);
+                await using var conn = new NpgsqlConnection(postgresConfiguration.ConnectionString);
                 await conn.OpenAsync().ConfigureAwait(false);
                 await using var cmd = new NpgsqlCommand(upsertSql, conn);
 

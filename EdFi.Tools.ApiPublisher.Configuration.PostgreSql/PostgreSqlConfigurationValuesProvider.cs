@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.IO;
-using System.Linq;
-using Castle.Core.Configuration;
 using Npgsql;
 
 namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
@@ -15,8 +12,6 @@ namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
             string encryptionPassword, 
             string configurationKeyPrefix)
         {
-            connectionString = PostgresConnectionStringHelper.ProcessPassfile(connectionString);
-            
             using var conn = new NpgsqlConnection(connectionString);
 
             conn.Open();
