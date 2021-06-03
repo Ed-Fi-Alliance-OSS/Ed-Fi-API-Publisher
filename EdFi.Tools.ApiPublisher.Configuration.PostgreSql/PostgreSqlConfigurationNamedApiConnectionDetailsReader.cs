@@ -20,7 +20,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
             
             // Load named connection information from PostgreSQL configuration store
             var config = new ConfigurationBuilder()
-                .AddPostgreSqlConfigurationStore(
+                .AddConfigurationStoreForPostgreSql(
                     ConfigurationStoreHelper.Key(apiConnectionName),
                     postgresConfiguration.ConnectionString,
                     postgresConfiguration.EncryptionPassword)

@@ -1,4 +1,4 @@
-# PostgreSQL Configuration Store
+# Configuration Store for PostgreSQL
 
 Enables management of individual connection settings with encryption for securely storing keys and secrets using a supplied password for symmetric key encryption using the `pgcrypto` extension for PostgreSQL.
 
@@ -29,18 +29,19 @@ For the API Publisher, the password can be supplied via the command-line using `
 ```sql
 -- Insert plain text values into the 'configuration_value' column
 insert into dbo.configuration_value(configuration_key, configuration_value)
-values ('/ed-fi/apiPublisher/connections/EdFi_Hosted_Sample_v5.2/url', 'https://api.ed-fi.org/v5.2/api/');
+values ('/ed-fi/apiPublisher/connections/Hosted_Sample_v5.2/url', 'https://api.ed-fi.org/v5.2/api/');
 
 -- Insert encrypted values into 'configuration_value_encrypted' column
 insert into dbo.configuration_value(configuration_key, configuration_value_encrypted)
-values ('/ed-fi/apiPublisher/connections/EdFi_Hosted_Sample_v5.2/key', pgp_sym_encrypt('RvcohKz9zHI4', 'my-secure-password'));
+values ('/ed-fi/apiPublisher/connections/Hosted_Sample_v5.2/key', pgp_sym_encrypt('RvcohKz9zHI4', 'my-secure-password'));
 
 insert into dbo.configuration_value(configuration_key, configuration_value_encrypted)
-values ('/ed-fi/apiPublisher/connections/EdFi_Hosted_Sample_v5.2/secret', pgp_sym_encrypt('E1iEFusaNf81xzCxwHfbolkC', 'my-secure-password'));
+values ('/ed-fi/apiPublisher/connections/Hosted_Sample_v5.2/secret', pgp_sym_encrypt('E1iEFusaNf81xzCxwHfbolkC', 'my-secure-password'));
 ```
 
-> NOTE: The name of the connection (`EdFi_Hosted_Sample_v5.2` in the example above) should not contain spaces since a primary usage scenario is to provide the name in a command-line argument to the utility (i.e. `--sourceName=EdFi_Hosted_Sample_v5.2`).
+![PostgreSQL Configuration Store](../../images/PostgreSql-configuration-store-example.png)
 
+> NOTE: The name of the connection (`Hosted_Sample_v5.2` in the example above) should not contain spaces since a primary usage scenario is to provide the name in a command-line argument to the utility (i.e. `--sourceName=Hosted_Sample_v5.2`).
 
 ## Configure API Publisher
 

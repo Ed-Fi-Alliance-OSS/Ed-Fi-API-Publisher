@@ -25,7 +25,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             InitializeLogging();
 
             Logger.Info(
-                "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (Edufied LLC) in conjunction with Student1.");
+                "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoffrey@mcelhanon.com, Edufied LLC) in conjunction with Student1.");
 
             try
             {

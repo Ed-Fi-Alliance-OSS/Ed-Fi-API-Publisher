@@ -15,7 +15,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
 
             // Load named connection information from SQL Server configuration store
             var config = new ConfigurationBuilder()
-                .AddSqlServerConfiguration(ConfigurationStoreHelper.Key(apiConnectionName), sqlServerConfiguration.ConnectionString)
+                .AddConfigurationStoreForSqlServer(ConfigurationStoreHelper.Key(apiConnectionName), sqlServerConfiguration.ConnectionString)
                 .Build();
 
             // Read the connection details from the configuration values

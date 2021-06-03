@@ -1,4 +1,4 @@
-# AWS Systems Manager Parameter Store Configuration
+# Configuration Store for AWS Parameter Store
 
 Enables management of individual connection settings with encryption support for securely storing keys and secrets in the [AWS Systems Manager Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html).
 
@@ -8,7 +8,7 @@ Ensure that the AWS SDK has the necessary [configured AWS credentials](https://d
 
 ## Configure API Connections
 
-Use the AWS console's UI (or other preferred mechanism) to manage API connection details, providing key names as defined in  [API Connection Management](../API-Connection-Management.md). When creating entries for API client keys or secrets, use the _SecureString_ type for the value.
+Use the AWS console's UI (or other preferred mechanism) to manage API connection details, providing key names as defined in  [API Connection Management](../API-Connection-Management.md). When creating entries for API client *keys* or *secrets*, use the _SecureString_ type for the value.
 
 ![AWS](../../images/Aws-Parameter-Store-configuration-store-example.png)
 

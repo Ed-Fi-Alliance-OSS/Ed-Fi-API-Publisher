@@ -5,7 +5,7 @@ namespace Microsoft.Extensions.Configuration
 {
     public static class ConfigurationBuilderExtensions
     {
-        public static IConfigurationBuilder AddPostgreSqlConfigurationStore(
+        public static IConfigurationBuilder AddConfigurationStoreForPostgreSql(
             this IConfigurationBuilder builder,
             string configurationKeyPath,
             string connectionString,

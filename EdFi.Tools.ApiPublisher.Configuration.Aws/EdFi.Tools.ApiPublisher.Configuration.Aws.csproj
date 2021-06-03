@@ -5,9 +5,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Amazon.Extensions.Configuration.SystemsManager" Version="1.2.0" />
-      <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.3.100.1" />
-      <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="3.3.105.6" />
+      <PackageReference Include="Amazon.Extensions.Configuration.SystemsManager" Version="2.1.0" />
+      <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.0.1" />
+      <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="3.7.3.11" />
       <PackageReference Include="Castle.Core" Version="4.4.0" />
       <PackageReference Include="Castle.Windsor" Version="5.0.1" />
       <PackageReference Include="Microsoft.Extensions.Configuration" Version="5.0.0" />

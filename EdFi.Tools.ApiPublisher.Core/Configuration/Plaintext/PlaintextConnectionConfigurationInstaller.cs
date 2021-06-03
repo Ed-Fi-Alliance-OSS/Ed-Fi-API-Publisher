@@ -6,7 +6,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration.Plaintext
 {
-    [ApiConnectionsConfigurationSourceName("plaintext")]
+    [ApiConnectionsConfigurationSourceName("plainText")]
     public class PlaintextConnectionConfigurationInstaller : RegistrationMethodsInstallerBase
     {
         protected virtual void RegisterIChangeVersionProcessedWriter(IWindsorContainer container)

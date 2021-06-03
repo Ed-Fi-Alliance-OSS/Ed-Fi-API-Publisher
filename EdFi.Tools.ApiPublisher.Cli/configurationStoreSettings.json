@@ -1,6 +1,6 @@
 {
   "configurationStore": {
-    "provider": "postgreSql",
+    "provider": "plainText",
     "sqlServer": {
       "connectionString": "Server=(local);Database=EdFi_API_Publisher_Configuration;Trusted_Connection=True"
     },

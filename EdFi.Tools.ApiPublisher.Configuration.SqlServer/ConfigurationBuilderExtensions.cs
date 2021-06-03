@@ -5,7 +5,7 @@ namespace Microsoft.Extensions.Configuration
 {
     public static class ConfigurationBuilderExtensions
     {
-        public static IConfigurationBuilder AddSqlServerConfiguration(
+        public static IConfigurationBuilder AddConfigurationStoreForSqlServer(
             this IConfigurationBuilder builder,
             string configurationKeyPath,
             string connectionString)

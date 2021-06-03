@@ -48,6 +48,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--ignoreIsolation"] = "Connections:Source:IgnoreIsolation",
 
                     // PostgreSQL configuration store
+                    ["--configurationStoreProvider"] = "ConfigurationStore:Provider",
                     ["--postgreSqlEncryptionPassword"] = "ConfigurationStore:PostgreSql:EncryptionPassword",
                 });
 

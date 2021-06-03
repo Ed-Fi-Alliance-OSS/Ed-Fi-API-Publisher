@@ -1,4 +1,4 @@
-# SQL Server Configuration Store
+# Configuration Store for SQL Server
 
 Enables management of individual connection settings with encryption support for securely storing keys and secrets using built-in support for symmetric key encryption in a SQL Server database.
 
@@ -215,7 +215,7 @@ EXEC    [dbo].[SetConfigurationValue]
 GO
 ```
 
-![SQL Server](../../images/Sql-Server-configuration-store-example.png)
+![SQL Server Configuration Store](../../images/Sql-Server-configuration-store-example.png)
 
 ## Configure API Publisher
 
