@@ -65,8 +65,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     .ConfigureAwait(false);
 
                 // Establish the change window we're processing, if any.
-                var changeWindow = await EstablishChangeWindow(sourceApiClient, sourceApiConnectionDetails, targetApiConnectionDetails)
-                    .ConfigureAwait(false);
+                ChangeWindow changeWindow = null;
+
+                // Only named (managed) connections can use a Change Window for processing.
+                if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Name) 
+                    && !string.IsNullOrWhiteSpace(targetApiConnectionDetails.Name))
+                {
+                    changeWindow = await EstablishChangeWindow(sourceApiClient, sourceApiConnectionDetails, targetApiConnectionDetails)
+                        .ConfigureAwait(false);
+                }
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
