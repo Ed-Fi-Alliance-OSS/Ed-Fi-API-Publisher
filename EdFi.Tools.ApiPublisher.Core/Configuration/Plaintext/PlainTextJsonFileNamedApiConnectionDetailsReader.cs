@@ -7,7 +7,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Plaintext
 {
     public class PlainTextJsonFileNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {
-        public ApiConnectionDetails GetNamedApiConnectionDetails(string apiConnectionName)
+        public ApiConnectionDetails GetNamedApiConnectionDetails(
+            string apiConnectionName,
+            IConfigurationSection configurationStoreSection)
         {
             // Build the configuration
             var config = new ConfigurationBuilder()

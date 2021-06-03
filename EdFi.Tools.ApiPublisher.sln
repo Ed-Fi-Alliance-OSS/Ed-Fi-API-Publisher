@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Con
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.SqlServer", "EdFi.Tools.ApiPublisher.Configuration.SqlServer\EdFi.Tools.ApiPublisher.Configuration.SqlServer.csproj", "{08CA1DB7-B451-4E83-91B6-2E22B4BE7B31}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.PostgreSql", "EdFi.Tools.ApiPublisher.Configuration.PostgreSql\EdFi.Tools.ApiPublisher.Configuration.PostgreSql.csproj", "{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +32,9 @@ Global
 		{08CA1DB7-B451-4E83-91B6-2E22B4BE7B31}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{08CA1DB7-B451-4E83-91B6-2E22B4BE7B31}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{08CA1DB7-B451-4E83-91B6-2E22B4BE7B31}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

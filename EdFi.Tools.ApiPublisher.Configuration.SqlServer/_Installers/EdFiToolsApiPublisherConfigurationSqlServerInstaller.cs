@@ -7,7 +7,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 
 namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer._Installers
 {
-    [ApiConnectionsConfigurationSourceName("sql-server")]
+    [ApiConnectionsConfigurationSourceName("sqlServer")]
     public class EdFiToolsApiPublisherConfigurationSqlServerInstaller : RegistrationMethodsInstallerBase
     {
         protected virtual void RegisterIChangeVersionProcessedWriter(IWindsorContainer container)

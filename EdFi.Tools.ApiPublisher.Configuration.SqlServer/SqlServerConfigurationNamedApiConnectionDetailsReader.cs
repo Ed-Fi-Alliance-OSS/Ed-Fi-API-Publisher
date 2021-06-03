@@ -7,23 +7,15 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
 {
     public class SqlServerConfigurationNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {
-        private readonly Lazy<string> _connectionString;
-        
-        public SqlServerConfigurationNamedApiConnectionDetailsReader(IAppSettingsConfigurationProvider appSettingsConfigurationProvider)
+        public ApiConnectionDetails GetNamedApiConnectionDetails(
+            string apiConnectionName,
+            IConfigurationSection configurationStoreSection)
         {
-            _connectionString = new Lazy<string>(
-                () =>
-                {
-                    var configuration = appSettingsConfigurationProvider.GetConfiguration();
-                    return configuration.GetConnectionString("SqlServerConfiguration");
-                });
-        }
-        
-        public ApiConnectionDetails GetNamedApiConnectionDetails(string apiConnectionName)
-        {
-            // Load named connection information from AWS Systems Manager
+            var sqlServerConfiguration = configurationStoreSection.Get<SqlServerConfigurationStore>().SqlServer;
+
+            // Load named connection information from SQL Server configuration store
             var config = new ConfigurationBuilder()
-                .AddSqlServerConfiguration($"/ed-fi/publisher/connections/{apiConnectionName}", _connectionString.Value)
+                .AddConfigurationStoreForSqlServer(ConfigurationStoreHelper.Key(apiConnectionName), sqlServerConfiguration.ConnectionString)
                 .Build();
 
             // Read the connection details from the configuration values

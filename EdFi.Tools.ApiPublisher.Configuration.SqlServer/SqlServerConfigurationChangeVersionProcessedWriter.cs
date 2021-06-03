@@ -16,31 +16,22 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
         private readonly ILog _logger =
             LogManager.GetLogger(typeof(SqlServerConfigurationChangeVersionProcessedWriter));
 
-        private readonly Lazy<string> _connectionString;
-
-        public SqlServerConfigurationChangeVersionProcessedWriter(IAppSettingsConfigurationProvider appSettingsConfigurationProvider)
-        {
-            _connectionString = new Lazy<string>(
-                () =>
-                {
-                    var configuration = appSettingsConfigurationProvider.GetConfiguration();
-                    return configuration.GetConnectionString("SqlServerConfiguration");
-                });
-        }
-
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
             string targetConnectionName,
-            long changeVersion)
+            long changeVersion,
+            IConfigurationSection configurationStoreSection)
         {
+            var sqlServerConfiguration = configurationStoreSection.Get<SqlServerConfigurationStore>().SqlServer;
+
             string lastChangeVersionProcessedKey =
-                $"/ed-fi/publisher/connections/{sourceConnectionName}/lastChangeVersionsProcessed";
+                $"{ConfigurationStoreHelper.Key(sourceConnectionName)}/lastChangeVersionsProcessed";
 
             try
             {
-                using (var conn = new SqlConnection(_connectionString.Value))
+                using (var conn = new SqlConnection(sqlServerConfiguration.ConnectionString))
                 {
-                    await conn.OpenAsync();
+                    await conn.OpenAsync().ConfigureAwait(false);
 
                     string newParameterJson;
 
@@ -49,13 +40,14 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
                         cmd.CommandType = CommandType.StoredProcedure;
                         cmd.Parameters.Add(new SqlParameter("@configurationKeyPrefix", lastChangeVersionProcessedKey));
 
-                        using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow))
+                        using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow).ConfigureAwait(false))
                         {
                             var currentParameter = new JObject();
                             
-                            if (await reader.ReadAsync())
+                            if (await reader.ReadAsync().ConfigureAwait(false))
                             {
                                 string changeVersionsJson = reader.GetString("ConfigurationValue");
+
                                 currentParameter = JObject.Parse(string.IsNullOrEmpty(changeVersionsJson) ? "{}" : changeVersionsJson);
                             }
 

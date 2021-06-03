@@ -14,8 +14,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 string environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             
                 var configuration = new ConfigurationBuilder()
-                    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-                    .AddJsonFile($"appsettings.{environmentName}.json", optional: true)
+                    .AddJsonFile("appSettings.json", optional: true, reloadOnChange: true)
+                    .AddJsonFile($"appSettings.{environmentName}.json", optional: true)
                     .Build();
 
                 return configuration;
