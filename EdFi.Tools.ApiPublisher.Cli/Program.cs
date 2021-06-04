@@ -80,8 +80,8 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var sourceApiConnectionDetails = apiConnections.Source;
                 var targetApiConnectionDetails = apiConnections.Target;
                 
-                EdFiApiClient CreateSourceApiClient() => new EdFiApiClient(sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
-                EdFiApiClient CreateTargetApiClient() => new EdFiApiClient(targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                EdFiApiClient CreateSourceApiClient() => new EdFiApiClient("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                EdFiApiClient CreateTargetApiClient() => new EdFiApiClient("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
                 
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,

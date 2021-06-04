@@ -1083,8 +1083,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     }
                     else
                     {
-                        int dependencyCount = streamingPagesItem.DependencyPaths.Length;
-                        itemsMessage.AppendLine($" ({dependencyCount} dependencies remaining)");
+                        int remainingDependencyCount = streamingPagesItem.DependencyPaths.Where(streamingPagesByResourcePath.ContainsKey).Count();
+
+                        if (remainingDependencyCount == 0)
+                        {
+                            itemsMessage.AppendLine($" (processing)");
+                        }
+                        else
+                        {
+                            itemsMessage.AppendLine($" ({remainingDependencyCount} dependencies remaining)");
+                        }
                     }
                 }
 
