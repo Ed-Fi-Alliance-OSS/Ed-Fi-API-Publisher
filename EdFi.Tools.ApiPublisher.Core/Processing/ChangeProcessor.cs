@@ -65,8 +65,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     .ConfigureAwait(false);
 
                 // Establish the change window we're processing, if any.
-                var changeWindow = await EstablishChangeWindow(sourceApiClient, sourceApiConnectionDetails, targetApiConnectionDetails)
-                    .ConfigureAwait(false);
+                ChangeWindow changeWindow = null;
+
+                // Only named (managed) connections can use a Change Window for processing.
+                if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Name) 
+                    && !string.IsNullOrWhiteSpace(targetApiConnectionDetails.Name))
+                {
+                    changeWindow = await EstablishChangeWindow(sourceApiClient, sourceApiConnectionDetails, targetApiConnectionDetails)
+                        .ConfigureAwait(false);
+                }
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
@@ -1076,8 +1083,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     }
                     else
                     {
-                        int dependencyCount = streamingPagesItem.DependencyPaths.Length;
-                        itemsMessage.AppendLine($" ({dependencyCount} dependencies remaining)");
+                        int remainingDependencyCount = streamingPagesItem.DependencyPaths.Where(streamingPagesByResourcePath.ContainsKey).Count();
+
+                        if (remainingDependencyCount == 0)
+                        {
+                            itemsMessage.AppendLine($" (processing)");
+                        }
+                        else
+                        {
+                            itemsMessage.AppendLine($" ({remainingDependencyCount} dependencies remaining)");
+                        }
                     }
                 }
 

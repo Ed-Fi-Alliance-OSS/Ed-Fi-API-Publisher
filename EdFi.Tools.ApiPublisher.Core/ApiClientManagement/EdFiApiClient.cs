@@ -14,6 +14,7 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 {
     public class EdFiApiClient
     {
+        private readonly string _name;
         private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiClient));
         
         private readonly HttpClient _httpClient;
@@ -21,10 +22,12 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
         private readonly HttpClient _tokenRefreshHttpClient;
 
         public EdFiApiClient(
+            string name,
             ApiConnectionDetails apiConnectionDetails,
             int bearerTokenRefreshMinutes,
             bool ignoreSslErrors)
         {
+            _name = name;
             ConnectionDetails = apiConnectionDetails;
 
             var httpClientHandler = new HttpClientHandler();
@@ -61,7 +64,7 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
         private async Task<string> GetBearerTokenAsync(HttpClient httpClient, string key, string secret, string scope)
         {
             if (_logger.IsDebugEnabled)
-                _logger.Debug($"Getting bearer token for key {key.Substring(0, 3)}...");
+                _logger.Debug($"Getting bearer token for {_name} API client with key {key.Substring(0, 3)}...");
             
             var authRequest = new HttpRequestMessage(HttpMethod.Post, "oauth/token");
             string encodedKeyAndSecret = Base64Encode($"{key}:{secret}");
@@ -83,11 +86,11 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             {
                 if (string.IsNullOrEmpty(scope))
                 {
-                    _logger.Debug($"Sending token request to '{authRequest.Method} {authRequest.RequestUri}'...");
+                    _logger.Debug($"Sending token request for {_name.ToLower()} API client to '{authRequest.Method} {authRequest.RequestUri}'...");
                 }
                 else
                 {
-                    _logger.Debug($"Sending token request to '{authRequest.Method} {authRequest.RequestUri}' with scope '{scope}'...");
+                    _logger.Debug($"Sending token request for {_name.ToLower()} API client to '{authRequest.Method} {authRequest.RequestUri}' with scope '{scope}'...");
                 }
             }
 
@@ -96,8 +99,8 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 
             if (!authResponseMessage.IsSuccessStatusCode)
             {
-                _logger.Error($"Authentication against '{authRequest.RequestUri}' failed. {authRequest.Method} request returned status {authResponseMessage.StatusCode}:{Environment.NewLine}{authResponseContent}");
-                throw new Exception("Authentication failed.");
+                _logger.Error($"Authentication of {_name.ToLower()} API client against '{authRequest.RequestUri}' failed. {authRequest.Method} request returned status {authResponseMessage.StatusCode}:{Environment.NewLine}{authResponseContent}");
+                throw new Exception($"Authentication failed for {_name.ToLower()} API client.");
             }
 
             var authResponseObject = JObject.Parse(authResponseContent);
@@ -106,12 +109,12 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             {
                 if (scope != authResponseObject["scope"].Value<string>())
                 {
-                    throw new Exception($"Authentication was successful but the requested scope of '{scope}' was not honored by the host. Remove the 'scope' parameter from the connection information for this API endpoint to proceed with an unscoped access token.");
+                    throw new Exception($"Authentication was successful for {_name.ToLower()} API client but the requested scope of '{scope}' was not honored by the host. Remove the 'scope' parameter from the connection information for this API endpoint to proceed with an unscoped access token.");
                 }
 
                 if (_logger.IsDebugEnabled)
                 {
-                    _logger.Debug($"Token request with scope '{scope}' was returned by server.");
+                    _logger.Debug($"Token request for {_name.ToLower()} API client with scope '{scope}' was returned by server.");
                 }
             }
             
@@ -132,11 +135,11 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             
             if (isInitializing)
             {
-                _logger.Info("Retrieving initial bearer token.");
+                _logger.Info($"Retrieving initial bearer token for {_name.ToLower()} API client.");
             }
             else
             {
-                _logger.Info("Refreshing bearer token.");
+                _logger.Info($"Refreshing bearer token for {_name.ToLower()} API client.");
             }
 
             try
@@ -149,21 +152,21 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 
                 if (isInitializing)
                 {
-                    _logger.Info("Bearer token retrieved successfully.");
+                    _logger.Info($"Bearer token retrieved successfully for {_name.ToLower()} API client.");
                 }
                 else
                 {
-                    _logger.Info("Bearer token refreshed successfully.");
+                    _logger.Info($"Bearer token refreshed successfully for {_name.ToLower()} API client.");
                 }
             }
             catch (Exception ex)
             {
                 if (isInitializing)
                 {
-                    throw new Exception("Unable to obtain initial bearer token.", ex);
+                    throw new Exception($"Unable to obtain initial bearer token for {_name.ToLower()} API client.", ex);
                 }
                 
-                _logger.Error($"Refresh of bearer token failed. Token may expire soon resulting in 401 responses.{Environment.NewLine}{ex}");
+                _logger.Error($"Refresh of bearer token failed for {_name.ToLower()} API client. Token may expire soon resulting in 401 responses.{Environment.NewLine}{ex}");
             }
         }
 
