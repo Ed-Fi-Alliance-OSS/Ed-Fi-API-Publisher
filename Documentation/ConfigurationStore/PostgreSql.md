@@ -4,8 +4,12 @@ Enables management of individual connection settings with encryption for securel
 
 ## Create the Ed-Fi API Publisher Configuration Database and Table
 
+First create the configuration database, as follows:
 ```sql
 create database edfi_api_publisher_configuration;
+```
+Connect to the new database. Then create configuration table, as follows:
+```sql
 create schema dbo;
 
 create table dbo.configuration_value
