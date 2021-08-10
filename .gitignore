@@ -35,6 +35,9 @@ _ReSharper.*
 # Rider
 **/.idea/**
 
+# VS Code
+**/.vscode/**
+
 #Others
 *.cache
 *.orig
