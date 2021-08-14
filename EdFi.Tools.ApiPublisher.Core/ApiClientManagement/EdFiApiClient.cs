@@ -54,7 +54,7 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             
             // Refresh the bearer tokens periodically
             _bearerTokenRefreshTimer = new Timer(RefreshBearerToken,
-                _tokenRefreshHttpClient,
+                false,
                 TimeSpan.FromMinutes(bearerTokenRefreshMinutes),
                 TimeSpan.FromMinutes(bearerTokenRefreshMinutes));
         }
@@ -131,42 +131,49 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
         
         private void RefreshBearerToken(object state)
         {
-            bool isInitializing = ((bool?) state).GetValueOrDefault();
-            
-            if (isInitializing)
-            {
-                _logger.Info($"Retrieving initial bearer token for {_name.ToLower()} API client.");
-            }
-            else
-            {
-                _logger.Info($"Refreshing bearer token for {_name.ToLower()} API client.");
-            }
-
             try
             {
-                var bearerToken = GetBearerTokenAsync(_tokenRefreshHttpClient, ConnectionDetails.Key, ConnectionDetails.Secret, ConnectionDetails.Scope)
-                    .ConfigureAwait(false).GetAwaiter().GetResult();
-
-                HttpClient.DefaultRequestHeaders.Authorization =
-                    AuthenticationHeaderValue.Parse($"Bearer {bearerToken}");
-
+                bool isInitializing = ((bool?) state).GetValueOrDefault();
+            
                 if (isInitializing)
                 {
-                    _logger.Info($"Bearer token retrieved successfully for {_name.ToLower()} API client.");
+                    _logger.Info($"Retrieving initial bearer token for {_name.ToLower()} API client.");
                 }
                 else
                 {
-                    _logger.Info($"Bearer token refreshed successfully for {_name.ToLower()} API client.");
+                    _logger.Info($"Refreshing bearer token for {_name.ToLower()} API client.");
+                }
+
+                try
+                {
+                    var bearerToken = GetBearerTokenAsync(_tokenRefreshHttpClient, ConnectionDetails.Key, ConnectionDetails.Secret, ConnectionDetails.Scope)
+                        .ConfigureAwait(false).GetAwaiter().GetResult();
+
+                    HttpClient.DefaultRequestHeaders.Authorization =
+                        AuthenticationHeaderValue.Parse($"Bearer {bearerToken}");
+
+                    if (isInitializing)
+                    {
+                        _logger.Info($"Bearer token retrieved successfully for {_name.ToLower()} API client.");
+                    }
+                    else
+                    {
+                        _logger.Info($"Bearer token refreshed successfully for {_name.ToLower()} API client.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (isInitializing)
+                    {
+                        throw new Exception($"Unable to obtain initial bearer token for {_name.ToLower()} API client.", ex);
+                    }
+                
+                    _logger.Error($"Refresh of bearer token failed for {_name.ToLower()} API client. Token may expire soon resulting in 401 responses.{Environment.NewLine}{ex}");
                 }
             }
             catch (Exception ex)
             {
-                if (isInitializing)
-                {
-                    throw new Exception($"Unable to obtain initial bearer token for {_name.ToLower()} API client.", ex);
-                }
-                
-                _logger.Error($"Refresh of bearer token failed for {_name.ToLower()} API client. Token may expire soon resulting in 401 responses.{Environment.NewLine}{ex}");
+                _logger.Error($"An unhandled exception occurred during bearer token refresh. Token expiration may occur. {ex}");
             }
         }
 

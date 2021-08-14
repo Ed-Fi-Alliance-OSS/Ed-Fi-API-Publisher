@@ -946,7 +946,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             {
                 var resourceKey = kvp.Key;
 
-                var streamResourcePagesBlock = StreamResourcePages.GetBlock<TItemActionMessage>(options);
+                var streamResourcePagesBlock = StreamResourcePages.GetBlock<TItemActionMessage>(options, errorHandlingBlock);
 
                 var (processingInBlock, processingOutBlock) = createProcessingBlocks(targetApiClient, options, errorHandlingBlock);
 
@@ -1037,74 +1037,105 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             _logger.Info($"Waiting for {streamingPagesByResourcePath.Count} {activityDescription} streaming sources to complete...");
 
+            var lastProgressUpdate = DateTime.Now;
+            
             while (streamingPagesByResourcePath.Any())
             {
                 string[] resourcePaths = streamingPagesByResourcePath.Keys.OrderBy(x => x).ToArray();
 
-                var itemsMessage = new StringBuilder();
-
-                foreach (string resourcePath in resourcePaths)
+                if (DateTime.Now - lastProgressUpdate > TimeSpan.FromSeconds(options.StreamingPagesWaitDurationSeconds))
                 {
-                    var streamingPagesItem = streamingPagesByResourcePath[resourcePath];
+                    int paddedDisplayLength = resourcePaths.Max(x => x.Length) + 2;
 
-                    itemsMessage.Append("    ");
-                    itemsMessage.Append(
-                        $"{resourcePath} - {streamingPagesItem.CompletionBlock.Completion.Status}");
+                    var remainingResources = resourcePaths.Select(rp => new
+                        {
+                            ResourcePath = rp, 
+                            DependentItems = streamingPagesByResourcePath[rp].DependencyPaths.Where(streamingPagesByResourcePath.ContainsKey).ToArray()
+                        })
+                        .Select(x => new
+                        {
+                            ResourcePath = x.ResourcePath,
+                            DependentItems = x.DependentItems,
+                            Count = x.DependentItems.Length
+                        }).ToArray();
 
-                    if (_logger.IsDebugEnabled)
+                    var resourcesBeingProcessed = remainingResources
+                        .Where(x => x.Count == 0)
+                        .OrderBy(x => x.ResourcePath)
+                        .ToArray();
+                    
+                    var itemsMessage = new StringBuilder();
+
+                    itemsMessage.AppendLine($"The following {resourcesBeingProcessed.Length} resources are processing (or ready for processing):");
+                    
+                    foreach (var resource in resourcesBeingProcessed)
+                    {
+                        itemsMessage.Append("    ");
+                        itemsMessage.AppendLine($"{GetResourcePathDisplayText(resource.ResourcePath)}");
+                    }
+                    
+                    var resourcesWaiting = remainingResources
+                        .Where(x => x.Count > 0)
+                        .OrderBy(x => x.ResourcePath)
+                        .ToArray();
+
+                    if (resourcesWaiting.Length > 0)
                     {
                         itemsMessage.AppendLine();
+                        itemsMessage.AppendLine($"The following {resourcesWaiting.Length} resources are waiting for dependencies to complete:");
 
-                        foreach (string dependencyPath in streamingPagesItem.DependencyPaths)
+                        foreach (var resource in resourcesWaiting)
                         {
-                            itemsMessage.Append("       ");
-
-                            StreamingPagesItem dependencyItem;
-
-                            if (!streamingPagesByResourcePath.TryGetValue(dependencyPath, out dependencyItem))
-                            {
-                                if (!completedStreamingPagesByResourcePath.TryGetValue(dependencyPath,
-                                    out dependencyItem))
-                                {
-                                    itemsMessage.AppendLine($"{dependencyPath} - Block Not Found!");
-                                }
-                                else
-                                {
-                                    itemsMessage.AppendLine(
-                                        $"{dependencyPath} - {dependencyItem.CompletionBlock.Completion.Status}");
-                                }
-                            }
-                            else
-                            {
-                                itemsMessage.AppendLine(
-                                    $"{dependencyPath} - {dependencyItem.CompletionBlock.Completion.Status}");
-                            }
+                            itemsMessage.Append("    ");
+                            itemsMessage.AppendLine($"{GetResourcePathDisplayText(resource.ResourcePath, paddedDisplayLength)} ({resource.DependentItems.Length} dependencies remaining --> {Truncate(string.Join(", ", resource.DependentItems.Select(x => GetResourcePathDisplayText(x))), 50)})");
                         }
                     }
-                    else
+                    
+                    string Truncate(string text, int length)
                     {
-                        int remainingDependencyCount = streamingPagesItem.DependencyPaths.Where(streamingPagesByResourcePath.ContainsKey).Count();
-
-                        if (remainingDependencyCount == 0)
+                        if (text.Length <= length)
                         {
-                            itemsMessage.AppendLine($" (processing)");
+                            return text;
+                        }
+
+                        return text.Substring(0, length) + "...";
+                    }
+
+                    string GetResourcePathDisplayText(string resourcePath, int padToLength = 0)
+                    {
+                        string[] parts = resourcePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+                        string displayName;
+                        
+                        if (parts[0] == "ed-fi")
+                        {
+                            displayName = parts[1];
                         }
                         else
                         {
-                            itemsMessage.AppendLine($" ({remainingDependencyCount} dependencies remaining)");
+                            displayName = $"{parts[1]} ({parts[0]})";
                         }
-                    }
-                }
 
-                string logMessage = $"Waiting for the {activityDescription} streaming of the following {resourcePaths.Length} source resources to complete:{Environment.NewLine}{itemsMessage}";
-                
-                if (_logger.IsDebugEnabled)
-                {
-                    _logger.Debug(logMessage);
-                }
-                else 
-                {
-                    _logger.Info(logMessage);
+                        if (padToLength == 0)
+                        {
+                            return displayName;
+                        }
+                        
+                        return $"{displayName}{new string(' ', (padToLength + 2) - displayName.Length)}";
+                    }
+                    
+                    string logMessage = $"Waiting for the {activityDescription} streaming of {resourcePaths.Length} resources to complete...{Environment.NewLine}{itemsMessage}";
+                    
+                    if (_logger.IsDebugEnabled)
+                    {
+                        _logger.Debug(logMessage);
+                    }
+                    else 
+                    {
+                        _logger.Info(logMessage);
+                    }
+                    
+                    lastProgressUpdate = DateTime.Now;
                 }
                 
                 int completedIndex = Task.WaitAny(
@@ -1129,8 +1160,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                     streamingPagesByResourcePath.Remove(resourcePaths[completedIndex]);
 
-                    _logger.Info(
-                        $"{resourcePaths[completedIndex]}: Streaming of '{resourcePaths[completedIndex]}' completed. {streamingPagesByResourcePath.Count} resource(s) remaining.");
+                    _logger.Info($"Streaming of '{resourcePaths[completedIndex]}' completed. {streamingPagesByResourcePath.Count} resource(s) remaining.");
                 }
             }
 

@@ -70,6 +70,24 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         {
             return (Url != null && Key != null && Secret != null);
         }
+
+        public IEnumerable<string> MissingConfigurationValues()
+        {
+            if (Url == null)
+            {
+                yield return "Url";
+            }
+            
+            if (Key == null)
+            {
+                yield return "Key";
+            }
+            
+            if (Secret == null)
+            {
+                yield return "Secret";
+            }
+        }
         
         public bool NeedsResolution()
         {

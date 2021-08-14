@@ -1,9 +1,9 @@
 {
     "options": 
     {
-        "bearerTokenRefreshMinutes": 12,
-        "postRetryStartingDelayMilliseconds": 100,
-        "maxPostRetryAttempts": 15,
+        "bearerTokenRefreshMinutes": 28,
+        "retryStartingDelayMilliseconds": 100,
+        "maxRetryAttempts": 10,
         "maxDegreeOfParallelismForPostResourceItem": 50,
         "maxDegreeOfParallelismForStreamResourcePages": 5,
         "streamingPagesWaitDurationSeconds": 10,

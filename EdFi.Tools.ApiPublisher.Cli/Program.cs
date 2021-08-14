@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -102,8 +103,21 @@ namespace EdFi.Tools.ApiPublisher.Cli
             }
             catch (Exception ex)
             {
-                Logger.Error($"Processing failed: {ex.Message}");
+                Logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
+                
                 return -1;
+            }
+        }
+
+        private static IEnumerable<string> GetExceptionMessages(Exception ex)
+        {
+            var currentException = ex;
+
+            while (currentException != null)
+            {
+                yield return currentException.Message;
+
+                currentException = currentException.InnerException;
             }
         }
 

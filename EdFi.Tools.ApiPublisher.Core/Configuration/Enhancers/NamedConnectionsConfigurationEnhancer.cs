@@ -87,7 +87,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers
                 
                 if (!namedApiConnectionDetails.IsFullyDefined())
                 {
-                    throw new ArgumentException($"Named {connectionType.ToString().ToLower()} connection '{namedApiConnectionDetails.Name}' was not configured.");
+                    throw new ArgumentException($"Named {connectionType.ToString().ToLower()} connection '{namedApiConnectionDetails.Name}' was not fully configured. The following values are missing: [{string.Join(", ", namedApiConnectionDetails.MissingConfigurationValues())}]");
                 }
 
                 // Fill in source configuration details

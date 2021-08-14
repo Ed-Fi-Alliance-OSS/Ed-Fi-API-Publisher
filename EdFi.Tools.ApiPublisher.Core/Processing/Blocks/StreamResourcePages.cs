@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -15,7 +17,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     {
         private static readonly ILog _logger = LogManager.GetLogger(typeof(StreamResourcePages));
         
-        public static TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> GetBlock<TItemActionMessage>(Options options)
+        public static TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> GetBlock<TItemActionMessage>(
+            Options options, 
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
             var streamResourcePagesBlock =
                 new TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage>(
@@ -23,7 +27,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     {
                         try
                         {
-                            return await StreamResourcePage(msg).ConfigureAwait(false);
+                            return await StreamResourcePage(msg, options, errorHandlingBlock).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -40,7 +44,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         }
         
         private static async Task<IEnumerable<TItemActionMessage>> StreamResourcePage<TItemActionMessage>(
-            StreamResourcePageMessage<TItemActionMessage> message)
+            StreamResourcePageMessage<TItemActionMessage> message,
+            Options options, 
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
             long offset = message.Offset;
             int limit = message.Limit;
@@ -63,22 +69,101 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     {
                         _logger.Debug($"{message.ResourceUrl}: Retrieving page items {offset} to {offset + limit - 1}.");
                     }
+
+                    int attempts = 0;
+                    int delay = options.RetryStartingDelayMilliseconds;
+
+                    HttpResponseMessage apiResponse = null;
+                    string responseContent = null;
                     
-                    var apiResponse = await message.HttpClient.GetAsync($"{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}")
-                        .ConfigureAwait(false);
+                    while (attempts++ < options.MaxRetryAttempts)
+                    {
+                        try
+                        {
+                            if (attempts > 1)
+                            {
+                                if (_logger.IsDebugEnabled)
+                                {
+                                    _logger.Debug($"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} from source attempt #{attempts}.");
+                                }
+                            }
+
+                            apiResponse = await message.HttpClient.GetAsync($"{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}")
+                                .ConfigureAwait(false);
                     
-                    string json = await apiResponse.Content.ReadAsStringAsync()
-                        .ConfigureAwait(false);
+                            responseContent = await apiResponse.Content.ReadAsStringAsync()
+                                .ConfigureAwait(false);
+                            
+                            if (!apiResponse.IsSuccessStatusCode)
+                            {
+                                // Retry certain error types
+                                if (apiResponse.StatusCode == HttpStatusCode.InternalServerError)
+                                {
+                                    _logger.Warn(
+                                        $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
+
+                                    ExponentialBackOffHelper.PerformDelay(ref delay);
+                                    continue;
+                                }
+                                
+                                var error = new ErrorItemMessage
+                                {
+                                    Method = HttpMethod.Get.ToString(),
+                                    ResourceUrl = message.ResourceUrl,
+                                    Id = null,
+                                    Body = null,
+                                    ResponseStatus = apiResponse.StatusCode,
+                                    ResponseContent = responseContent
+                                };
+
+                                // Publish the failure
+                                errorHandlingBlock.Post(error);
+                            }
+                            
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error($"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} attempt #{attempts}: {ex}");
+
+                            ExponentialBackOffHelper.PerformDelay(ref delay);
+                        }
+                    }
+
+                    if (!apiResponse.IsSuccessStatusCode)
+                    {
+                        break;
+                    }
+
+                    // Success
+                    if (_logger.IsInfoEnabled && attempts > 1)
+                    {
+                        _logger.Info(
+                            $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} attempt #{attempts} returned {apiResponse.StatusCode}.");
+                    }
 
                     JArray items;
                     
                     try
                     {
-                        items = JArray.Parse(json);
+                        items = JArray.Parse(responseContent);
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error($"{message.ResourceUrl}: {ex}{Environment.NewLine}{json}");
+                        var error = new ErrorItemMessage
+                        {
+                            Method = HttpMethod.Get.ToString(),
+                            ResourceUrl = message.ResourceUrl,
+                            Id = null,
+                            Body = null,
+                            ResponseStatus = apiResponse.StatusCode,
+                            ResponseContent = responseContent
+                        };
+
+                        // Publish the failure
+                        errorHandlingBlock.Post(error);
+                        
+                        _logger.Error($"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}");
                         break;
                     }
 

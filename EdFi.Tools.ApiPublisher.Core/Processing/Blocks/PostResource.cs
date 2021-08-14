@@ -165,8 +165,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         
                             // Success
                             if (_logger.IsInfoEnabled && attempts > 1)
+                            {
                                 _logger.Info(
                                     $"{msg.ResourceUrl} (source id: {id}): POST attempt #{attempts} returned {apiResponse.StatusCode}.");
+                            }
 
                             if (_logger.IsDebugEnabled)
                             {

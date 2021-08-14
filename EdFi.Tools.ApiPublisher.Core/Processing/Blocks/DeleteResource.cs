@@ -338,7 +338,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             {
                 // TODO: GKM - Should we add a flag for specifying that publishing without proper deletes support from source API is ok?
                 _logger.Warn($"Source API's '{EdFiApiConstants.DeletesPathSuffix}' response does not include the domain key values. Publishing of deletes to the target API cannot be performed.");
-                _logger.Debug("Attempting to gracefully cancel delete processing due to lack of support for domain key values from the source API.");
+                _logger.Debug("Attempting to gracefully cancel delete processing due to lack of support for deleted key values from the source API.");
                 
                 msg.CancellationSource.Cancel();
                 

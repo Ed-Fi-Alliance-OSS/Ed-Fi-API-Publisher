@@ -83,16 +83,64 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 }
 
                 string changeWindowParms = RequestHelper.GetChangeWindowParms(message.ChangeWindow);
-                var apiResponse = await message.HttpClient.GetAsync($"{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}")
-                    .ConfigureAwait(false);
+
+                int attempts = 0;
+                int delay = 100; // TODO: Need options here --> options.RetryStartingDelayMilliseconds;
+
+                HttpResponseMessage apiResponse = null;
+                string responseContent = null;
+
+                while (attempts++ < 10) // TODO: Need options here --> options.MaxRetry)
+                {
+                    try
+                    {
+                        if (attempts > 1)
+                        {
+                            if (_logger.IsDebugEnabled)
+                            {
+                                _logger.Debug($"{message.ResourceUrl}): Count on source attempt #{attempts}.");
+                            }
+                        }
+
+                        apiResponse = await message.HttpClient.GetAsync($"{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}")
+                            .ConfigureAwait(false);
+                        
+                        if (!apiResponse.IsSuccessStatusCode)
+                        {
+                            // Retry certain error types
+                            if (apiResponse.StatusCode == HttpStatusCode.InternalServerError)
+                            {
+                                _logger.Warn(
+                                    $"{message.ResourceUrl}: Retrying count on request on resource (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
+
+                                ExponentialBackOffHelper.PerformDelay(ref delay);
+                                continue;
+                            }
+
+                            _logger.Error(
+                                $"{message.ResourceUrl}: Count request returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+
+                            await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
+                                .ConfigureAwait(false);
+                    
+                            // Allow processing to continue with no additional work on this resource
+                            return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+                        }
+
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex);
+
+                        throw;
+                    }
+                }
 
                 if (!apiResponse.IsSuccessStatusCode)
                 {
-                    await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
-                        .ConfigureAwait(false);
-                    
-                    // Allow processing to continue with no additional work on this resource
-                    return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+                    _logger.Error(
+                        $"{message.ResourceUrl}: Count request returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
                 }
 
                 // Try to get the count header from the response
@@ -100,7 +148,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 {
                     // Publish an error for the resource to allow processing to continue. Feature is not supported
                     _logger.Warn($"{message.ResourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing.");
-                    
+
+                    await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
+                        .ConfigureAwait(false);
+
                     // Allow processing to continue with no additional work on this resource
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                 }
