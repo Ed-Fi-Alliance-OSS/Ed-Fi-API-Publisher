@@ -71,12 +71,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     }
 
                     int attempts = 0;
+                    int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
                     int delay = options.RetryStartingDelayMilliseconds;
 
                     HttpResponseMessage apiResponse = null;
                     string responseContent = null;
                     
-                    while (attempts++ < options.MaxRetryAttempts)
+                    while (++attempts <= maxAttempts)
                     {
                         try
                         {

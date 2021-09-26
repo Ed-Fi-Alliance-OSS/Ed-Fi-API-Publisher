@@ -39,9 +39,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 
                 try
                 {
+                    int attempts = 0;
+                    int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
+                    int delay = options.RetryStartingDelayMilliseconds;
+
                     if (_logger.IsDebugEnabled)
                     {
-                        _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Processing PostItemMessage (with up to {options.MaxRetryAttempts} attempts).");
+                        _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Processing PostItemMessage (with up to {maxAttempts} attempts).");
                     }
                 
                     // Remove attributes not usable between API instances
@@ -57,13 +61,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         msg.Item.Remove(descriptorIdPropertyName);
                     }
                     
-                    int attempts = 0;
-                    int delay = options.RetryStartingDelayMilliseconds;
-
                     HttpResponseMessage apiResponse = null;
                     string responseContent = null;
                 
-                    while (attempts++ < options.MaxRetryAttempts)
+                    while (++attempts <= maxAttempts)
                     {
                         try
                         {
@@ -129,7 +130,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                     || apiResponse.StatusCode == HttpStatusCode.InternalServerError)
                                 {
                                     _logger.Warn(
-                                        $"{msg.ResourceUrl} (source id: {id}): Retrying resource (attempt #{attempts} of {options.MaxRetryAttempts} failed with status '{apiResponse.StatusCode}'):{Environment.NewLine}{responseContent}");
+                                        $"{msg.ResourceUrl} (source id: {id}): Retrying resource (attempt #{attempts} of {maxAttempts} failed with status '{apiResponse.StatusCode}'):{Environment.NewLine}{responseContent}");
 
                                     ExponentialBackOffHelper.PerformDelay(ref delay);
                                     continue;
@@ -186,8 +187,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         }
                     }
 
-                    // If retry count exceeded, publish the failure
-                    if (attempts >= options.MaxRetryAttempts)
+                    // If retry count exceeded with a failure response, publish the failure
+                    if (attempts > maxAttempts && apiResponse?.IsSuccessStatusCode == false)
                     {
                         // Publish the failure
                         var error = new ErrorItemMessage

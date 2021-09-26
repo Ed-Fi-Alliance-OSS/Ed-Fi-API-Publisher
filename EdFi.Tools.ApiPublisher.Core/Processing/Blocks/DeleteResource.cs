@@ -59,12 +59,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         string queryString = String.Join("&", keyValueParms);
                     
                         int attempts = 0;
+                        int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
+                        
                         int delay = options.RetryStartingDelayMilliseconds;
 
                         HttpResponseMessage apiResponse = null;
                         string responseContent = null;
 
-                        while (attempts++ < options.MaxRetryAttempts)
+                        while (++attempts <= maxAttempts)
                         {
                             try
                             {
@@ -155,8 +157,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             }
                         }
 
-                        // If retry count exceeded, publish the failure
-                        if (attempts >= options.MaxRetryAttempts)
+                        // If retry count exceeded with a failure response, publish the failure
+                        if (attempts > maxAttempts && apiResponse?.IsSuccessStatusCode == false)
                         {
                             var error = new ErrorItemMessage
                             {
@@ -222,12 +224,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 try
                 {
                     int attempts = 0;
+                    int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
                     int delay = options.RetryStartingDelayMilliseconds;
 
                     HttpResponseMessage apiResponse = null;
                     string responseContent = null;
 
-                    while (attempts++ < options.MaxRetryAttempts)
+                    while (++attempts <= maxAttempts)
                     {
                         try
                         {
@@ -291,8 +294,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         }
                     }
 
-                    // If retry count exceeded, publish the failure
-                    if (attempts >= options.MaxRetryAttempts)
+                    // If retry count exceeded with a failure response, publish the failure
+                    if (attempts > maxAttempts && apiResponse?.IsSuccessStatusCode == false)
                     {
                         // Publish the failure
                         var error = new ErrorItemMessage
