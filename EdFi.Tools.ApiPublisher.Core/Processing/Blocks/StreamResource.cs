@@ -12,6 +12,8 @@ using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
 using Newtonsoft.Json.Linq;
+using Polly;
+using Polly.Contrib.WaitAndRetry;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
@@ -91,73 +93,39 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                 string changeWindowParms = RequestHelper.GetChangeWindowParms(message.ChangeWindow);
 
-                int attempts = 0;
-                int delay = options.RetryStartingDelayMilliseconds;
+                var delay = Backoff.ExponentialBackoff(
+                    TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
+                    options.MaxRetryAttempts);
 
-                HttpResponseMessage apiResponse = null;
-                string responseContent = null;
+                int attempt = 0;
 
-                while (attempts++ < options.MaxRetryAttempts)
-                {
-                    try
-                    {
-                        if (attempts > 1)
+                var apiResponse = await Policy
+                    .HandleResult<HttpResponseMessage>(r => !r.StatusCode.IsPermanentFailure())
+                    .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
+                            _logger.Warn(
+                                $"{message.ResourceUrl}: Getting item count from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                        })
+                    .ExecuteAsync((ctx, ct) =>
+                        {
+                            attempt++;
+                        
                             if (_logger.IsDebugEnabled)
                             {
-                                _logger.Debug($"{message.ResourceUrl}): Count on source attempt #{attempts}.");
-                            }
-                        }
-
-                        apiResponse = await message.HttpClient
-                            .GetAsync($"{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}")
-                            .ConfigureAwait(false);
-
-                        if (!apiResponse.IsSuccessStatusCode)
-                        {
-                            // Retry certain error types
-                            if (!apiResponse.StatusCode.IsPermanentFailure())
-                            {
-                                _logger.Warn(
-                                    $"{message.ResourceUrl}: Retrying count on request on resource (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
-
-                                ExponentialBackOffHelper.PerformDelay(ref delay);
-
-                                continue;
+                                _logger.Debug($"{message.ResourceUrl}): Getting item count from source (attempt #{attempt})...");
                             }
 
-                            _logger.Error(
-                                $"{message.ResourceUrl}: Count request returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                            return message.HttpClient.GetAsync(
+                                $"{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}",
+                                ct);
+                        }, new Context(), cancellationToken);
 
-                            await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
-                                .ConfigureAwait(false);
-
-                            // Allow processing to continue with no additional work on this resource
-                            return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
-                        }
-
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(ex);
-
-                        throw;
-                    }
-                }
+                string responseContent = null;
 
                 if (!apiResponse.IsSuccessStatusCode)
                 {
                     _logger.Error(
                         $"{message.ResourceUrl}: Count request returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
-                }
-
-                // Try to get the count header from the response
-                if (!apiResponse.Headers.TryGetValues("total-count", out IEnumerable<string> headerValues))
-                {
-                    // Publish an error for the resource to allow processing to continue. Feature is not supported
-                    _logger.Warn(
-                        $"{message.ResourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing.");
 
                     await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
                         .ConfigureAwait(false);
@@ -166,7 +134,22 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                 }
 
+                // Try to get the count header from the response
+                if (!apiResponse.Headers.TryGetValues("total-count", out IEnumerable<string> headerValues))
+                {
+                    _logger.Warn(
+                        $"{message.ResourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing, but overall processing will fail.");
+
+                    // Publish an error for the resource. Feature is not supported.
+                    await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
+                        .ConfigureAwait(false);
+
+                    // Allow processing to continue as best it can with no additional work on this resource
+                    return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+                }
+
                 string totalCountHeaderValue = headerValues.First();
+                
                 _logger.Debug($"{message.ResourceUrl}: Total count header value = {totalCountHeaderValue}");
 
                 long totalCount;

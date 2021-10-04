@@ -4,14 +4,16 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using Newtonsoft.Json.Linq;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
-using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
+using Polly;
+using Polly.Contrib.WaitAndRetry;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
@@ -39,13 +41,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 
                 try
                 {
-                    int attempts = 0;
-                    int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
-                    int delay = options.RetryStartingDelayMilliseconds;
-
                     if (_logger.IsDebugEnabled)
                     {
-                        _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Processing PostItemMessage (with up to {maxAttempts} attempts).");
+                        _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Processing PostItemMessage (with up to {options.MaxRetryAttempts} retries).");
                     }
                 
                     // Remove attributes not usable between API instances
@@ -61,147 +59,130 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         msg.Item.Remove(descriptorIdPropertyName);
                     }
                     
-                    HttpResponseMessage apiResponse = null;
-                    string responseContent = null;
-                
-                    while (++attempts <= maxAttempts)
-                    {
-                        try
+                    var delay = Backoff.ExponentialBackoff(
+                        TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
+                        options.MaxRetryAttempts);
+
+                    int attempt = 0;
+
+                    var apiResponse = await Policy
+                        .Handle<Exception>()
+                        .OrResult<HttpResponseMessage>(r => 
+                            // Descriptor Conflicts are not to be retried
+                            (r.StatusCode == HttpStatusCode.Conflict && !msg.ResourceUrl.EndsWith("Descriptors", StringComparison.OrdinalIgnoreCase)) 
+                            || !r.StatusCode.IsPermanentFailure())
+                        .WaitAndRetryAsync(delay, async (result, ts, retryAttempt, ctx) =>
                         {
-                            if (attempts > 1)
+                            if (result.Exception != null)
+                            {
+                                _logger.Error($"{msg.ResourceUrl} (source id: {id}, attempt #{attempt}): {result.Exception}");
+                            }
+                            else
+                            {
+                                string responseContent = await result.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                                _logger.Warn($"{msg.ResourceUrl} (source id: {id}): Posting resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}");
+                            }
+                        })
+                        .ExecuteAsync((ctx, ct) =>
+                        {
+                            attempt++;
+
+                            if (_logger.IsDebugEnabled)
+                            {
+                                if (attempt > 1)
+                                {
+                                    _logger.Debug($"{msg.ResourceUrl} (source id: {id}): POST attempt #{attempt}.");
+                                }
+                                else
+                                {
+                                    _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Sending POST request.");
+                                }
+                            }
+
+                            return targetApiClient.HttpClient.PostAsync(
+                                msg.ResourceUrl,
+                                new StringContent(msg.Item.ToString(), Encoding.UTF8, "application/json"),
+                                ct);
+                            
+                        }, new Context(), CancellationToken.None);
+
+                    // Failure
+                    if (!apiResponse.IsSuccessStatusCode)
+                    {
+                        // Descriptor POSTs behave slightly different than other resources in
+                        // that the DescriptorId must be used to update the descriptor value,
+                        // while a POST with the values will result in a 409 Conflict if the values
+                        // already exist. Thus, a Conflict response can be safely ignored as it
+                        // indicates the data is already present and nothing more needs to be done.
+                        if (msg.ResourceUrl.EndsWith("Descriptors") &&
+                            apiResponse.StatusCode == HttpStatusCode.Conflict)
+                        {
+                            return Enumerable.Empty<ErrorItemMessage>();
+                        }
+                        
+                        // Gracefully handle authorization errors by using the retry action delegate
+                        // (if present) to post the message to the retry "resource" queue 
+                        if (apiResponse.StatusCode == HttpStatusCode.Forbidden)
+                        {
+                            // Determine if current resource has an authorization retry queue
+                            if (msg.PostAuthorizationFailureRetry != null)
                             {
                                 if (_logger.IsDebugEnabled)
                                 {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {id}): POST attempt #{attempts}.");
+                                    _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Authorization failed -- deferring for retry after pertinent associations are processed.");
                                 }
+                                
+                                // Re-add the identifier, and pass the message along to the "retry" resource (after associations have been processed)
+                                msg.Item.Add("id", idToken);
+                                msg.PostAuthorizationFailureRetry(msg);
+
+                                // Deferring for retry - no errors to publish
+                                return Enumerable.Empty<ErrorItemMessage>();
                             }
-
-                            if (_logger.IsDebugEnabled)
-                            {
-                                _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Sending POST request.");
-                            }
-
-                            apiResponse = await targetApiClient.HttpClient.PostAsync(
-                                msg.ResourceUrl,
-                                new StringContent(
-                                    msg.Item.ToString(),
-                                    Encoding.UTF8,
-                                    "application/json"))
-                                .ConfigureAwait(false);
-
-                            if (!apiResponse.IsSuccessStatusCode)
-                            {
-                                // Descriptor POSTs behave slightly different than other resources in
-                                // that the DescriptorId must be used to update the descriptor value,
-                                // while a POST with the values will result in a 409 Conflict if the values
-                                // already exist. Thus, a Conflict response can be safely ignored as it
-                                // indicates the data is already present and nothing more needs to be done.
-                                if (msg.ResourceUrl.EndsWith("Descriptors") &&
-                                    apiResponse.StatusCode == HttpStatusCode.Conflict)
-                                {
-                                    return Enumerable.Empty<ErrorItemMessage>();
-                                }
-                                
-                                // Gracefully handle authorization errors by using the retry action delegate
-                                // (if present) to post the message to the retry "resource" queue 
-                                if (apiResponse.StatusCode == HttpStatusCode.Forbidden)
-                                {
-                                    // Determine if current resource has an authorization retry queue
-                                    if (msg.PostAuthorizationFailureRetry != null)
-                                    {
-                                        if (_logger.IsDebugEnabled)
-                                        {
-                                            _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Authorization failed -- deferring for retry after pertinent associations are processed.");
-                                        }
-                                        
-                                        // Re-add the identifier, and pass the message along to the "retry" resource (after associations have been processed)
-                                        msg.Item.Add("id", idToken);
-                                        msg.PostAuthorizationFailureRetry(msg);
-
-                                        // Deferring for retry - no errors to publish
-                                        return Enumerable.Empty<ErrorItemMessage>();
-                                    }
-                                }
-                                
-                                responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-                                
-                                // Retry certain error types as potentially non-permanent
-                                if (apiResponse.StatusCode == HttpStatusCode.Conflict
-                                    || !apiResponse.StatusCode.IsPermanentFailure())
-                                {
-                                    _logger.Warn(
-                                        $"{msg.ResourceUrl} (source id: {id}): Retrying resource (attempt #{attempts} of {maxAttempts} failed with status '{apiResponse.StatusCode}'):{Environment.NewLine}{responseContent}");
-
-                                    ExponentialBackOffHelper.PerformDelay(ref delay);
-                                    continue;
-                                }
-
-                                // If the failure is Forbidden, and we should treat it as a warning
-                                if (apiResponse.StatusCode == HttpStatusCode.Forbidden
-                                    && msg.PostAuthorizationFailureRetry == null
-                                    && targetApiClient.ConnectionDetails?.TreatForbiddenPostAsWarning == true)
-                                {
-                                    // Warn and ignore all future data for this resource
-                                    _logger.Warn($"{msg.ResourceUrl} (source id: {id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
-                                    ignoredResourceByUrl.TryAdd(msg.ResourceUrl, true);
-                                    return Enumerable.Empty<ErrorItemMessage>();
-                                }
-                                
-                                // Unhandled error, no retries to be attempted... surface the error in the log
-                                _logger.Error($"{msg.ResourceUrl} (source id: {id}): POST returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
-
-                                // Publish the failed data
-                                var error = new ErrorItemMessage
-                                {
-                                    Method = HttpMethod.Post.ToString(),
-                                    ResourceUrl = msg.ResourceUrl,
-                                    Id = id,
-                                    Body = msg.Item,
-                                    ResponseStatus = apiResponse.StatusCode,
-                                    ResponseContent = responseContent
-                                };
-
-                                return new[] {error};
-                            }
+                        }
                         
-                            // Success
-                            if (_logger.IsInfoEnabled && attempts > 1)
-                            {
-                                _logger.Info(
-                                    $"{msg.ResourceUrl} (source id: {id}): POST attempt #{attempts} returned {apiResponse.StatusCode}.");
-                            }
-
-                            if (_logger.IsDebugEnabled)
-                            {
-                                _logger.Debug(
-                                    $"{msg.ResourceUrl} (source id: {id}): POST returned {apiResponse.StatusCode}");
-                            }
-
-                            break;
-                        }
-                        catch (Exception ex)
+                        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        
+                        // If the failure is Forbidden, and we should treat it as a warning
+                        if (apiResponse.StatusCode == HttpStatusCode.Forbidden
+                            && msg.PostAuthorizationFailureRetry == null
+                            && targetApiClient.ConnectionDetails?.TreatForbiddenPostAsWarning == true)
                         {
-                            _logger.Error($"{msg.ResourceUrl} (source id: {id}, attempt #{attempts}): {ex}");
-
-                            ExponentialBackOffHelper.PerformDelay(ref delay);
+                            // Warn and ignore all future data for this resource
+                            _logger.Warn($"{msg.ResourceUrl} (source id: {id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                            ignoredResourceByUrl.TryAdd(msg.ResourceUrl, true);
+                            return Enumerable.Empty<ErrorItemMessage>();
                         }
-                    }
+                        
+                        // Unhandled error, no retries to be attempted... surface the error in the log
+                        _logger.Error($"{msg.ResourceUrl} (source id: {id}): POST returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
 
-                    // If retry count exceeded with a failure response, publish the failure
-                    if (attempts > maxAttempts && apiResponse?.IsSuccessStatusCode == false)
-                    {
-                        // Publish the failure
+                        // Publish the failed data
                         var error = new ErrorItemMessage
                         {
                             Method = HttpMethod.Post.ToString(),
                             ResourceUrl = msg.ResourceUrl,
                             Id = id,
                             Body = msg.Item,
-                            ResponseStatus = apiResponse?.StatusCode,
+                            ResponseStatus = apiResponse.StatusCode,
                             ResponseContent = responseContent
                         };
 
                         return new[] {error};
+                    }
+                        
+                    // Success
+                    if (_logger.IsInfoEnabled && attempt > 1)
+                    {
+                        _logger.Info(
+                            $"{msg.ResourceUrl} (source id: {id}): POST attempt #{attempt} returned {apiResponse.StatusCode}.");
+                    }
+
+                    if (_logger.IsDebugEnabled)
+                    {
+                        _logger.Debug(
+                            $"{msg.ResourceUrl} (source id: {id}): POST returned {apiResponse.StatusCode}");
                     }
 
                     // Success - no errors to publish
@@ -217,9 +198,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
             });
             
-            return 
-                ((ITargetBlock<PostItemMessage>) postResourceBlock, 
-                (ISourceBlock<ErrorItemMessage>) postResourceBlock);
+            return (postResourceBlock, postResourceBlock);
         }
 
         public static PostItemMessage CreateItemActionMessage(StreamResourcePageMessage<PostItemMessage> msg, JObject j)

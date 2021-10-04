@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -11,6 +11,8 @@ using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
 using Newtonsoft.Json.Linq;
+using Polly;
+using Polly.Contrib.WaitAndRetry;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
@@ -71,17 +73,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         _logger.Debug($"{message.ResourceUrl}: Retrieving page items {offset} to {offset + limit - 1}.");
                     }
 
-                    int attempts = 0;
-                    int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
-                    int delay = options.RetryStartingDelayMilliseconds;
+                    var delay = Backoff.ExponentialBackoff(
+                        TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
+                        options.MaxRetryAttempts);
 
-                    HttpResponseMessage apiResponse = null;
-                    string responseContent = null;
+                    int attempts = 0;
                     
-                    while (++attempts <= maxAttempts)
-                    {
-                        try
+                    var apiResponse = await Policy
+                        .HandleResult<HttpResponseMessage>(r => !r.StatusCode.IsPermanentFailure())
+                        .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
+                            _logger.Warn(
+                                $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                        })
+                        .ExecuteAsync((ctx, ct) =>
+                        {
+                            attempts++;
+
                             if (attempts > 1)
                             {
                                 if (_logger.IsDebugEnabled)
@@ -89,51 +97,28 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                     _logger.Debug($"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} from source attempt #{attempts}.");
                                 }
                             }
-
-                            apiResponse = await message.HttpClient.GetAsync($"{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}")
-                                .ConfigureAwait(false);
-                    
-                            responseContent = await apiResponse.Content.ReadAsStringAsync()
-                                .ConfigureAwait(false);
-                            
-                            if (!apiResponse.IsSuccessStatusCode)
-                            {
-                                // Retry certain error types
-                                if (!apiResponse.StatusCode.IsPermanentFailure())
-                                {
-                                    _logger.Warn(
-                                        $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
-
-                                    ExponentialBackOffHelper.PerformDelay(ref delay);
-                                    continue;
-                                }
                                 
-                                var error = new ErrorItemMessage
-                                {
-                                    Method = HttpMethod.Get.ToString(),
-                                    ResourceUrl = message.ResourceUrl,
-                                    Id = null,
-                                    Body = null,
-                                    ResponseStatus = apiResponse.StatusCode,
-                                    ResponseContent = responseContent
-                                };
-
-                                // Publish the failure
-                                errorHandlingBlock.Post(error);
-                            }
-                            
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Error($"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} attempt #{attempts}: {ex}");
-
-                            ExponentialBackOffHelper.PerformDelay(ref delay);
-                        }
-                    }
-
+                            return message.HttpClient.GetAsync($"{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}", ct);
+                        }, new Context(), CancellationToken.None);
+                    
+                    string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    
+                    // Failure
                     if (!apiResponse.IsSuccessStatusCode)
                     {
+                        var error = new ErrorItemMessage
+                        {
+                            Method = HttpMethod.Get.ToString(),
+                            ResourceUrl = message.ResourceUrl,
+                            Id = null,
+                            Body = null,
+                            ResponseStatus = apiResponse.StatusCode,
+                            ResponseContent = responseContent
+                        };
+
+                        // Publish the failure
+                        errorHandlingBlock.Post(error);
+
                         break;
                     }
 
@@ -210,7 +195,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             catch (Exception ex)
             {
                 _logger.Error($"{message.ResourceUrl}: {ex}");
-                return new TItemActionMessage[0];
+                return Array.Empty<TItemActionMessage>();
             }
         }
     }

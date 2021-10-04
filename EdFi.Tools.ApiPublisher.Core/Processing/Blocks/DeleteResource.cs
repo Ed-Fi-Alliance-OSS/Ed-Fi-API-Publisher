@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -11,6 +12,8 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Polly;
+using Polly.Contrib.WaitAndRetry;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
@@ -29,9 +32,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
             getItemForDeletionBlock.LinkTo(deleteResourceBlock, new DataflowLinkOptions {PropagateCompletion = true});
             
-            return
-                ((ITargetBlock<GetItemForDeletionMessage>) getItemForDeletionBlock, 
-                (ISourceBlock<ErrorItemMessage>) deleteResourceBlock);
+            return (getItemForDeletionBlock, deleteResourceBlock);
         }
 
         private static TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> CreateGetItemForDeletionBlock(
@@ -58,123 +59,103 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                         string queryString = String.Join("&", keyValueParms);
                     
+                        var delay = Backoff.ExponentialBackoff(
+                            TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
+                            options.MaxRetryAttempts);
+
                         int attempts = 0;
-                        int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
-                        int delay = options.RetryStartingDelayMilliseconds;
-
-                        HttpResponseMessage apiResponse = null;
-                        string responseContent = null;
-
-                        while (++attempts <= maxAttempts)
-                        {
-                            try
+                        var apiResponse = await Policy
+                            .Handle<Exception>()
+                            .OrResult<HttpResponseMessage>(r => !r.StatusCode.IsPermanentFailure())
+                            .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                             {
+                                if (result.Exception != null)
+                                {
+                                    _logger.Error($"{msg.ResourceUrl} (source id: {id}): GET by key for deletion of target resource attempt #{attempts}): {result.Exception}");
+                                }
+                                else
+                                {
+                                    _logger.Warn(
+                                        $"{msg.ResourceUrl} (source id: {id}): GET by key for deletion of target resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                                }
+                            })
+                            .ExecuteAsync((ctx, ct) =>
+                            {
+                                attempts++;
+
                                 if (attempts > 1)
                                 {
                                     if (_logger.IsDebugEnabled)
                                     {
-                                        _logger.Debug($"{msg.ResourceUrl} (source id: {msg.Id}): GET by key on target attempt #{attempts} ({queryString}).");
+                                        _logger.Debug($"{msg.ResourceUrl} (source id: {msg.Id}): GET by key for deletion of target resource (attempt #{attempts}) using '{queryString}'...");
                                     }
                                 }
-
-                                apiResponse = await targetHttpClient.GetAsync($"{msg.ResourceUrl}?{queryString}").ConfigureAwait(false);
-
-                                responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                                if (!apiResponse.IsSuccessStatusCode)
-                                {
-                                    _logger.Error(
-                                        $"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
-
-                                    // Retry certain error types
-                                    if (!apiResponse.StatusCode.IsPermanentFailure())
-                                    {
-                                        _logger.Warn(
-                                            $"{msg.ResourceUrl} (source id: {id}): Retrying select by key on resource (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
-
-                                        ExponentialBackOffHelper.PerformDelay(ref delay);
-                                        continue;
-                                    }
-                            
-                                    var error = new ErrorItemMessage
-                                    {
-                                        Method = HttpMethod.Get.ToString(),
-                                        ResourceUrl = msg.ResourceUrl,
-                                        Id = id,
-                                        Body = null,
-                                        ResponseStatus = apiResponse.StatusCode,
-                                        ResponseContent = responseContent
-                                    };
-
-                                    // Publish the failure
-                                    errorHandlingBlock.Post(error);
                                 
-                                    // No delete to process
-                                    return Enumerable.Empty<DeleteItemMessage>();
-                                }
+                                return targetHttpClient.GetAsync($"{msg.ResourceUrl}?{queryString}", ct);
+                            }, new Context(), CancellationToken.None);
 
-                                // Success
-                                if (_logger.IsInfoEnabled && attempts > 1)
-                                {
-                                    _logger.Info(
-                                        $"{msg.ResourceUrl} (source id: {id}): GET by key attempt #{attempts} returned {apiResponse.StatusCode}.");
-                                }
+                        string responseContent = null;
 
-                                if (_logger.IsDebugEnabled)
-                                {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}");
-                                }
+                        responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                                var getByKeyResults = JArray.Parse(responseContent);
-
-                                // If the item to be deleted cannot be found...
-                                if (getByKeyResults.Count == 0)
-                                {
-                                    if (_logger.IsDebugEnabled)
-                                    {
-                                        _logger.Debug($"{msg.ResourceUrl} (source id: {msg.Id}): GET by key for deletion returned no results on target API ({queryString}).");
-                                    }
-                                    
-                                    return Enumerable.Empty<DeleteItemMessage>();
-                                }
-
-                                return new[]
-                                {
-                                    new DeleteItemMessage
-                                    {
-                                        ResourceUrl = msg.ResourceUrl,
-                                        Id = getByKeyResults[0]["id"].Value<string>(),
-                                        SourceId = msg.Id,
-                                    }
-                                };
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.Error($"{msg.ResourceUrl} (source id: {id}): GET by key attempt #{attempts}): {ex}");
-
-                                ExponentialBackOffHelper.PerformDelay(ref delay);
-                            }
-                        }
-
-                        // If retry count exceeded with a failure response, publish the failure
-                        if (attempts > maxAttempts && apiResponse?.IsSuccessStatusCode == false)
+                        if (!apiResponse.IsSuccessStatusCode)
                         {
+                            _logger.Error(
+                                $"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+
                             var error = new ErrorItemMessage
                             {
                                 Method = HttpMethod.Get.ToString(),
                                 ResourceUrl = $"{msg.ResourceUrl}?{queryString}",
                                 Id = id,
                                 Body = null,
-                                ResponseStatus = apiResponse?.StatusCode,
+                                ResponseStatus = apiResponse.StatusCode,
                                 ResponseContent = responseContent
                             };
 
                             // Publish the failure
                             errorHandlingBlock.Post(error);
+                                
+                            // No delete to process
+                            return Enumerable.Empty<DeleteItemMessage>();
                         }
 
-                        // Success - no errors to publish
-                        return Enumerable.Empty<DeleteItemMessage>();
+                        // Success
+                        
+                        // Log a message if this was successful after a retry.
+                        if (_logger.IsInfoEnabled && attempts > 1)
+                        {
+                            _logger.Info(
+                                $"{msg.ResourceUrl} (source id: {id}): GET by key attempt #{attempts} returned {apiResponse.StatusCode}.");
+                        }
+
+                        if (_logger.IsDebugEnabled)
+                        {
+                            _logger.Debug($"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}");
+                        }
+
+                        var getByKeyResults = JArray.Parse(responseContent);
+
+                        // If the item to be deleted cannot be found...
+                        if (getByKeyResults.Count == 0)
+                        {
+                            if (_logger.IsDebugEnabled)
+                            {
+                                _logger.Debug($"{msg.ResourceUrl} (source id: {msg.Id}): GET by key for deletion returned no results on target API ({queryString}).");
+                            }
+                            
+                            return Enumerable.Empty<DeleteItemMessage>();
+                        }
+
+                        return new[]
+                        {
+                            new DeleteItemMessage
+                            {
+                                ResourceUrl = msg.ResourceUrl,
+                                Id = getByKeyResults[0]["id"].Value<string>(),
+                                SourceId = msg.Id,
+                            }
+                        };
                     }
                     catch (Exception ex)
                     {
@@ -222,80 +203,51 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                 try
                 {
+                    var delay = Backoff.ExponentialBackoff(
+                        TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
+                        options.MaxRetryAttempts);
+
                     int attempts = 0;
-                    int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
-                    int delay = options.RetryStartingDelayMilliseconds;
 
-                    HttpResponseMessage apiResponse = null;
-                    string responseContent = null;
-
-                    while (++attempts <= maxAttempts)
-                    {
-                        try
+                    var apiResponse = await Policy
+                        .Handle<Exception>()
+                        .OrResult<HttpResponseMessage>(r => 
+                            r.StatusCode == HttpStatusCode.Conflict || !r.StatusCode.IsPermanentFailure())
+                        .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
+                            if (result.Exception != null)
+                            {
+                                _logger.Error($"{msg.ResourceUrl} (source id: {sourceId}): Delete resource attempt #{attempts} threw an exception: {result.Exception}");
+                            }
+                            else
+                            {
+                                _logger.Warn(
+                                    $"{msg.ResourceUrl} (source id: {sourceId}): Delete resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                            }
+                        })
+                        .ExecuteAsync((ctx, ct) =>
+                        {
+                            attempts++;
+
                             if (attempts > 1)
                             {
                                 if (_logger.IsDebugEnabled)
                                 {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): DELETE attempt #{attempts}.");
+                                    _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): DELETE request (attempt #{attempts}.");
                                 }
                             }
-
-                            apiResponse = await targetHttpClient.DeleteAsync($"{msg.ResourceUrl}/{id}").ConfigureAwait(false);
-
-                            if (!apiResponse.IsSuccessStatusCode)
-                            {
-                                responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                                 
-                                _logger.Error(
-                                    $"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
-
-                                // Retry certain error types
-                                if (apiResponse.StatusCode == HttpStatusCode.Conflict
-                                    || !apiResponse.StatusCode.IsPermanentFailure())
-                                {
-                                    _logger.Warn(
-                                        $"{msg.ResourceUrl} (source id: {sourceId}): Retrying delete resource (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
-
-                                    ExponentialBackOffHelper.PerformDelay(ref delay);
-                                    continue;
-                                }
-                            
-                                // Publish the failure
-                                var error = new ErrorItemMessage
-                                {
-                                    Method = HttpMethod.Delete.ToString(),
-                                    ResourceUrl = msg.ResourceUrl,
-                                    Id = id,
-                                    Body = null,
-                                    ResponseStatus = apiResponse.StatusCode,
-                                    ResponseContent = responseContent
-                                };
-
-                                return new[] {error};
-                            }
-                        
-                            // Success
-                            if (_logger.IsInfoEnabled && attempts > 1)
-                                _logger.Info(
-                                    $"{msg.ResourceUrl} (source id: {sourceId}): DELETE attempt #{attempts} returned {apiResponse.StatusCode}.");
-
-                            if (_logger.IsDebugEnabled)
-                                _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}");
-
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Error($"{msg.ResourceUrl} (source id: {sourceId}): Delete attempt #{attempts} threw an exception: {ex}");
-
-                            ExponentialBackOffHelper.PerformDelay(ref delay);
-                        }
-                    }
-
-                    // If retry count exceeded with a failure response, publish the failure
-                    if (attempts > maxAttempts && apiResponse?.IsSuccessStatusCode == false)
+                            return targetHttpClient.DeleteAsync($"{msg.ResourceUrl}/{id}", ct);
+                        }, new Context(), CancellationToken.None);
+                    
+                    // Failure
+                    if (!apiResponse.IsSuccessStatusCode)
                     {
+                        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                
+                        _logger.Error(
+                            $"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+
                         // Publish the failure
                         var error = new ErrorItemMessage
                         {
@@ -303,11 +255,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             ResourceUrl = msg.ResourceUrl,
                             Id = id,
                             Body = null,
-                            ResponseStatus = apiResponse?.StatusCode,
+                            ResponseStatus = apiResponse.StatusCode,
                             ResponseContent = responseContent
                         };
 
                         return new[] {error};
+                    }
+                    
+                    // Success
+                    if (_logger.IsInfoEnabled && attempts > 1)
+                    {
+                        _logger.Info(
+                            $"{msg.ResourceUrl} (source id: {sourceId}): DELETE attempt #{attempts} returned {apiResponse.StatusCode}.");
+                    }
+
+                    if (_logger.IsDebugEnabled)
+                    {
+                        _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}");
                     }
 
                     // Success - no errors to publish
