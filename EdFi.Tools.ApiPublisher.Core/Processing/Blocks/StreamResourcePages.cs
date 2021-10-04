@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
@@ -98,7 +99,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             if (!apiResponse.IsSuccessStatusCode)
                             {
                                 // Retry certain error types
-                                if (apiResponse.StatusCode == HttpStatusCode.InternalServerError)
+                                if (!apiResponse.StatusCode.IsPermanentFailure())
                                 {
                                     _logger.Warn(
                                         $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");

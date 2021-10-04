@@ -108,7 +108,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         if (!apiResponse.IsSuccessStatusCode)
                         {
                             // Retry certain error types
-                            if (apiResponse.StatusCode == HttpStatusCode.InternalServerError)
+                            if (!apiResponse.StatusCode.IsPermanentFailure())
                             {
                                 _logger.Warn(
                                     $"{message.ResourceUrl}: Retrying count on request on resource (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");

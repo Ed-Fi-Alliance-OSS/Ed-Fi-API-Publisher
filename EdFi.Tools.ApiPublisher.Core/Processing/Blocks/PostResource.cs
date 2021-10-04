@@ -9,6 +9,7 @@ using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using Newtonsoft.Json.Linq;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
@@ -125,9 +126,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 
                                 responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                                 
-                                // Retry certain error types
+                                // Retry certain error types as potentially non-permanent
                                 if (apiResponse.StatusCode == HttpStatusCode.Conflict
-                                    || apiResponse.StatusCode == HttpStatusCode.InternalServerError)
+                                    || !apiResponse.StatusCode.IsPermanentFailure())
                                 {
                                     _logger.Warn(
                                         $"{msg.ResourceUrl} (source id: {id}): Retrying resource (attempt #{attempts} of {maxAttempts} failed with status '{apiResponse.StatusCode}'):{Environment.NewLine}{responseContent}");

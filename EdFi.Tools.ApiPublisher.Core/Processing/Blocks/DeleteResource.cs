@@ -60,7 +60,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     
                         int attempts = 0;
                         int maxAttempts = 1 + Math.Max(0, options.MaxRetryAttempts);
-                        
                         int delay = options.RetryStartingDelayMilliseconds;
 
                         HttpResponseMessage apiResponse = null;
@@ -88,7 +87,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                         $"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
 
                                     // Retry certain error types
-                                    if (apiResponse.StatusCode == HttpStatusCode.InternalServerError)
+                                    if (!apiResponse.StatusCode.IsPermanentFailure())
                                     {
                                         _logger.Warn(
                                             $"{msg.ResourceUrl} (source id: {id}): Retrying select by key on resource (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
@@ -253,7 +252,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                                 // Retry certain error types
                                 if (apiResponse.StatusCode == HttpStatusCode.Conflict
-                                    || apiResponse.StatusCode == HttpStatusCode.InternalServerError)
+                                    || !apiResponse.StatusCode.IsPermanentFailure())
                                 {
                                     _logger.Warn(
                                         $"{msg.ResourceUrl} (source id: {sourceId}): Retrying delete resource (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
