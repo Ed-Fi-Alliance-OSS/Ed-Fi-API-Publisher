@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Castle.MicroKernel.Registration;
 using Castle.Windsor;
@@ -28,6 +29,9 @@ namespace EdFi.Tools.ApiPublisher.Cli
             Logger.Info(
                 "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoffrey@mcelhanon.com, Edufied LLC) in conjunction with Student1.");
 
+            var cancellationTokenSource = new CancellationTokenSource();
+            var cancellationToken = cancellationTokenSource.Token;
+            
             try
             {
                 var configBuilder = new ConfigurationBuilderFactory()
@@ -74,6 +78,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 
                 var options = publisherSettings.Options;
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
+                var resourcesWithUpdatableKeys = publisherSettings.ResourcesWithUpdatableKeys;
 
                 var apiConnections = finalConfiguration.Get<ConnectionConfiguration>().Connections;
                 
@@ -86,6 +91,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
+                    resourcesWithUpdatableKeys,
                     sourceApiConnectionDetails,
                     targetApiConnectionDetails,
                     CreateSourceApiClient,
@@ -96,7 +102,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var changeProcessor = container.Resolve<IChangeProcessor>();
 
                 Logger.Info($"Processing started.");
-                await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration).ConfigureAwait(false);
+                await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
                 Logger.Info($"Processing complete.");
 
                 return 0;

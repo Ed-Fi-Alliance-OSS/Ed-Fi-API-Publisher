@@ -27,5 +27,15 @@
             "path": "/ed-fi/parents",
             "updatePrerequisitePaths": ["/ed-fi/studentParentAssociations"]
         }
+    ],
+    "resourcesWithUpdatableKeys": [
+        "/ed-fi/classPeriods",
+        "/ed-fi/grades",
+        "/ed-fi/gradebookEntries",
+        "/ed-fi/locations",
+        "/ed-fi/sections",
+        "/ed-fi/sessions",
+        "/ed-fi/studentSchoolAssociations",
+        "/ed-fi/studentSectionAssociations"
     ]
 }

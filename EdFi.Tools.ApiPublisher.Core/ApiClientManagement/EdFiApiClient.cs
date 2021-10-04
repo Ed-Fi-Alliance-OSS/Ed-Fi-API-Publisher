@@ -12,7 +12,7 @@ using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 {
-    public class EdFiApiClient
+    public class EdFiApiClient : IDisposable
     {
         private readonly string _name;
         private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiClient));
@@ -25,12 +25,13 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             string name,
             ApiConnectionDetails apiConnectionDetails,
             int bearerTokenRefreshMinutes,
-            bool ignoreSslErrors)
+            bool ignoreSslErrors,
+            HttpClientHandler httpClientHandler = null)
         {
             _name = name;
             ConnectionDetails = apiConnectionDetails;
 
-            var httpClientHandler = new HttpClientHandler();
+            httpClientHandler ??= new HttpClientHandler();
 
             if (ignoreSslErrors)
             {
@@ -178,5 +179,12 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
         }
 
         public ApiConnectionDetails ConnectionDetails { get; }
+
+        public void Dispose()
+        {
+            _httpClient?.Dispose();
+            _bearerTokenRefreshTimer?.Dispose();
+            _tokenRefreshHttpClient?.Dispose();
+        }
     }
 }

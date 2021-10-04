@@ -27,7 +27,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
                 return $"/ed-fi/{resource}";
             }
 
-            var resourceParts = resource.Split('/');
+            var resourceParts = resource.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
             if (resourceParts.Length != 2)
             {

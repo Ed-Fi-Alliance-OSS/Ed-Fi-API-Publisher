@@ -15,6 +15,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         
         public ChangeProcessorConfiguration(
             AuthorizationFailureHandling[] authorizationFailureHandling,
+            string[] resourcesWithUpdatableKeys,
             ApiConnectionDetails sourceApiConnectionDetails,
             ApiConnectionDetails targetApiConnectionDetails,
             Func<EdFiApiClient> sourceApiClientFactory,
@@ -23,6 +24,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             IConfigurationSection configurationStoreSection)
         {
             AuthorizationFailureHandling = authorizationFailureHandling;
+            ResourcesWithUpdatableKeys = resourcesWithUpdatableKeys;
             SourceApiConnectionDetails = sourceApiConnectionDetails;
             TargetApiConnectionDetails = targetApiConnectionDetails;
             Options = options;
@@ -46,7 +48,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         }
 
         public AuthorizationFailureHandling[] AuthorizationFailureHandling { get; }
-        
+        public string[] ResourcesWithUpdatableKeys { get; }
+
         public ApiConnectionDetails SourceApiConnectionDetails { get; }
         
         public ApiConnectionDetails TargetApiConnectionDetails { get; }

@@ -41,7 +41,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _errorPublisher = errorPublisher;
         }
         
-        public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration)
+        public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
         {
             var processStopwatch = new Stopwatch();
             processStopwatch.Start();
@@ -95,6 +95,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) =
                     PublishErrors.GetBlocks(options, _errorPublisher);
                 
+                // Process all the key changes first
+                var keyChangesTaskStatuses = await ProcessKeyChangesToCompletionAsync(
+                    changeWindow,
+                    postDependencyKeysByResourceKey,
+                    configuration.ResourcesWithUpdatableKeys,
+                    sourceApiClient, 
+                    targetApiClient, 
+                    options,
+                    publishErrorsIngestionBlock,
+                    cancellationToken)
+                    .ConfigureAwait(false);
+                
                 // Process all the "Upserts"
                 var postTaskStatuses = ProcessUpsertsToCompletion(
                     sourceApiClient, 
@@ -102,7 +114,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     postDependencyKeysByResourceKey, 
                     options, 
                     changeWindow, 
-                    publishErrorsIngestionBlock);
+                    publishErrorsIngestionBlock,
+                    cancellationToken);
 
                 // Process all the deletions
                 var deleteTaskStatuses = await ProcessDeletesToCompletionAsync(
@@ -111,7 +124,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     sourceApiClient, 
                     targetApiClient, 
                     options, 
-                    publishErrorsIngestionBlock)
+                    publishErrorsIngestionBlock,
+                    cancellationToken)
                     .ConfigureAwait(false);
 
                 // Indicate to the error handling that we're done feeding it errors.
@@ -121,7 +135,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 _logger.Debug($"Waiting for all errors to be published.");
                 publishErrorsCompletionBlock.Completion.Wait();
 
-                EnsureProcessingWasSuccessful(postTaskStatuses, deleteTaskStatuses);
+                EnsureProcessingWasSuccessful(keyChangesTaskStatuses, postTaskStatuses, deleteTaskStatuses);
 
                 await UpdateChangeVersionAsync(configuration, changeWindow)
                     .ConfigureAwait(false);
@@ -644,9 +658,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 .GetValueOrDefault(targetApiConnectionDetails.Name);
         }
 
-        private TaskStatus[] ProcessUpsertsToCompletion(EdFiApiClient sourceApiClient, EdFiApiClient targetApiClient,
-            IDictionary<string, string[]> postDependenciesByResourcePath, Options options, ChangeWindow changeWindow,
-            ITargetBlock<ErrorItemMessage> errorPublishingBlock)
+        private TaskStatus[] ProcessUpsertsToCompletion(
+            EdFiApiClient sourceApiClient,
+            EdFiApiClient targetApiClient,
+            IDictionary<string, string[]> postDependenciesByResourcePath,
+            Options options,
+            ChangeWindow changeWindow,
+            ITargetBlock<ErrorItemMessage> errorPublishingBlock,
+            CancellationToken cancellationToken)
         {
             // Start processing resources in dependency order
             var streamingPagesOfPostsByResourcePath = InitiateResourceStreaming(
@@ -657,7 +676,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 PostResource.CreateItemActionMessage,
                 options,
                 changeWindow,
-                errorPublishingBlock);
+                errorPublishingBlock,
+                cancellationToken);
 
             // Wait for all upsert publishing to finish
             var postTaskStatuses = WaitForResourceStreamingToComplete(
@@ -669,27 +689,28 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         }
 
         private async Task<TaskStatus[]> ProcessDeletesToCompletionAsync(
-            ChangeWindow changeWindow, 
+            ChangeWindow changeWindow,
             IDictionary<string, string[]> postDependenciesByResourcePath,
-            EdFiApiClient sourceApiClient, 
-            EdFiApiClient targetApiClient, 
-            Options options, 
-            ITargetBlock<ErrorItemMessage> errorPublishingBlock)
+            EdFiApiClient sourceApiClient,
+            EdFiApiClient targetApiClient,
+            Options options,
+            ITargetBlock<ErrorItemMessage> errorPublishingBlock,
+            CancellationToken cancellationToken)
         {
             // Only process deletes if we are using a specific Change Window
             if (changeWindow == null)
             {
                 _logger.Info($"No change window was defined, so no delete processing will be performed.");
-                return new TaskStatus[0];
+                return Array.Empty<TaskStatus>();
             }
 
             if (changeWindow.MinChangeVersion <= 1)
             {
                 _logger.Info($"Change window starting value indicates all values are being published, and so there is no need to perform delete processing.");
-                return new TaskStatus[0];
+                return Array.Empty<TaskStatus>();
             }
             
-            TaskStatus[] deleteTaskStatuses = new TaskStatus[0];
+            TaskStatus[] deleteTaskStatuses = Array.Empty<TaskStatus>();
             
             // Invert the dependencies for use in deletion, excluding descriptors (if present) and the special #Retry nodes
             var deleteDependenciesByResourcePath = InvertDependencies(postDependenciesByResourcePath, 
@@ -717,7 +738,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         DeleteResource.CreateItemActionMessage,
                         options,
                         changeWindow,
-                        errorPublishingBlock, 
+                        errorPublishingBlock,
+                        cancellationToken,
                         EdFiApiConstants.DeletesPathSuffix);
 
                     // Wait for everything to finish
@@ -734,8 +756,180 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             return deleteTaskStatuses;
         }
+        
+        private async Task<TaskStatus[]> ProcessKeyChangesToCompletionAsync(
+            ChangeWindow changeWindow,
+            IDictionary<string, string[]> postDependenciesByResourcePath,
+            string[] resourcesWithUpdatableKeys,
+            EdFiApiClient sourceApiClient,
+            EdFiApiClient targetApiClient,
+            Options options,
+            ITargetBlock<ErrorItemMessage> errorPublishingBlock,
+            CancellationToken cancellationToken)
+        {
+            // Only process key changes if we are using a specific Change Window
+            if (changeWindow == null)
+            {
+                _logger.Info($"No change window was defined, so no key change processing will be performed.");
+                return Array.Empty<TaskStatus>();
+            }
 
-        private void EnsureProcessingWasSuccessful(TaskStatus[] postTaskStatuses, TaskStatus[] deleteTaskStatuses)
+            if (changeWindow.MinChangeVersion <= 1)
+            {
+                _logger.Info($"Change window starting value indicates all values are being published, and so there is no need to perform key change processing.");
+                return Array.Empty<TaskStatus>();
+            }
+            
+            TaskStatus[] keyChangeTaskStatuses = Array.Empty<TaskStatus>();
+            
+            if (resourcesWithUpdatableKeys.Any())
+            {
+                var keyChangeDependenciesByResourcePath = GetKeyChangeDependencies(postDependenciesByResourcePath, resourcesWithUpdatableKeys);
+
+                // Probe for key changes support (using first by name sorted alphabetically for deterministic behavior)
+                string resourcePathSegment = keyChangeDependenciesByResourcePath.Keys
+                    .OrderBy(x => x)
+                    .FirstOrDefault();
+
+                if (resourcePathSegment == null)
+                {
+                    throw new Exception(
+                        "None of the resources configured to support key changes were found in the dependency metadata retrieved from the target API. Check your configuration and API versions.");
+                }
+                
+                string probeUrl = $"{EdFiApiConstants.DataManagementApiSegment}{resourcePathSegment}{EdFiApiConstants.KeyChangesPathSuffix}";
+
+                _logger.Debug($"Probing source API for key changes support at '{probeUrl}'.");
+                
+                var probeResponse = await sourceApiClient.HttpClient.GetAsync($"{probeUrl}?limit=1").ConfigureAwait(false);
+
+                if (probeResponse.IsSuccessStatusCode)
+                {
+                    _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'. Initiating key changes processing.");
+
+                    var streamingPagesOfKeyChangesByResourcePath = InitiateResourceStreaming(
+                        sourceApiClient,
+                        targetApiClient,
+                        keyChangeDependenciesByResourcePath,
+                        ChangeResourceKey.CreateBlocks, 
+                        ChangeResourceKey.CreateItemActionMessage,
+                        options,
+                        changeWindow,
+                        errorPublishingBlock,
+                        cancellationToken,
+                        EdFiApiConstants.KeyChangesPathSuffix);
+
+                    // Wait for everything to finish
+                    keyChangeTaskStatuses = WaitForResourceStreamingToComplete(
+                        "key changes",
+                        streamingPagesOfKeyChangesByResourcePath,
+                        options);
+                }
+                else
+                {
+                    _logger.Warn($"Request to Source API for the '{EdFiApiConstants.KeyChangesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Key change processing cannot be performed.");
+                }
+            }
+
+            return keyChangeTaskStatuses;
+        }
+
+        /// <summary>
+        /// Gets a new dictionary of dependencies for processing that are limited to just the resources that can have their keys updated.
+        /// </summary>
+        /// <param name="postDependenciesByResourcePath"></param>
+        /// <param name="resourcesWithUpdatableKeys"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        private IDictionary<string, string[]> GetKeyChangeDependencies(IDictionary<string, string[]> postDependenciesByResourcePath, string[] resourcesWithUpdatableKeys)
+        {
+            // Copy the dependencies before modifying them
+            var keyChangeDependenciesByResourcePath = new Dictionary<string, string[]>(postDependenciesByResourcePath);
+            
+            int infiniteLoopProtectionThreshold = keyChangeDependenciesByResourcePath.Count();
+            int i = 0;
+    
+            while (i < infiniteLoopProtectionThreshold)
+            {
+                // Identify all resources that have no more dependencies (except retained dependencies)
+                // (Retained dependencies are resources that have updatable keys and must be retained in the graph through flattening operations)
+                var resourcesWithoutRetainedDependencies = keyChangeDependenciesByResourcePath
+                    .Where(kvp => !kvp.Value.Except(resourcesWithUpdatableKeys).Any())
+                    .Select(kvp => kvp.Key)
+                    .Except(resourcesWithUpdatableKeys)
+                    .ToArray();
+        
+                // Exit processing if there are no more resources that can be removed from the dependency graph
+                if (!resourcesWithoutRetainedDependencies.Any())
+                {
+                    break;
+                }
+        
+                var retainedDependenciesByResourcePath = new Dictionary<string, string[]>();
+        
+                // Iterate through all the resources that have no more dependencies (except retain dependencies)
+                foreach (var resourcePathToBeRemoved in resourcesWithoutRetainedDependencies)
+                {
+                    var dependenciesWithUpdatableKeys = keyChangeDependenciesByResourcePath[resourcePathToBeRemoved]
+                        .Intersect(resourcesWithUpdatableKeys)
+                        .ToArray();
+            
+                    if (dependenciesWithUpdatableKeys.Any())
+                    {
+                        // Capture the dependencies of this resource that must be retained (used in place of dependencies on the resource being removed)
+                        retainedDependenciesByResourcePath.Add(resourcePathToBeRemoved, dependenciesWithUpdatableKeys);
+                    }
+            
+                    // Remove the resource from the graph
+                    keyChangeDependenciesByResourcePath.Remove(resourcePathToBeRemoved);
+                }
+        
+                // Iterate through the remaining graph resources
+                foreach (var kvp in keyChangeDependenciesByResourcePath.ToArray())
+                {
+                    // Skip if the current resource doesn't have any dependencies on the resource that was just removed
+                    if (!kvp.Value.Intersect(resourcesWithoutRetainedDependencies).Any())
+                    {
+                        continue;
+                    }
+            
+                    // Identify dependencies of the current resource on any of the resources that were just removed that have retained dependencies (dependencies with updatable keys)
+                    var dependenciesNeedingFlattening = retainedDependenciesByResourcePath.Keys.Intersect(kvp.Value).ToArray();
+            
+                    foreach (var dependencyToFlatten in dependenciesNeedingFlattening)
+                    {
+                        // Rebuild the array of dependencies...
+                        keyChangeDependenciesByResourcePath[kvp.Key] = 
+                            // Starting with all the current dependencies
+                            kvp.Value
+                            // Exclude the dependency for the resource that was removed from the graph
+                            .Except(new[] { dependencyToFlatten })
+                            // Add in that resource's retained dependencies here (flattening/simplifying the dependency graph for processing)
+                            .Concat(retainedDependenciesByResourcePath[dependencyToFlatten])
+                            .ToArray();
+                    }
+            
+                    // Ensure all the dependencies for resources being removed have been removed
+                    keyChangeDependenciesByResourcePath[kvp.Key] = kvp.Value.Except(resourcesWithoutRetainedDependencies).ToArray();
+                }
+        
+                i++;
+            }
+
+            if (i == infiniteLoopProtectionThreshold)
+            {
+                // This should never happen
+                throw new Exception(
+                    "Unable to reduce resource dependencies for processing key changes as expected (the infinite loop threshold was exceeded during processing).");
+            }
+
+            return keyChangeDependenciesByResourcePath;
+        }
+
+        private void EnsureProcessingWasSuccessful(
+            TaskStatus[] keyChangeTaskStatuses,
+            TaskStatus[] postTaskStatuses,
+            TaskStatus[] deleteTaskStatuses)
         {
             bool success = true;
             
@@ -745,6 +939,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             {
                 success = false;
                 _logger.Error($"{publishedErrorCount} unrecoverable errors occurred during resource item processing -- last change version will not be updated for this connection.");
+            }
+
+            var nonCompletedKeyChangeTaskCount = keyChangeTaskStatuses.Count(s => s != TaskStatus.RanToCompletion);
+
+            if (nonCompletedKeyChangeTaskCount > 0)
+            {
+                success = false;
+                _logger.Error($"{nonCompletedKeyChangeTaskCount} resource key change tasks did not run to completion successfully -- last change version processed will not be updated for this connection.");
             }
 
             var nonCompletedPostTaskCount = postTaskStatuses.Count(s => s != TaskStatus.RanToCompletion);
@@ -924,11 +1126,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             EdFiApiClient sourceApiClient,
             EdFiApiClient targetApiClient,
             IDictionary<string, string[]> dependenciesByResourcePath,
-            Func<EdFiApiClient, Options, ITargetBlock<ErrorItemMessage>, ValueTuple<ITargetBlock<TItemActionMessage>, ISourceBlock<ErrorItemMessage>>> createProcessingBlocks, 
+            Func<EdFiApiClient, Options, ITargetBlock<ErrorItemMessage>, (ITargetBlock<TItemActionMessage>,
+                ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
             Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
-            Options options, 
+            Options options,
             ChangeWindow changeWindow,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            CancellationToken cancellationToken,
             string resourceUrlPathSuffix = null)
         {
             _logger.Info($"Initiating resource streaming.");
@@ -966,7 +1170,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         CompletionBlock = processingOutBlock
                     });
 
-                var streamResourceBlock = StreamResource.CreateBlock(createItemActionMessage, errorHandlingBlock);
+                var streamResourceBlock = StreamResource.CreateBlock(createItemActionMessage, errorHandlingBlock, options, cancellationToken);
 
                 streamResourceBlock.LinkTo(streamResourcePagesBlock, linkOptions);
                 streamResourcePagesBlock.LinkTo(processingInBlock, linkOptions);

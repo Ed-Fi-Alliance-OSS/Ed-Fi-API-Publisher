@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -19,8 +21,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         
         public static TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TItemActionMessage>>
             CreateBlock<TItemActionMessage>(
-                Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage, 
-                ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+                Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
+                ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+                Options options,
+                CancellationToken cancellationToken)
         {
             return new TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TItemActionMessage>>(
                 async msg =>
@@ -33,7 +37,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                     try
                     {
-                        var messages = await DoStreamResource(msg, createItemActionMessage, errorHandlingBlock)
+                        var messages = await DoStreamResource(msg, createItemActionMessage, errorHandlingBlock, options, cancellationToken)
                             .ConfigureAwait(false);
                         
                         if (msg.CancellationSource.IsCancellationRequested)
@@ -53,9 +57,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         }
 
         private static async Task<IEnumerable<StreamResourcePageMessage<TItemActionMessage>>>
-            DoStreamResource<TItemActionMessage>(StreamResourceMessage message,
-                Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage, 
-                ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            DoStreamResource<TItemActionMessage>(
+                StreamResourceMessage message,
+                Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
+                ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+                Options options,
+                CancellationToken cancellationToken)
         {
             if (message.Dependencies.Any())
             {
@@ -72,10 +79,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
             try
             {
-                if (message.ChangeWindow?.MaxChangeVersion != default(long)
-                    && message.ChangeWindow?.MaxChangeVersion != null)
+                if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
                 {
-                    _logger.Info($"{message.ResourceUrl}: Retrieving total count of items in change versions {message.ChangeWindow.MinChangeVersion} to {message.ChangeWindow.MaxChangeVersion}.");
+                    _logger.Info(
+                        $"{message.ResourceUrl}: Retrieving total count of items in change versions {message.ChangeWindow.MinChangeVersion} to {message.ChangeWindow.MaxChangeVersion}.");
                 }
                 else
                 {
@@ -85,12 +92,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 string changeWindowParms = RequestHelper.GetChangeWindowParms(message.ChangeWindow);
 
                 int attempts = 0;
-                int delay = 100; // TODO: Need options here --> options.RetryStartingDelayMilliseconds;
+                int delay = options.RetryStartingDelayMilliseconds;
 
                 HttpResponseMessage apiResponse = null;
                 string responseContent = null;
 
-                while (attempts++ < 10) // TODO: Need options here --> options.MaxRetry)
+                while (attempts++ < options.MaxRetryAttempts)
                 {
                     try
                     {
@@ -102,9 +109,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             }
                         }
 
-                        apiResponse = await message.HttpClient.GetAsync($"{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}")
+                        apiResponse = await message.HttpClient
+                            .GetAsync($"{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}")
                             .ConfigureAwait(false);
-                        
+
                         if (!apiResponse.IsSuccessStatusCode)
                         {
                             // Retry certain error types
@@ -114,6 +122,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                     $"{message.ResourceUrl}: Retrying count on request on resource (attempt #{attempts} failed with status '{apiResponse.StatusCode}').");
 
                                 ExponentialBackOffHelper.PerformDelay(ref delay);
+
                                 continue;
                             }
 
@@ -122,7 +131,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                             await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
                                 .ConfigureAwait(false);
-                    
+
                             // Allow processing to continue with no additional work on this resource
                             return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                         }
@@ -147,7 +156,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 if (!apiResponse.Headers.TryGetValues("total-count", out IEnumerable<string> headerValues))
                 {
                     // Publish an error for the resource to allow processing to continue. Feature is not supported
-                    _logger.Warn($"{message.ResourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing.");
+                    _logger.Warn(
+                        $"{message.ResourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing.");
 
                     await HandleResourceCountRequestErrorAsync<TItemActionMessage>(message, errorHandlingBlock, apiResponse)
                         .ConfigureAwait(false);
@@ -155,7 +165,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     // Allow processing to continue with no additional work on this resource
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                 }
-                
+
                 string totalCountHeaderValue = headerValues.First();
                 _logger.Debug($"{message.ResourceUrl}: Total count header value = {totalCountHeaderValue}");
 
@@ -168,16 +178,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 catch (Exception)
                 {
                     // Publish an error for the resource to allow processing to continue, but to force failure.
-                    _logger.Error($"{message.ResourceUrl}: Unable to convert Total-Count header value of '{totalCountHeaderValue}'  returned by the source API to an integer.");
-                    
-                    errorHandlingBlock.Post(new ErrorItemMessage
-                    {
-                        ResourceUrl = message.ResourceUrl,
-                        Method = HttpMethod.Get.ToString(),
-                        ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = $"Total-Count: {totalCountHeaderValue}",
-                    });
-                    
+                    _logger.Error(
+                        $"{message.ResourceUrl}: Unable to convert Total-Count header value of '{totalCountHeaderValue}'  returned by the source API to an integer.");
+
+                    errorHandlingBlock.Post(
+                        new ErrorItemMessage
+                        {
+                            ResourceUrl = message.ResourceUrl,
+                            Method = HttpMethod.Get.ToString(),
+                            ResponseStatus = apiResponse.StatusCode,
+                            ResponseContent = $"Total-Count: {totalCountHeaderValue}",
+                        });
+
                     // Allow processing to continue without performing additional work on this resource.
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                 }
@@ -188,21 +200,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 int limit = message.PageSize;
 
                 var pageMessages = new List<StreamResourcePageMessage<TItemActionMessage>>();
-                
+
                 while (offset < totalCount)
                 {
                     var pageMessage = new StreamResourcePageMessage<TItemActionMessage>
                     {
                         HttpClient = message.HttpClient,
-                        ResourceUrl = message.ResourceUrl, 
-                        Limit = limit, 
+                        ResourceUrl = message.ResourceUrl,
+                        Limit = limit,
                         Offset = offset,
                         ChangeWindow = message.ChangeWindow,
                         CreateItemActionMessage = createItemActionMessage,
                         CancellationSource = message.CancellationSource,
                         PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
                     };
-                    
+
                     pageMessages.Add(pageMessage);
 
                     offset += limit;
@@ -213,7 +225,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 {
                     pageMessages.Last().IsFinalPage = true;
                 }
-                
+
                 return pageMessages;
             }
             catch (Exception ex)
