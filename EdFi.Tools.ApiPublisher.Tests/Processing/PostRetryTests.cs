@@ -107,8 +107,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // -----------------------------------------------------------------
             //                      Source Requests
             // -----------------------------------------------------------------
-            int changeVersion = 1001;
-
             // Initialize a generator for the fake natural key class
             var keyValueFaker = new Faker<FakeKey>().StrictMode(true)
                 .RuleFor(o => o.Name, f => f.Name.FirstName())

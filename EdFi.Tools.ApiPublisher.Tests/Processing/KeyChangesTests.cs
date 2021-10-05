@@ -42,7 +42,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private ILoggerRepository _loggerRepository;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
 
-            protected override async Task ArrangeAsync()
+            protected override Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
@@ -148,6 +148,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 var errorPublisher = A.Fake<IErrorPublisher>();
 
                 _changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher);
+
+                return Task.CompletedTask;
             }
 
             protected override async Task ActAsync()
