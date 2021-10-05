@@ -77,6 +77,9 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var publisherSettings = finalConfiguration.Get<ApiPublisherSettings>();
                 
                 var options = publisherSettings.Options;
+
+                ValidateOptions(options);
+                
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
                 var resourcesWithUpdatableKeys = publisherSettings.ResourcesWithUpdatableKeys;
 
@@ -112,6 +115,56 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 Logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
                 
                 return -1;
+            }
+        }
+
+        private static void ValidateOptions(Options options)
+        {
+            var validationErrors = new List<string>();
+            
+            if (options.MaxRetryAttempts < 0)
+            {
+                validationErrors.Add($"{nameof(options.MaxRetryAttempts)} cannot be a negative number.");
+            }
+            
+            if (options.StreamingPageSize < 1)
+            {
+                validationErrors.Add($"{nameof(options.StreamingPageSize)} must be greater than 0.");
+            }
+
+            if (options.BearerTokenRefreshMinutes < 1)
+            {
+                validationErrors.Add($"{nameof(options.BearerTokenRefreshMinutes)} must be greater than 0.");
+            }
+
+            if (options.ErrorPublishingBatchSize < 1)
+            {
+                validationErrors.Add($"{nameof(options.ErrorPublishingBatchSize)} must be greater than 0.");
+            }
+
+            if (options.RetryStartingDelayMilliseconds < 1)
+            {
+                validationErrors.Add($"{nameof(options.RetryStartingDelayMilliseconds)} must be greater than 0.");
+            }
+            
+            if (options.StreamingPagesWaitDurationSeconds < 1)
+            {
+                validationErrors.Add($"{nameof(options.StreamingPagesWaitDurationSeconds)} must be greater than 0.");
+            }
+            
+            if (options.MaxDegreeOfParallelismForPostResourceItem < 1)
+            {
+                validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForPostResourceItem)} must be greater than 0.");
+            }
+            
+            if (options.MaxDegreeOfParallelismForStreamResourcePages < 1)
+            {
+                validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForStreamResourcePages)} must be greater than 0.");
+            }
+
+            if (validationErrors.Any())
+            {
+                throw new Exception($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");
             }
         }
 
