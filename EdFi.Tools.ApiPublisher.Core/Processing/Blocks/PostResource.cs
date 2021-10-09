@@ -70,7 +70,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         .OrResult<HttpResponseMessage>(r => 
                             // Descriptor Conflicts are not to be retried
                             (r.StatusCode == HttpStatusCode.Conflict && !msg.ResourceUrl.EndsWith("Descriptors", StringComparison.OrdinalIgnoreCase)) 
-                            || !r.StatusCode.IsPermanentFailure())
+                            || r.StatusCode.IsPotentiallyTransientFailure())
                         .WaitAndRetryAsync(delay, async (result, ts, retryAttempt, ctx) =>
                         {
                             if (result.Exception != null)

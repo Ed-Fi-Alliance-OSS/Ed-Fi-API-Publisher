@@ -66,7 +66,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         int attempts = 0;
                         var apiResponse = await Policy
                             .Handle<Exception>()
-                            .OrResult<HttpResponseMessage>(r => !r.StatusCode.IsPermanentFailure())
+                            .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                             .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                             {
                                 if (result.Exception != null)
@@ -212,7 +212,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     var apiResponse = await Policy
                         .Handle<Exception>()
                         .OrResult<HttpResponseMessage>(r => 
-                            r.StatusCode == HttpStatusCode.Conflict || !r.StatusCode.IsPermanentFailure())
+                            r.StatusCode == HttpStatusCode.Conflict || r.StatusCode.IsPotentiallyTransientFailure())
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
                             if (result.Exception != null)

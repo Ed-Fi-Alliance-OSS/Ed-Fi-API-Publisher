@@ -80,7 +80,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     int attempts = 0;
                     
                     var apiResponse = await Policy
-                        .HandleResult<HttpResponseMessage>(r => !r.StatusCode.IsPermanentFailure())
+                        .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
                             _logger.Warn(
