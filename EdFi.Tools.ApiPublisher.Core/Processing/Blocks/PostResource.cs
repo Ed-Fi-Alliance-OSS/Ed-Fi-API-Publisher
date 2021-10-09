@@ -35,7 +35,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 {
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
-                
+
+                string schemaResourcePathUrl = msg.ResourceUrl.Replace(EdFiApiConstants.DataManagementApiSegment, String.Empty); 
+                    
                 var idToken = msg.Item["id"];
                 string id = idToken.Value<string>();
                 
@@ -43,7 +45,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 {
                     if (_logger.IsDebugEnabled)
                     {
-                        _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Processing PostItemMessage (with up to {options.MaxRetryAttempts} retries).");
+                        _logger.Debug($"{schemaResourcePathUrl} (source id: {id}): Processing PostItemMessage (with up to {options.MaxRetryAttempts} retries).");
                     }
                 
                     // Remove attributes not usable between API instances
@@ -63,7 +65,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
                         options.MaxRetryAttempts);
 
-                    int attempt = 0;
+                    int attempts = 0;
 
                     var apiResponse = await Policy
                         .Handle<Exception>()
@@ -75,28 +77,28 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         {
                             if (result.Exception != null)
                             {
-                                _logger.Error($"{msg.ResourceUrl} (source id: {id}, attempt #{attempt}): {result.Exception}");
+                                _logger.Error($"{schemaResourcePathUrl} (source id: {id}): POST attempt #{attempts} failed with an exception. . Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{result.Exception}");
                             }
                             else
                             {
                                 string responseContent = await result.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                                _logger.Warn($"{msg.ResourceUrl} (source id: {id}): Posting resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}");
+                                _logger.Warn($"{schemaResourcePathUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}");
                             }
                         })
                         .ExecuteAsync((ctx, ct) =>
                         {
-                            attempt++;
+                            attempts++;
 
                             if (_logger.IsDebugEnabled)
                             {
-                                if (attempt > 1)
+                                if (attempts > 1)
                                 {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {id}): POST attempt #{attempt}.");
+                                    _logger.Debug($"{schemaResourcePathUrl} (source id: {id}): POST attempt #{attempts}.");
                                 }
                                 else
                                 {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Sending POST request.");
+                                    _logger.Debug($"{schemaResourcePathUrl} (source id: {id}): Sending POST request.");
                                 }
                             }
 
@@ -118,6 +120,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         if (msg.ResourceUrl.EndsWith("Descriptors") &&
                             apiResponse.StatusCode == HttpStatusCode.Conflict)
                         {
+                            if (_logger.IsDebugEnabled)
+                            {
+                                _logger.Debug(
+                                    $"{schemaResourcePathUrl} (source id: {id}): POST returned {HttpStatusCode.Conflict}, but for descriptors this means the value is already present.");
+                            }
+                            
                             return Enumerable.Empty<ErrorItemMessage>();
                         }
                         
@@ -130,7 +138,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             {
                                 if (_logger.IsDebugEnabled)
                                 {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Authorization failed -- deferring for retry after pertinent associations are processed.");
+                                    _logger.Debug($"{schemaResourcePathUrl} (source id: {id}): Authorization failed -- deferring for retry after pertinent associations are processed.");
                                 }
                                 
                                 // Re-add the identifier, and pass the message along to the "retry" resource (after associations have been processed)
@@ -150,13 +158,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             && targetApiClient.ConnectionDetails?.TreatForbiddenPostAsWarning == true)
                         {
                             // Warn and ignore all future data for this resource
-                            _logger.Warn($"{msg.ResourceUrl} (source id: {id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                            _logger.Warn($"{schemaResourcePathUrl} (source id: {id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
                             ignoredResourceByUrl.TryAdd(msg.ResourceUrl, true);
                             return Enumerable.Empty<ErrorItemMessage>();
                         }
                         
-                        // Unhandled error, no retries to be attempted... surface the error in the log
-                        _logger.Error($"{msg.ResourceUrl} (source id: {id}): POST returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                        // Error is final, log it and indicate failure for processing
+                        _logger.Error($"{schemaResourcePathUrl} (source id: {id}): POST attempt #{attempts} failed with status '{apiResponse.StatusCode}':{Environment.NewLine}{responseContent}");
 
                         // Publish the failed data
                         var error = new ErrorItemMessage
@@ -173,16 +181,22 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     }
                         
                     // Success
-                    if (_logger.IsInfoEnabled && attempt > 1)
+                    if (attempts > 1)
                     {
-                        _logger.Info(
-                            $"{msg.ResourceUrl} (source id: {id}): POST attempt #{attempt} returned {apiResponse.StatusCode}.");
+                        if (_logger.IsInfoEnabled)
+                        {
+                            _logger.Info(
+                                $"{schemaResourcePathUrl} (source id: {id}): POST attempt #{attempts} returned {apiResponse.StatusCode}.");
+                        }
                     }
-
-                    if (_logger.IsDebugEnabled)
+                    else
                     {
-                        _logger.Debug(
-                            $"{msg.ResourceUrl} (source id: {id}): POST returned {apiResponse.StatusCode}");
+                        // Ensure a log entry when POST succeeds on first attempt and DEBUG logging is enabled
+                        if (_logger.IsDebugEnabled)
+                        {
+                            _logger.Debug(
+                                $"{schemaResourcePathUrl} (source id: {id}): POST attempt #{attempts} returned {apiResponse.StatusCode}.");
+                        }
                     }
 
                     // Success - no errors to publish
@@ -190,7 +204,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error($"{msg.ResourceUrl} (source id: {id}): An unhandled exception occurred in the PostResource block: {ex}");
+                    _logger.Error($"{schemaResourcePathUrl} (source id: {id}): An unhandled exception occurred in the PostResource block: {ex}");
                     throw;
                 }
             }, new ExecutionDataflowBlockOptions
