@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing.Text;
 using System.Linq;
 using System.Net;
@@ -206,7 +207,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
             return fakeRequestHandler;
         }
 
-        public static IFakeHttpRequestHandler Snapshots(this IFakeHttpRequestHandler fakeRequestHandler, object[] data)
+        public static IFakeHttpRequestHandler Snapshots(this IFakeHttpRequestHandler fakeRequestHandler, Snapshot[] data)
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/changeQueries/v1/snapshots", A<HttpRequestMessage>.Ignored))
                 .Returns(FakeResponse.OK(JsonConvert.SerializeObject(data)));

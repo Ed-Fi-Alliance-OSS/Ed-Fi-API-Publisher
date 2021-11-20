@@ -204,7 +204,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 .SetBaseUrl(MockRequests.SourceApiBaseUrl)
                 .OAuthToken()
                 .ApiVersionMetadata()
-                .SnapshotsEmpty()
+                .Snapshots(new []{ new Snapshot { Id = Guid.NewGuid(), SnapshotIdentifier = "ABC123", SnapshotDateTime = DateTime.Now } })
                 .LegacySnapshotsNotFound();
         }
 
