@@ -793,10 +793,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 if (resourcePathSegment == null)
                 {
-                    throw new Exception(
-                        "None of the resources configured to support key changes were found in the dependency metadata retrieved from the target API. Check your configuration and API versions.");
+                    _logger.Info($"None of the API resources configured to allow key changes were found in the resources to be processed (based on dependency metadata retrieved from the target API).");
+
+                    return Array.Empty<TaskStatus>();
                 }
-                
+
                 string probeUrl = $"{EdFiApiConstants.DataManagementApiSegment}{resourcePathSegment}{EdFiApiConstants.KeyChangesPathSuffix}";
 
                 _logger.Debug($"Probing source API for key changes support at '{probeUrl}'.");
@@ -1148,9 +1149,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Set up streaming resource blocks for all resources
             foreach (var kvp in dependenciesByResourcePath)
             {
-                var resourceKey = kvp.Key;
-
-                var streamResourcePagesBlock = StreamResourcePages.GetBlock<TItemActionMessage>(options, errorHandlingBlock);
+                string resourceKey = kvp.Key;
+                string resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
 
                 var (processingInBlock, processingOutBlock) = createProcessingBlocks(targetApiClient, options, errorHandlingBlock);
 
@@ -1159,7 +1159,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     // Save the action delegate, keyed by the main resource
                     postAuthorizationRetryByResourceKey.Add(
-                        ResourcePathHelper.GetResourcePath(resourceKey), 
+                        resourcePath, 
                         msg => processingInBlock.Post((TItemActionMessage) msg));
                 }
 
@@ -1171,6 +1171,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     });
 
                 var streamResourceBlock = StreamResource.CreateBlock(createItemActionMessage, errorHandlingBlock, options, cancellationToken);
+                var streamResourcePagesBlock = StreamResourcePages.GetBlock<TItemActionMessage>(options, errorHandlingBlock);
 
                 streamResourceBlock.LinkTo(streamResourcePagesBlock, linkOptions);
                 streamResourcePagesBlock.LinkTo(processingInBlock, linkOptions);
@@ -1201,10 +1202,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 postAuthorizationRetryByResourceKey.TryGetValue(resourceKey, out var postRetry);
 
+                var skippedResources = 
+                    ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiClient.ConnectionDetails.SkipResources);
+
                 var message = new StreamResourceMessage
                 {
                     HttpClient = sourceApiClient.HttpClient,
                     ResourceUrl = resourceUrl,
+                    ShouldSkip = skippedResources.Contains(resourcePath),
                     Dependencies = dependencyPaths.Select(p => streamingPagesByResourceKey[p].CompletionBlock.Completion).ToArray(),
                     DependencyPaths = dependencyPaths.ToArray(),
                     PageSize = options.StreamingPageSize,

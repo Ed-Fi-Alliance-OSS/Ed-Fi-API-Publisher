@@ -19,5 +19,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public CancellationTokenSource CancellationSource { get; set; }
 
         public Action<object> PostAuthorizationFailureRetry { get; set; }
+        public bool ShouldSkip { get; set; }
     }
 }

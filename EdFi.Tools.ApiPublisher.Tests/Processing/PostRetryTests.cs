@@ -107,28 +107,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // -----------------------------------------------------------------
             //                      Source Requests
             // -----------------------------------------------------------------
-            // Initialize a generator for the fake natural key class
-            var keyValueFaker = new Faker<FakeKey>().StrictMode(true)
-                .RuleFor(o => o.Name, f => f.Name.FirstName())
-                .RuleFor(o => o.RetirementAge, f => f.Random.Int(50, 75))
-                .RuleFor(o => o.BirthDate, f => f.Date.Between(DateTime.Today.AddYears(-75), DateTime.Today.AddYears(5)).Date);
-
-            // Initialize a generator for a generic resource with a reference containing the key values
-            var sourceResourceFaker = new Faker<GenericResource<FakeKey>>().StrictMode(true)
-                .RuleFor(o => o.Id, f => Guid.NewGuid().ToString("n"))
-                .RuleFor(o => o.SomeReference, f => keyValueFaker.Generate())
-                .RuleFor(o => o.VehicleManufacturer, f => f.Vehicle.Manufacturer())
-                .RuleFor(o => o.VehicleYear, f => f.Date.Between(DateTime.Today.AddYears(-50), DateTime.Today).Year);
-
+            var sourceResourceFaker = TestHelpers.GetGenericResourceFaker();
+            
             var suppliedSourceResources = sourceResourceFaker.Generate(1);
 
             // Prepare the fake source API endpoint
-            var fakeSourceRequestHandler = A.Fake<IFakeHttpRequestHandler>()
-                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
-                .OAuthToken()
-                .ApiVersionMetadata()
-                .SnapshotsEmpty()
-                .LegacySnapshotsNotFound()
+            var fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
                 // Test-specific mocks
                 .AvailableChangeVersions(1100)
                 .ResourceCount(responseTotalCountHeader: 1)
@@ -139,11 +123,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             //                      Target Requests
             // -----------------------------------------------------------------
                
-            var fakeTargetRequestHandler = A.Fake<IFakeHttpRequestHandler>()
-                .SetBaseUrl(MockRequests.TargetApiBaseUrl)
-                .OAuthToken()
-                .ApiVersionMetadata()
-                .Dependencies();
+            var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
             if (initialResponseCodeOnPost == HttpStatusCode.OK)
             {
@@ -177,7 +157,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     ignoreSslErrors: true,
                     httpClientHandler: new HttpClientHandlerFakeBridge(fakeTargetRequestHandler));
 
-            var authorizationFailureHandling = TestHelpers.GetAuthorizationFailureHandling();
+            var authorizationFailureHandling = TestHelpers.Configuration.GetAuthorizationFailureHandling();
 
             // Only include descriptors if our test subject resource is a descriptor (trying to avoid any dependencies to keep things simpler)
             var options = TestHelpers.GetOptions();

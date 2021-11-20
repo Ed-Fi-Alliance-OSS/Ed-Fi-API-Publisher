@@ -13,6 +13,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
         /// <returns>An array of values from the parsed items.</returns>
         public static string[] ParseResourcesCsvToResourcePathArray(string resourcesCsv)
         {
+            if (string.IsNullOrEmpty(resourcesCsv))
+            {
+                return Array.Empty<string>();
+            }
+
             return resourcesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim())
                 .Select(NormalizeResourcePath)

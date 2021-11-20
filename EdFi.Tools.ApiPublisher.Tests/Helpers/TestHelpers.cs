@@ -1,8 +1,12 @@
+using System;
 using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
+using Bogus;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Tests.Models;
 using EdFi.Tools.ApiPublisher.Tests.Processing;
+using FakeItEasy;
 using log4net;
 using log4net.Config;
 using log4net.Repository;
@@ -11,6 +15,31 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 {
     public class TestHelpers
     {
+        public static Faker<GenericResource<FakeKey>> GetGenericResourceFaker()
+        {
+            var keyValueFaker = GetKeyValueFaker();
+
+            // Initialize a generator for a generic resource with a reference containing the key values
+            var genericResourceFaker = new Faker<GenericResource<FakeKey>>().StrictMode(true)
+                .RuleFor(o => o.Id, f => Guid.NewGuid().ToString("n"))
+                .RuleFor(o => o.SomeReference, f => keyValueFaker.Generate())
+                .RuleFor(o => o.VehicleManufacturer, f => f.Vehicle.Manufacturer())
+                .RuleFor(o => o.VehicleYear, f => f.Date.Between(DateTime.Today.AddYears(-50), DateTime.Today).Year);
+
+            return genericResourceFaker;
+        }
+
+        public static Faker<FakeKey> GetKeyValueFaker()
+        {
+            // Initialize a generator for the fake natural key class
+            var keyValueFaker = new Faker<FakeKey>().StrictMode(true)
+                .RuleFor(o => o.Name, f => f.Name.FirstName())
+                .RuleFor(o => o.RetirementAge, f => f.Random.Int(50, 75))
+                .RuleFor(o => o.BirthDate, f => f.Date.Between(DateTime.Today.AddYears(-75), DateTime.Today.AddYears(5)).Date);
+
+            return keyValueFaker;
+        }
+
         public static Options GetOptions()
         {
             return new Options
@@ -31,7 +60,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
         
         public static ApiConnectionDetails GetSourceApiConnectionDetails(
             int lastVersionProcessedToTarget = 1000,
-            string[] resources = null)
+            string[] resources = null,
+            string[] skipResources = null)
         {
             return new ApiConnectionDetails
             {
@@ -43,6 +73,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
                 Resources = resources == null ? null : string.Join(",", resources),
                 ExcludeResources = null,
+                SkipResources = skipResources == null ? null : string.Join(",", skipResources),
                 
                 IgnoreIsolation = true,
                 
@@ -68,6 +99,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
                 Resources = null, // "abc,def,ghi",
                 ExcludeResources = null,
+                SkipResources = null,
                 
                 IgnoreIsolation = true,
                 
@@ -78,47 +110,50 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             };
         }
 
-        public static string[] GetResourcesWithUpdatableKeys()
+        public static class Configuration
         {
-            return new[]
+            public static string[] GetResourcesWithUpdatableKeys()
             {
-                "/ed-fi/classPeriods",
-                "/ed-fi/grades",
-                "/ed-fi/gradebookEntries",
-                "/ed-fi/locations",
-                "/ed-fi/sections",
-                "/ed-fi/sessions",
-                "/ed-fi/studentSchoolAssociations",
-                "/ed-fi/studentSectionAssociations",
-            };
+                return new[]
+                {
+                    "/ed-fi/classPeriods",
+                    "/ed-fi/grades",
+                    "/ed-fi/gradebookEntries",
+                    "/ed-fi/locations",
+                    "/ed-fi/sections",
+                    "/ed-fi/sessions",
+                    "/ed-fi/studentSchoolAssociations",
+                    "/ed-fi/studentSectionAssociations",
+                };
+            }
+
+            public static AuthorizationFailureHandling[] GetAuthorizationFailureHandling()
+            {
+                return new []
+                {
+                    new AuthorizationFailureHandling
+                    {
+                        Path = "/ed-fi/students",
+                        UpdatePrerequisitePaths = new[] { "/ed-fi/studentSchoolAssociations" }
+                    },
+                    new AuthorizationFailureHandling
+                    {
+                        Path = "/ed-fi/staffs",
+                        UpdatePrerequisitePaths = new[]
+                        {
+                            "/ed-fi/staffEducationOrganizationEmploymentAssociations",
+                            "/ed-fi/staffEducationOrganizationAssignmentAssociations"
+                        }
+                    },
+                    new AuthorizationFailureHandling
+                    {
+                        Path = "/ed-fi/parents",
+                        UpdatePrerequisitePaths = new[] { "/ed-fi/studentParentAssociations" }
+                    }
+                };
+            }
         }
 
-        public static AuthorizationFailureHandling[] GetAuthorizationFailureHandling()
-        {
-            return new []
-            {
-                new AuthorizationFailureHandling
-                {
-                    Path = "/ed-fi/students",
-                    UpdatePrerequisitePaths = new[] { "/ed-fi/studentSchoolAssociations" }
-                },
-                new AuthorizationFailureHandling
-                {
-                    Path = "/ed-fi/staffs",
-                    UpdatePrerequisitePaths = new[]
-                    {
-                        "/ed-fi/staffEducationOrganizationEmploymentAssociations",
-                        "/ed-fi/staffEducationOrganizationAssignmentAssociations"
-                    }
-                },
-                new AuthorizationFailureHandling
-                {
-                    Path = "/ed-fi/parents",
-                    UpdatePrerequisitePaths = new[] { "/ed-fi/studentParentAssociations" }
-                }
-            };
-        }
-        
         public static async Task<ILoggerRepository> InitializeLogging()
         {
             var ms = new MemoryStream();
@@ -162,5 +197,23 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             return hierarchy;
         }
 
+        public static IFakeHttpRequestHandler GetFakeBaselineSourceApiRequestHandler()
+        {
+            return A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .OAuthToken()
+                .ApiVersionMetadata()
+                .SnapshotsEmpty()
+                .LegacySnapshotsNotFound();
+        }
+
+        public static IFakeHttpRequestHandler GetFakeBaselineTargetApiRequestHandler()
+        {
+            return A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.TargetApiBaseUrl)
+                .OAuthToken()
+                .ApiVersionMetadata()
+                .Dependencies();
+        }
     }
 }

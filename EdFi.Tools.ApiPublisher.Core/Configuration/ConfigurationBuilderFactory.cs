@@ -44,6 +44,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
                     ["--resources"] = "Connections:Source:Resources",
                     ["--excludeResources"] = "Connections:Source:ExcludeResources",
+                    ["--skipResources"] = "Connections:Source:SkipResources",
                     ["--treatForbiddenPostAsWarning"] = "Connections:Target:TreatForbiddenPostAsWarning",
                     ["--ignoreIsolation"] = "Connections:Source:IgnoreIsolation",
 

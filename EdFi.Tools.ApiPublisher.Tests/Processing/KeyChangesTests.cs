@@ -50,11 +50,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 int changeVersion = 1001;
 
                 // Initialize a generator for the fake natural key class
-                var keyValueFaker = new Faker<FakeKey>().StrictMode(true)
-                    .RuleFor(o => o.Name, f => f.Name.FirstName())
-                    .RuleFor(o => o.RetirementAge, f => f.Random.Int(50, 75))
-                    .RuleFor(o => o.BirthDate, f => f.Date.Between(DateTime.Today.AddYears(-75), DateTime.Today.AddYears(5)).Date);
-
+                var keyValueFaker = TestHelpers.GetKeyValueFaker();
+                
                 // Initialize a generator for the /keyChanges API response
                 var keyChangeFaker = new Faker<KeyChange<FakeKey>>().StrictMode(true)
                     .RuleFor(o => o.Id, f => Guid.NewGuid().ToString("n"))
@@ -67,12 +64,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 _suppliedKeyChanges = keyChangeFaker.Generate(TestItemQuantity);
 
                 // Prepare the fake source API endpoint
-                _fakeSourceRequestHandler = A.Fake<IFakeHttpRequestHandler>()
-                    .SetBaseUrl(MockRequests.SourceApiBaseUrl)
-                    .OAuthToken()
-                    .ApiVersionMetadata()
-                    .SnapshotsEmpty()
-                    .LegacySnapshotsNotFound()
+                _fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
                     // Test-specific mocks
                     .AvailableChangeVersions(1100)
                     .ResourceCount(responseTotalCountHeader: TestItemQuantity)
@@ -126,8 +118,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         ignoreSslErrors: true,
                         httpClientHandler: new HttpClientHandlerFakeBridge(_fakeTargetRequestHandler));
 
-                var authorizationFailureHandling = TestHelpers.GetAuthorizationFailureHandling();
-                _resourcesWithUpdatableKeys = TestHelpers.GetResourcesWithUpdatableKeys();
+                var authorizationFailureHandling = TestHelpers.Configuration.GetAuthorizationFailureHandling();
+                _resourcesWithUpdatableKeys = TestHelpers.Configuration.GetResourcesWithUpdatableKeys();
                 var options = TestHelpers.GetOptions();
                 var configurationStoreSection = null as IConfigurationSection; //new ConfigurationSection()
 
