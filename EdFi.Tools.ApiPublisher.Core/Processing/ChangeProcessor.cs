@@ -60,9 +60,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // Check Ed-Fi API and Standard versions for compatibility
                 await CheckApiVersionsAsync(configuration).ConfigureAwait(false);
 
-                // Determine if source API provides a snapshot, and apply the HTTP header to the client 
-                await ApplySourceSnapshotIdentifierAsync(sourceApiClient, sourceApiConnectionDetails, configuration.SourceApiVersion)
-                    .ConfigureAwait(false);
+                // Look for and apply snapshots if flag was not provided
+                if (sourceApiConnectionDetails.IgnoreIsolation != true)
+                {
+                    // Determine if source API provides a snapshot, and apply the HTTP header to the client 
+                    await ApplySourceSnapshotIdentifierAsync(sourceApiClient, sourceApiConnectionDetails, configuration.SourceApiVersion)
+                        .ConfigureAwait(false);
+                }
 
                 // Establish the change window we're processing, if any.
                 ChangeWindow changeWindow = null;
@@ -608,11 +612,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Confirm that a snapshot exists or --ignoreIsolation=true has been provided
             if (snapshotIdentifier == null)
             {
-                if (sourceApiConnectionDetails.IgnoreIsolation != true)
-                {
-                    string message = $"Snapshot identifier could not be obtained from API at '{sourceApiConnectionDetails.Url}', and \"force\" option was not specified. Publishing cannot proceed due to lack of guaranteed isolation from ongoing changes at the source. Use --ignoreIsolation=true (or a corresponding configuration value) to force processing.";
-                    throw new Exception(message);
-                }
+                string message = $"Snapshot identifier could not be obtained from API at '{sourceApiConnectionDetails.Url}', and \"force\" option was not specified. Publishing cannot proceed due to lack of guaranteed isolation from ongoing changes at the source. Use --ignoreIsolation=true (or a corresponding configuration value) to force processing.";
+                throw new Exception(message);
             }
             else
             {
@@ -1022,8 +1023,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 snapshotsRelativePath = $"{EdFiApiConstants.DataManagementApiSegment}/publishing/snapshots";
             }
             
-            var snapshotsResponse = await sourceApiClient.HttpClient.GetAsync(snapshotsRelativePath)
-                .ConfigureAwait(false);
+            var snapshotsResponse = await sourceApiClient.HttpClient.GetAsync(snapshotsRelativePath).ConfigureAwait(false);
 
             if (snapshotsResponse.StatusCode == HttpStatusCode.NotFound)
             {
