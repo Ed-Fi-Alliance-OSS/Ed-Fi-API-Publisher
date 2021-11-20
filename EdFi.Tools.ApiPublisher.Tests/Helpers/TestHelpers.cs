@@ -57,11 +57,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 WhatIf = false,
             };
         }
-        
+
         public static ApiConnectionDetails GetSourceApiConnectionDetails(
             int lastVersionProcessedToTarget = 1000,
             string[] resources = null,
-            string[] skipResources = null)
+            string[] skipResources = null,
+            bool ignoreIsolation = false)
         {
             return new ApiConnectionDetails
             {
@@ -75,7 +76,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 ExcludeResources = null,
                 SkipResources = skipResources == null ? null : string.Join(",", skipResources),
                 
-                IgnoreIsolation = true,
+                IgnoreIsolation = ignoreIsolation,
                 
                 // LastChangeVersionProcessed = null,
                 // LastChangeVersionsProcessed = "{ 'TestTarget': 1234 }",
