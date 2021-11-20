@@ -81,12 +81,11 @@ Run the Ed-Fi API Publisher from the folder containing all the binaries by execu
 Currently the Ed-Fi API Publisher has the following known limitations:
 
 * API resource items deleted in source API cannot be published to the target API due to limitations of the current Change Queries implementation in the Ed-Fi ODS API.
-* Even with delete support added by exposing the primary key values, tracking and publishing deletions of Descriptors will still not be possible due to internal implementation details within the API.
-* Changes to primary keys in source API resources will currently result in stale copies of the "old" version of the resources (and all impacted dependencies) remaining in the target API.
-* Student/Staff/Parent UniqueId changes in the source API could result in the inability of the Ed-Fi API Publisher to continue publishing to the target API.
-* Profiles (for defining resource/property level data policies for API clients) are not yet supported by the Ed-Fi API Publisher.
+* Even with delete support added by exposing the primary key values, tracking and publishing deletions of Descriptors will still not be possible due to internal implementation details within the Ed-Fi ODS API through (at least) v5.3. Unofficial branches of the Ed-Fi ODS API that fix and enhance the Change Queries feature for use with the API Publisher are available for v5.1 and v5.2.
+* Changes to primary keys in source API resources will currently result in stale copies of the "old" version of the resources (and all impacted dependencies) remaining in the target API. Unofficial branches that fix and enhance the Change Queries feature for use with the API Publisher are available for v5.1 and v5.2.
+* Profiles (for defining resource/property level data policies for API clients) are not yet supported by the Ed-Fi API Publisher. Create an issue to request Profiles support if this of interest to you.
 
-Feedback on the need for resolution to these issues should be provided to the Ed-Fi Alliance through [Ed-Fi Tracker](https://tracker.ed-fi.org/).
+Feedback on the need for resolution to the Ed-Fi ODS API issues listed above should be provided to the Ed-Fi Alliance through [Ed-Fi Tracker](https://tracker.ed-fi.org/).
 
 More technical details on some of these issues can be found [here](Documentation/Known-Issues-Details.md).
 
