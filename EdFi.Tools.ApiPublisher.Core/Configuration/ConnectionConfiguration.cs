@@ -63,6 +63,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
         public string Resources { get; set; }
         public string ExcludeResources { get; set; }
+        public string SkipResources { get; set; }
         
         public bool? TreatForbiddenPostAsWarning { get; set; }
 

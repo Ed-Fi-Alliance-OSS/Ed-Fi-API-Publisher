@@ -18,7 +18,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             var publishErrorsCompletionBlock = CreatePublishErrorsBlock(errorPublisher);
             publishErrorsIngestionBlock.LinkTo(publishErrorsCompletionBlock, new DataflowLinkOptions {PropagateCompletion = true});
 
-            return ((ITargetBlock<ErrorItemMessage>) publishErrorsIngestionBlock, publishErrorsCompletionBlock);
+            return (publishErrorsIngestionBlock, publishErrorsCompletionBlock);
         }
         
         private static ActionBlock<ErrorItemMessage[]> CreatePublishErrorsBlock(IErrorPublisher errorPublisher)

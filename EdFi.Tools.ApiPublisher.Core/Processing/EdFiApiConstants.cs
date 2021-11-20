@@ -8,6 +8,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         public const string DeletesPathSuffix = "/deletes";
         
         /// <summary>
+        /// Gets the path suffix to the "deletes" child resource under each of the data management API's resources.
+        /// </summary>
+        public const string KeyChangesPathSuffix = "/keyChanges";
+        
+        /// <summary>
         /// Gets the path segment to the data management API, including the version.
         /// </summary>
         public const string DataManagementApiSegment = "data/v3";
@@ -21,5 +26,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         /// Gets the name of the property which holds the natural key values for a deleted item (if supported by the source API).
         /// </summary>
         public const string KeyValuesPropertyName = "keyValues";
+
+        /// <summary>
+        /// Gets the name of the property which holds the old (previous) natural key values for an item whose key has changed (if supported by the source API).
+        /// </summary>
+        public const string OldKeyValuesPropertyName = "oldKeyValues";
+
+        /// <summary>
+        /// Gets the name of the property which holds the new natural key values for an item whose key has changed (if supported by the source API).
+        /// </summary>
+        public const string NewKeyValuesPropertyName = "newKeyValues";
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Castle.MicroKernel.Registration;
 using Castle.Windsor;
@@ -28,6 +29,9 @@ namespace EdFi.Tools.ApiPublisher.Cli
             Logger.Info(
                 "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoffrey@mcelhanon.com, Edufied LLC) in conjunction with Student1.");
 
+            var cancellationTokenSource = new CancellationTokenSource();
+            var cancellationToken = cancellationTokenSource.Token;
+            
             try
             {
                 var configBuilder = new ConfigurationBuilderFactory()
@@ -73,7 +77,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var publisherSettings = finalConfiguration.Get<ApiPublisherSettings>();
                 
                 var options = publisherSettings.Options;
+
+                ValidateOptions(options);
+                
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
+                var resourcesWithUpdatableKeys = publisherSettings.ResourcesWithUpdatableKeys;
 
                 var apiConnections = finalConfiguration.Get<ConnectionConfiguration>().Connections;
                 
@@ -86,6 +94,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
+                    resourcesWithUpdatableKeys,
                     sourceApiConnectionDetails,
                     targetApiConnectionDetails,
                     CreateSourceApiClient,
@@ -96,7 +105,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var changeProcessor = container.Resolve<IChangeProcessor>();
 
                 Logger.Info($"Processing started.");
-                await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration).ConfigureAwait(false);
+                await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
                 Logger.Info($"Processing complete.");
 
                 return 0;
@@ -106,6 +115,56 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 Logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
                 
                 return -1;
+            }
+        }
+
+        private static void ValidateOptions(Options options)
+        {
+            var validationErrors = new List<string>();
+            
+            if (options.MaxRetryAttempts < 0)
+            {
+                validationErrors.Add($"{nameof(options.MaxRetryAttempts)} cannot be a negative number.");
+            }
+            
+            if (options.StreamingPageSize < 1)
+            {
+                validationErrors.Add($"{nameof(options.StreamingPageSize)} must be greater than 0.");
+            }
+
+            if (options.BearerTokenRefreshMinutes < 1)
+            {
+                validationErrors.Add($"{nameof(options.BearerTokenRefreshMinutes)} must be greater than 0.");
+            }
+
+            if (options.ErrorPublishingBatchSize < 1)
+            {
+                validationErrors.Add($"{nameof(options.ErrorPublishingBatchSize)} must be greater than 0.");
+            }
+
+            if (options.RetryStartingDelayMilliseconds < 1)
+            {
+                validationErrors.Add($"{nameof(options.RetryStartingDelayMilliseconds)} must be greater than 0.");
+            }
+            
+            if (options.StreamingPagesWaitDurationSeconds < 1)
+            {
+                validationErrors.Add($"{nameof(options.StreamingPagesWaitDurationSeconds)} must be greater than 0.");
+            }
+            
+            if (options.MaxDegreeOfParallelismForPostResourceItem < 1)
+            {
+                validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForPostResourceItem)} must be greater than 0.");
+            }
+            
+            if (options.MaxDegreeOfParallelismForStreamResourcePages < 1)
+            {
+                validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForStreamResourcePages)} must be greater than 0.");
+            }
+
+            if (validationErrors.Any())
+            {
+                throw new Exception($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");
             }
         }
 

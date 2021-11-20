@@ -9,6 +9,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public Options Options { get; set; }
 
         public AuthorizationFailureHandling[] AuthorizationFailureHandling { get; set; }
+        
+        public string[] ResourcesWithUpdatableKeys { get; set; }
     }
 
     public class AuthorizationFailureHandling

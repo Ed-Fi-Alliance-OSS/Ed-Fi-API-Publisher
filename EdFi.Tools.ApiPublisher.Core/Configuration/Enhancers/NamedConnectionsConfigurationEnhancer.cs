@@ -138,6 +138,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers
                         namedApiConnectionDetails.ExcludeResources);
                 }
 
+                if (!string.IsNullOrEmpty(namedApiConnectionDetails.SkipResources))
+                {
+                    yield return new KeyValuePair<string, string>(
+                        $"Connections:{connectionType.ToString()}:SkipResources", 
+                        namedApiConnectionDetails.SkipResources);
+                }
+
                 // Treating Forbidden response as warning is only applicable for "target" connections
                 if (namedApiConnectionDetails.TreatForbiddenPostAsWarning.HasValue
                     && connectionType == ConnectionType.Target)
