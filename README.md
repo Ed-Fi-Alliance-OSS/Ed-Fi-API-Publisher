@@ -78,14 +78,24 @@ Run the Ed-Fi API Publisher from the folder containing all the binaries by execu
 
 ## Known Limitations / Issues
 
-Currently the Ed-Fi API Publisher has the following known limitations:
+> NOTE: There are branches available for the Ed-Fi ODS API v5.1 and v5.2 that resolve all the issues described below. Contact Geoffrey McElhanon (geoffrey@mcelhanon.com) for more details.
 
-* API resource items deleted in source API cannot be published to the target API due to limitations of the current Change Queries implementation in the Ed-Fi ODS API.
-* Even with delete support added by exposing the primary key values, tracking and publishing deletions of Descriptors will still not be possible due to internal implementation details within the Ed-Fi ODS API through (at least) v5.3. Unofficial branches of the Ed-Fi ODS API that fix and enhance the Change Queries feature for use with the API Publisher are available for v5.1 and v5.2.
-* Changes to primary keys in source API resources will currently result in stale copies of the "old" version of the resources (and all impacted dependencies) remaining in the target API. Unofficial branches that fix and enhance the Change Queries feature for use with the API Publisher are available for v5.1 and v5.2.
-* Profiles (for defining resource/property level data policies for API clients) are not yet supported by the Ed-Fi API Publisher. Create an issue to request Profiles support if this of interest to you.
+Currently the Ed-Fi ODS API has the following known issues related to Change Queries and the Ed-Fi API Publisher:
 
-Feedback on the need for resolution to the Ed-Fi ODS API issues listed above should be provided to the Ed-Fi Alliance through [Ed-Fi Tracker](https://tracker.ed-fi.org/).
+* [Change Queries implementation doesn't provide enough information to communicate deletes between ODS databases](https://tracker.ed-fi.org/browse/ODS-3672)
+* [Add support to Change Queries for tracking deletes by natural key](https://tracker.ed-fi.org/browse/ODS-4423)
+* [Change Queries does not capture deletes on derived resources](https://tracker.ed-fi.org/browse/ODS-4087)
+* [Change Queries does not support primary key changes](https://tracker.ed-fi.org/browse/ODS-5005)
+
+(Feedback on the need for resolution to the Ed-Fi ODS API issues listed above should be provided to the Ed-Fi Alliance through [Ed-Fi Tracker](https://tracker.ed-fi.org/).)
+
+The Ed-Fi ODS API only exposes the "Id" of the resources that are deleted, however since the "Id" is not intended to be a global, portable identifier for the resource (Ed-Fi uses domain key values for that identity), and thus the _current implementation_ of the deletes resource is of limited value for API Publishing.
+
+Even with delete support added by exposing the primary key values, tracking and publishing deletions of Descriptors will still not be possible due to internal implementation details within the Ed-Fi ODS API through (at least) v5.3.
+
+Changes to primary keys (on the API resources that support it) in source API will currently result in stale copies of the "old" version of the resources (and all impacted dependencies) remaining in the target API. 
+
+An additional limitation of the Ed-Fi API Publisher is the current lack of support for API Profiles (for defining resource/property level data policies for API clients). Create an issue to request Profiles support if this of interest to you.
 
 More technical details on some of these issues can be found [here](Documentation/Known-Issues-Details.md).
 
