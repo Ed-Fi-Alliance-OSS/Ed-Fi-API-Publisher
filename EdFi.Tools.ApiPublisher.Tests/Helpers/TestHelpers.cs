@@ -52,6 +52,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 RetryStartingDelayMilliseconds = 1,
                 IgnoreSSLErrors = true,
                 StreamingPagesWaitDurationSeconds = 10,
+                MaxDegreeOfParallelismForResourceProcessing = 2,
                 MaxDegreeOfParallelismForPostResourceItem = 1,
                 MaxDegreeOfParallelismForStreamResourcePages = 1,
                 WhatIf = false,
@@ -169,14 +170,26 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
         <layout type=""log4net.Layout.PatternLayout"">
             <conversionPattern value=""%date [%thread] %-5level %logger [%property{{NDC}}] - %message%newline"" />
         </layout>
+        <filter type=""log4net.Filter.LevelRangeFilter"">
+            <levelMin value=""INFO"" />
+            <levelMax value=""FATAL"" />
+        </filter>
     </appender>
     <appender name=""MemoryAppender"" type=""log4net.Appender.MemoryAppender"">
         <onlyFixPartialEventData value=""true"" />
     </appender>
+    <appender name=""FileAppender"" type=""log4net.Appender.FileAppender"">
+        <file value=""C:\ProgramData\Ed-Fi-API-Publisher\Ed-Fi-API-Publisher-Tests.log"" />
+        <appendToFile value=""false"" />
+        <layout type=""log4net.Layout.PatternLayout"">
+            <conversionPattern value=""%date [%thread] %-5level %logger [%property{{NDC}}] - %message%newline"" />
+        </layout>
+    </appender>
     <root>
-        <level value=""{logLevel}"" />
+        <level value=""DEBUG"" />
         <appender-ref ref=""ConsoleAppender"" />
         <appender-ref ref=""MemoryAppender"" />
+        <appender-ref ref=""FileAppender"" />
     </root>
     <logger name=""EdFi.Tools.ApiPublisher.Core.Processing.Blocks.PostResource"">
         <level value=""DEBUG"" />

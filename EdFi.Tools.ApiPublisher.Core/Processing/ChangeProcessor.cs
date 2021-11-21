@@ -668,6 +668,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
             CancellationToken cancellationToken)
         {
+            using var processingSemaphore = new SemaphoreSlim(options.MaxDegreeOfParallelismForResourceProcessing, options.MaxDegreeOfParallelismForResourceProcessing);
+
             // Start processing resources in dependency order
             var streamingPagesOfPostsByResourcePath = InitiateResourceStreaming(
                 sourceApiClient,
@@ -678,12 +680,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 options,
                 changeWindow,
                 errorPublishingBlock,
+                processingSemaphore,
                 cancellationToken);
 
             // Wait for all upsert publishing to finish
             var postTaskStatuses = WaitForResourceStreamingToComplete(
                 "upserts",
                 streamingPagesOfPostsByResourcePath,
+                processingSemaphore,
                 options);
             
             return postTaskStatuses;
@@ -731,6 +735,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'. Initiating delete processing.");
 
+                    using var processingSemaphore = new SemaphoreSlim(options.MaxDegreeOfParallelismForResourceProcessing, options.MaxDegreeOfParallelismForResourceProcessing);
+
                     var streamingPagesOfDeletesByResourcePath = InitiateResourceStreaming(
                         sourceApiClient,
                         targetApiClient,
@@ -740,6 +746,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         options,
                         changeWindow,
                         errorPublishingBlock,
+                        processingSemaphore,
                         cancellationToken,
                         EdFiApiConstants.DeletesPathSuffix);
 
@@ -747,6 +754,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     deleteTaskStatuses = WaitForResourceStreamingToComplete(
                         "deletes",
                         streamingPagesOfDeletesByResourcePath,
+                        processingSemaphore,
                         options);
                 }
                 else
@@ -809,6 +817,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'. Initiating key changes processing.");
 
+                    using var processingSemaphore = new SemaphoreSlim(options.MaxDegreeOfParallelismForResourceProcessing, options.MaxDegreeOfParallelismForResourceProcessing);
+
                     var streamingPagesOfKeyChangesByResourcePath = InitiateResourceStreaming(
                         sourceApiClient,
                         targetApiClient,
@@ -818,6 +828,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         options,
                         changeWindow,
                         errorPublishingBlock,
+                        processingSemaphore,
                         cancellationToken,
                         EdFiApiConstants.KeyChangesPathSuffix);
 
@@ -825,6 +836,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     keyChangeTaskStatuses = WaitForResourceStreamingToComplete(
                         "key changes",
                         streamingPagesOfKeyChangesByResourcePath,
+                        processingSemaphore,
                         options);
                 }
                 else
@@ -1133,6 +1145,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             Options options,
             ChangeWindow changeWindow,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            SemaphoreSlim processingSemaphore,
             CancellationToken cancellationToken,
             string resourceUrlPathSuffix = null)
         {
@@ -1216,6 +1229,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     ChangeWindow = changeWindow, 
                     CancellationSource = cancellationSource,
                     PostAuthorizationFailureRetry = postRetry,
+                    ProcessingSemaphore = processingSemaphore,
                 };
 
                 if (postRetry != null)
@@ -1240,6 +1254,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private TaskStatus[] WaitForResourceStreamingToComplete(
             string activityDescription,
             IDictionary<string, StreamingPagesItem> streamingPagesByResourcePath,
+            SemaphoreSlim processingSemaphore,
             Options options)
         {
             var completedStreamingPagesByResourcePath = new Dictionary<string, StreamingPagesItem>(StringComparer.OrdinalIgnoreCase);
@@ -1369,7 +1384,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                     streamingPagesByResourcePath.Remove(resourcePaths[completedIndex]);
 
-                    _logger.Info($"Streaming of '{resourcePaths[completedIndex]}' completed. {streamingPagesByResourcePath.Count} resource(s) remaining.");
+                    if (_logger.IsDebugEnabled)
+                    {
+                        _logger.Debug($"Streaming of '{resourcePaths[completedIndex]}' completed. Releasing a processing slot ({processingSemaphore.CurrentCount} slots currently available)...");
+                    }
+
+                    _logger.Info($"Streaming of '{resourcePaths[completedIndex]}' completed. {streamingPagesByResourcePath.Count} resource(s) remaining. {processingSemaphore.CurrentCount + 1} processing slot(s) soon to be available.");
+
+                    try
+                    {
+                        processingSemaphore.Release();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warn($"Attempt to release the semaphore resulted in an exception: {ex}");
+                    }
                 }
             }
 

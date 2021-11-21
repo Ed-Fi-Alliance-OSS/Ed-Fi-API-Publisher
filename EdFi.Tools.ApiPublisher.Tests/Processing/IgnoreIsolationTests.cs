@@ -42,8 +42,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     // Test-specific mocks
                     .AvailableChangeVersions(1100)
                     .ResourceCount(responseTotalCountHeader: 1)
-                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}", suppliedSourceResources);
-
+                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}", suppliedSourceResources)
+                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}/deletes", Array.Empty<object>());
                 // -----------------------------------------------------------------
 
                 // -----------------------------------------------------------------

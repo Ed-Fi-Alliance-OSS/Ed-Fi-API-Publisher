@@ -32,6 +32,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--bearerTokenRefreshMinutes"] = "Options:BearerTokenRefreshMinutes",
                     ["--retryStartingDelayMilliseconds"] = "Options:RetryStartingDelayMilliseconds",
                     ["--maxRetryAttempts"] = "Options:MaxRetryAttempts",
+                    ["--maxDegreeOfParallelismForResourceProcessing"] = "Options:MaxDegreeOfParallelismForResourceProcessing",
                     ["--maxDegreeOfParallelismForPostResourceItem"] = "Options:MaxDegreeOfParallelismForPostResourceItem",
                     ["--maxDegreeOfParallelismForStreamResourcePages"] = "Options:MaxDegreeOfParallelismForStreamResourcePages",
                     ["--streamingPagesWaitDurationSeconds"] = "Options:StreamingPagesWaitDurationSeconds",

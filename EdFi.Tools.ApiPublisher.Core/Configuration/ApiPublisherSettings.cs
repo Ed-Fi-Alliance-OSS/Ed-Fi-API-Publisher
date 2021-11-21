@@ -29,8 +29,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         
         public int MaxRetryAttempts { get; set; } = 5;
 
-        private int _maxDegreeOfParallelismForPostResourceItem = 20;
+        public int MaxDegreeOfParallelismForResourceProcessing { get; set; } = 10;
         
+        private int _maxDegreeOfParallelismForPostResourceItem = 20;
+
         public int MaxDegreeOfParallelismForPostResourceItem
         {
             get => _maxDegreeOfParallelismForPostResourceItem;
@@ -67,9 +69,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public int StreamingPageSize { get; set; } = 75;
 
         public bool IncludeDescriptors { get; set; } = false;
-        
+
         public bool WhatIf { get; set; } = false;
-        
+
         public int ErrorPublishingBatchSize { get; set; } = 25;
 
         public bool IgnoreSSLErrors { get; set; } = false;

@@ -30,7 +30,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
             private ILoggerRepository _loggerRepository;
-            private const string AnyResourcePattern = "/ed-fi/\\w+";
+            private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
             
             protected override async Task ArrangeAsync()
             {
@@ -43,10 +43,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 // Prepare the fake source API endpoint
                 _fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
+
                     // Test-specific mocks
                     .AvailableChangeVersions(1100)
                     .ResourceCount(responseTotalCountHeader: 1)
-                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}", suppliedSourceResources);
+                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}", suppliedSourceResources)
+                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}/deletes", Array.Empty<object>());
 
                 // -----------------------------------------------------------------
 
