@@ -26,9 +26,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
             var getItemForDeletionBlock =
-                CreateGetItemForDeletionBlock(targetApiClient.HttpClient, options, errorHandlingBlock);
+                CreateGetItemForDeletionBlock(targetApiClient, options, errorHandlingBlock);
 
-            var deleteResourceBlock = CreateDeleteResourceBlock(targetApiClient.HttpClient, options);
+            var deleteResourceBlock = CreateDeleteResourceBlock(targetApiClient, options);
 
             getItemForDeletionBlock.LinkTo(deleteResourceBlock, new DataflowLinkOptions {PropagateCompletion = true});
             
@@ -36,7 +36,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         }
 
         private static TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> CreateGetItemForDeletionBlock(
-            HttpClient targetHttpClient, 
+            EdFiApiClient targetApiClient, 
             Options options, 
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
@@ -91,7 +91,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                     }
                                 }
                                 
-                                return targetHttpClient.GetAsync($"{msg.ResourceUrl}?{queryString}", ct);
+                                return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}?{queryString}", ct);
                             }, new Context(), CancellationToken.None);
 
                         string responseContent = null;
@@ -193,7 +193,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         }
         
         private static TransformManyBlock<DeleteItemMessage, ErrorItemMessage> CreateDeleteResourceBlock(
-            HttpClient targetHttpClient, Options options)
+            EdFiApiClient targetApiClient, Options options)
         {
             var deleteResource = new TransformManyBlock<DeleteItemMessage, ErrorItemMessage>(
                 async msg =>
@@ -237,7 +237,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 }
                             }
                                 
-                            return targetHttpClient.DeleteAsync($"{msg.ResourceUrl}/{id}", ct);
+                            return targetApiClient.HttpClient.DeleteAsync($"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}/{id}", ct);
                         }, new Context(), CancellationToken.None);
                     
                     // Failure

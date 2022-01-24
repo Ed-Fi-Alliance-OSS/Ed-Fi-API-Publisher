@@ -369,7 +369,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Get the dependencies
             var postDependencyKeysByResourceKey = 
                 await _resourceDependencyProvider.GetDependenciesByResourcePathAsync(
-                    targetApiClient.HttpClient,
+                    targetApiClient,
                     options.IncludeDescriptors)
                 .ConfigureAwait(false);
 
@@ -725,7 +725,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             {
                 // Probe for deletes support
                 string resourcePathSegment = deleteDependenciesByResourcePath.First().Key;
-                string probeUrl = $"{EdFiApiConstants.DataManagementApiSegment}{resourcePathSegment}{EdFiApiConstants.DeletesPathSuffix}";
+                string probeUrl = $"{sourceApiClient.DataManagementApiSegment}{resourcePathSegment}{EdFiApiConstants.DeletesPathSuffix}";
 
                 _logger.Debug($"Probing source API for deletes support at '{probeUrl}'.");
                 
@@ -807,7 +807,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     return Array.Empty<TaskStatus>();
                 }
 
-                string probeUrl = $"{EdFiApiConstants.DataManagementApiSegment}{resourcePathSegment}{EdFiApiConstants.KeyChangesPathSuffix}";
+                string probeUrl = $"{sourceApiClient.DataManagementApiSegment}{resourcePathSegment}{EdFiApiConstants.KeyChangesPathSuffix}";
 
                 _logger.Debug($"Probing source API for key changes support at '{probeUrl}'.");
                 
@@ -1028,11 +1028,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Get available snapshot information
             if (sourceApiVersion.IsAtLeast(5, 2))
             {
-                snapshotsRelativePath = $"{EdFiApiConstants.ChangeQueriesApiSegment}/snapshots";
+                snapshotsRelativePath = $"{sourceApiClient.ChangeQueriesApiSegment}/snapshots";
             }
             else
             {
-                snapshotsRelativePath = $"{EdFiApiConstants.DataManagementApiSegment}/publishing/snapshots";
+                snapshotsRelativePath = $"{sourceApiClient.DataManagementApiSegment}/publishing/snapshots";
             }
             
             var snapshotsResponse = await sourceApiClient.HttpClient.GetAsync(snapshotsRelativePath).ConfigureAwait(false);
@@ -1051,6 +1051,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             if (snapshotsResponse.IsSuccessStatusCode)
             {
+                // Detect null content and provide a better error message (which happens during unit testing if mocked requests aren't properly defined)
+                if (snapshotsResponse.Content == null)
+                {
+                    throw new NullReferenceException($"Content of response for '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}' was null.");
+                }
+
                 string snapshotResponseText = await snapshotsResponse.Content.ReadAsStringAsync()
                     .ConfigureAwait(false);
 
@@ -1101,7 +1107,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private async Task<long?> GetCurrentSourceChangeVersionAsync(EdFiApiClient sourceApiClient)
         {
             // Get current source version information
-            string availableChangeVersionsRelativePath = $"{EdFiApiConstants.ChangeQueriesApiSegment}/availableChangeVersions";
+            string availableChangeVersionsRelativePath = $"{sourceApiClient.ChangeQueriesApiSegment}/availableChangeVersions";
             
             var versionResponse = await sourceApiClient.HttpClient.GetAsync(availableChangeVersionsRelativePath)
                 .ConfigureAwait(false);
@@ -1202,7 +1208,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 var resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
                 var dependencyPaths = kvp.Value.ToArray();
 
-                string resourceUrl = $"{EdFiApiConstants.DataManagementApiSegment}{resourcePath}{resourceUrlPathSuffix}";
+                string resourceUrl = $"{resourcePath}{resourceUrlPathSuffix}";
 
                 if (cancellationSource.IsCancellationRequested)
                 {
@@ -1220,7 +1226,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 var message = new StreamResourceMessage
                 {
-                    HttpClient = sourceApiClient.HttpClient,
+                    EdFiApiClient = sourceApiClient,
                     ResourceUrl = resourceUrl,
                     ShouldSkip = skippedResources.Contains(resourcePath),
                     Dependencies = dependencyPaths.Select(p => streamingPagesByResourceKey[p].CompletionBlock.Completion).ToArray(),

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Web;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Processing;
 using log4net;
 using Newtonsoft.Json.Linq;
 
@@ -21,6 +22,9 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
         private readonly Timer _bearerTokenRefreshTimer;
         private readonly HttpClient _tokenRefreshHttpClient;
 
+        private readonly Lazy<string> _dataManagementApiSegment;
+        private readonly Lazy<string> _changeQueriesApiSegment;
+
         public EdFiApiClient(
             string name,
             ApiConnectionDetails apiConnectionDetails,
@@ -30,6 +34,18 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
         {
             _name = name;
             ConnectionDetails = apiConnectionDetails;
+
+            _dataManagementApiSegment
+                = new Lazy<string>(
+                () => ConnectionDetails.SchoolYear == null
+                    ? EdFiApiConstants.DataManagementApiSegment
+                    : $"{EdFiApiConstants.DataManagementApiSegment}/{ConnectionDetails.SchoolYear}");
+
+            _changeQueriesApiSegment
+                = new Lazy<string>(
+                () => ConnectionDetails.SchoolYear == null
+                    ? EdFiApiConstants.ChangeQueriesApiSegment
+                    : $"{EdFiApiConstants.ChangeQueriesApiSegment}/{ConnectionDetails.SchoolYear}");
 
             httpClientHandler ??= new HttpClientHandler();
 
@@ -179,6 +195,10 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
         }
 
         public ApiConnectionDetails ConnectionDetails { get; }
+
+        public string DataManagementApiSegment => _dataManagementApiSegment.Value;
+        
+        public string ChangeQueriesApiSegment => _changeQueriesApiSegment.Value;
 
         public void Dispose()
         {

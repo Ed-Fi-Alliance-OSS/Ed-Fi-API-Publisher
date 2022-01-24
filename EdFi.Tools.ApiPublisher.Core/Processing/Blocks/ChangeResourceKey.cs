@@ -27,9 +27,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
          {
             var getItemForKeyChangeBlock =
-                CreateGetItemForKeyChangeBlock(targetApiClient.HttpClient, options, errorHandlingBlock);
+                CreateGetItemForKeyChangeBlock(targetApiClient, options, errorHandlingBlock);
             
-            var changeKeyResourceBlock = CreateChangeKeyBlock(targetApiClient.HttpClient, options);
+            var changeKeyResourceBlock = CreateChangeKeyBlock(targetApiClient, options);
             
             getItemForKeyChangeBlock.LinkTo(changeKeyResourceBlock, new DataflowLinkOptions {PropagateCompletion = true});
             
@@ -37,7 +37,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
          }
         
         private static TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> CreateGetItemForKeyChangeBlock(
-            HttpClient targetHttpClient, 
+            EdFiApiClient targetApiClient, 
             Options options, 
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
@@ -93,9 +93,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                     }
                                 }
 
-                                return targetHttpClient.GetAsync($"{message.ResourceUrl}?{queryString}", ct);
+                                return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{message.ResourceUrl}?{queryString}", ct);
                             }, new Context(), CancellationToken.None);
 
+                        // Detect null content and provide a better error message (which happens during unit testing if mocked requests aren't properly defined)
+                        if (apiResponse.Content == null)
+                        {
+                            throw new NullReferenceException($"Content of response for '{targetApiClient.HttpClient.BaseAddress}{message.ResourceUrl}?{queryString}' was null.");
+                        }
+                        
                         string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                         
                         // Failure
@@ -234,7 +240,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         }
         
         private static TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> CreateChangeKeyBlock(
-            HttpClient targetHttpClient, Options options)
+            EdFiApiClient targetApiClient, Options options)
         {
             var changeKey = new TransformManyBlock<ChangeKeyMessage, ErrorItemMessage>(
                 async msg =>
@@ -278,8 +284,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 }
                             }
                                 
-                            return targetHttpClient.PutAsync(
-                                $"{msg.ResourceUrl}/{id}",
+                            return targetApiClient.HttpClient.PutAsync(
+                                $"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}/{id}",
                                 new StringContent(msg.Body, Encoding.UTF8, "application/json"), 
                                 ct);
                         }, new Context(), CancellationToken.None);

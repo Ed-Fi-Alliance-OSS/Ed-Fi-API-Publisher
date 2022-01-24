@@ -42,7 +42,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private ILoggerRepository _loggerRepository;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
 
-            protected override Task ArrangeAsync()
+            protected override async Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
@@ -86,6 +86,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 
                 _fakeTargetRequestHandler = A.Fake<IFakeHttpRequestHandler>()
                     .SetBaseUrl(MockRequests.TargetApiBaseUrl)
+                    .SetDataManagementUrlSegment(EdFiApiConstants.DataManagementApiSegment)
+                    .SetChangeQueriesUrlSegment(EdFiApiConstants.ChangeQueriesApiSegment)
                     .OAuthToken()
                     .ApiVersionMetadata()
                     .Dependencies();
@@ -133,6 +135,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     options,
                     configurationStoreSection);
 
+                // Initialize logging
+                _loggerRepository = await TestHelpers.InitializeLogging();
 
                 // Create dependencies
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
@@ -140,8 +144,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 var errorPublisher = A.Fake<IErrorPublisher>();
 
                 _changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher);
-
-                return Task.CompletedTask;
             }
 
             protected override async Task ActAsync()
@@ -166,6 +168,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             [Test]
             public void Should_GET_keyChanges_from_source_API_for_each_resource_whose_keys_are_updatable()
             {
+                // Console.WriteLine(_loggerRepository.LoggedContent());
+                
                 foreach (var resourceWithUpdatableKey in _resourcesWithUpdatableKeys)
                 {
                     // One request for the count
@@ -213,6 +217,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             [Test]
             public void Should_PUT_all_existing_target_API_resources_with_key_changes_with_the_new_key_values_applied_from_the_source_API()
             {
+                // Console.WriteLine(_loggerRepository.LoggedContent());
+
                 // Verify that all the updated resources were PUT to the target API
                 for (int j = 0; j < TestItemQuantity; j++)
                 {

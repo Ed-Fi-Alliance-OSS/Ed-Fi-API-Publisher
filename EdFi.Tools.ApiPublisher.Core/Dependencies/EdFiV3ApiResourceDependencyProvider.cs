@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using log4net;
@@ -16,9 +17,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Dependencies
     {
         private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiV3ApiResourceDependencyProvider));
         
-        public async Task<IDictionary<string, string[]>> GetDependenciesByResourcePathAsync(HttpClient httpClient, bool includeDescriptors)
+        public async Task<IDictionary<string, string[]>> GetDependenciesByResourcePathAsync(
+            EdFiApiClient edfiApiClient,
+            bool includeDescriptors)
         {
-            var (dependencyGraphML, ns) = await GetResourceDependenciesAsync(httpClient).ConfigureAwait(false);
+            var (dependencyGraphML, ns) = await GetResourceDependenciesAsync(edfiApiClient).ConfigureAwait(false);
             
             var graph = dependencyGraphML.Element(ns + "graph");
 
@@ -61,14 +64,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Dependencies
             return dependenciesByResource;
         }
 
-        private async Task<(XElement, XNamespace)> GetResourceDependenciesAsync(HttpClient httpClient)
+        private async Task<(XElement, XNamespace)> GetResourceDependenciesAsync(EdFiApiClient edFiApiClient)
         {
+            string dependenciesRequestUri = $"metadata/{edFiApiClient.DataManagementApiSegment}/dependencies";
+
             // Get the resource dependencies from the target
-            _logger.Info($"Getting dependencies from API at {httpClient.BaseAddress}...");
+            _logger.Info($"Getting dependencies from API at {edFiApiClient.HttpClient.BaseAddress}{dependenciesRequestUri}...");
             
-            var dependencyRequest = new HttpRequestMessage(HttpMethod.Get, $"metadata/{EdFiApiConstants.DataManagementApiSegment}/dependencies");
+            var dependencyRequest = new HttpRequestMessage(HttpMethod.Get, dependenciesRequestUri);
             dependencyRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/graphml"));
-            var dependencyResponse = await httpClient.SendAsync(dependencyRequest).ConfigureAwait(false);
+            var dependencyResponse = await edFiApiClient.HttpClient.SendAsync(dependencyRequest).ConfigureAwait(false);
 
             string dependencyResponseContent = await dependencyResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 

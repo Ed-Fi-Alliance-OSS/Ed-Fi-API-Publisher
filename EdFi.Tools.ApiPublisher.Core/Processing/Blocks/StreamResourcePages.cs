@@ -98,8 +98,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 }
                             }
                                 
-                            return message.HttpClient.GetAsync($"{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}", ct);
+                            return message.EdFiApiClient.HttpClient.GetAsync($"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}", ct);
                         }, new Context(), CancellationToken.None);
+                    
+                    // Detect null content and provide a better error message (which happens during unit testing if mocked requests aren't properly defined)
+                    if (apiResponse.Content == null)
+                    {
+                        throw new NullReferenceException($"Content of response for '{message.EdFiApiClient.HttpClient.BaseAddress}{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}' was null.");
+                    }
                     
                     string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                     
@@ -109,7 +115,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         var error = new ErrorItemMessage
                         {
                             Method = HttpMethod.Get.ToString(),
-                            ResourceUrl = message.ResourceUrl,
+                            ResourceUrl = $"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                             Id = null,
                             Body = null,
                             ResponseStatus = apiResponse.StatusCode,
@@ -140,7 +146,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         var error = new ErrorItemMessage
                         {
                             Method = HttpMethod.Get.ToString(),
-                            ResourceUrl = message.ResourceUrl,
+                            ResourceUrl = $"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                             Id = null,
                             Body = null,
                             ResponseStatus = apiResponse.StatusCode,

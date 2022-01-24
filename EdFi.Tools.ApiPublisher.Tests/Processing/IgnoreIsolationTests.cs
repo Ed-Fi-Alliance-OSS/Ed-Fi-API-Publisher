@@ -114,7 +114,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             {
                 // No attempts to GET the snapshots
                 A.CallTo(() => _fakeSourceRequestHandler.Get(
-                    $"{MockRequests.SourceApiBaseUrl}/{EdFiApiConstants.ChangeQueriesApiSegment}/snapshots",
+                    $"{MockRequests.SourceApiBaseUrl}/{_fakeSourceRequestHandler.ChangeQueriesUrlSegment}/snapshots",
                     A<HttpRequestMessage>.Ignored))
                 .MustNotHaveHappened();
             }

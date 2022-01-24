@@ -21,12 +21,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--sourceKey"] = "Connections:Source:Key",
                     ["--sourceSecret"] = "Connections:Source:Secret",
                     ["--sourceScope"] = "Connections:Source:Scope",
+                    ["--sourceSchoolYear"] = "Connections:Source:SchoolYear",
                     ["--lastChangeVersionProcessed"] = "Connections:Source:LastChangeVersionProcessed",
                     ["--targetName"] = "Connections:Target:Name",
                     ["--targetUrl"] = "Connections:Target:Url",
                     ["--targetKey"] = "Connections:Target:Key",
                     ["--targetSecret"] = "Connections:Target:Secret",
                     ["--targetScope"] = "Connections:Target:Scope",
+                    ["--targetSchoolYear"] = "Connections:Target:SchoolYear",
                     
                     // Publisher Options
                     ["--bearerTokenRefreshMinutes"] = "Options:BearerTokenRefreshMinutes",

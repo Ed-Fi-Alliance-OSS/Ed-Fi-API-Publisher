@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Bogus;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using EdFi.Tools.ApiPublisher.Tests.Processing;
 using FakeItEasy;
@@ -63,7 +64,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             int lastVersionProcessedToTarget = 1000,
             string[] resources = null,
             string[] skipResources = null,
-            bool ignoreIsolation = false)
+            bool ignoreIsolation = false,
+            int? schoolYear = null)
         {
             return new ApiConnectionDetails
             {
@@ -72,7 +74,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 Key = "sourceKey",
                 Secret = "secret",
                 Scope = null,
-
+                SchoolYear = schoolYear,
+                
                 Resources = resources == null ? null : string.Join(",", resources),
                 ExcludeResources = null,
                 SkipResources = skipResources == null ? null : string.Join(",", skipResources),
@@ -89,7 +92,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             };
         }
 
-        public static ApiConnectionDetails GetTargetApiConnectionDetails()
+        public static ApiConnectionDetails GetTargetApiConnectionDetails(int? schoolYear = null)
         {
             return new ApiConnectionDetails
             {
@@ -98,6 +101,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 Key = "targetKey",
                 Secret = "secret",
                 Scope = null,
+                SchoolYear = schoolYear,
 
                 Resources = null, // "abc,def,ghi",
                 ExcludeResources = null,
@@ -211,20 +215,28 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             return hierarchy;
         }
 
-        public static IFakeHttpRequestHandler GetFakeBaselineSourceApiRequestHandler()
+        public static IFakeHttpRequestHandler GetFakeBaselineSourceApiRequestHandler(
+                string dataManagementUrlSegment = EdFiApiConstants.DataManagementApiSegment,
+                string changeQueriesUrlSegment = EdFiApiConstants.ChangeQueriesApiSegment)
         {
             return A.Fake<IFakeHttpRequestHandler>()
                 .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .SetDataManagementUrlSegment(dataManagementUrlSegment)
+                .SetChangeQueriesUrlSegment(changeQueriesUrlSegment)
                 .OAuthToken()
                 .ApiVersionMetadata()
                 .Snapshots(new []{ new Snapshot { Id = Guid.NewGuid(), SnapshotIdentifier = "ABC123", SnapshotDateTime = DateTime.Now } })
                 .LegacySnapshotsNotFound();
         }
 
-        public static IFakeHttpRequestHandler GetFakeBaselineTargetApiRequestHandler()
+        public static IFakeHttpRequestHandler GetFakeBaselineTargetApiRequestHandler(
+            string dataManagementUrlSegment = EdFiApiConstants.DataManagementApiSegment,
+            string changeQueriesUrlSegment = EdFiApiConstants.ChangeQueriesApiSegment)
         {
             return A.Fake<IFakeHttpRequestHandler>()
                 .SetBaseUrl(MockRequests.TargetApiBaseUrl)
+                .SetDataManagementUrlSegment(dataManagementUrlSegment)
+                .SetChangeQueriesUrlSegment(changeQueriesUrlSegment)
                 .OAuthToken()
                 .ApiVersionMetadata()
                 .Dependencies();

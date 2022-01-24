@@ -1,13 +1,13 @@
 using System;
-using System.Net.Http;
 using System.Threading;
+using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 {
     public class StreamResourcePageMessage<TItemActionMessage>
     {
-        public HttpClient HttpClient { get; set; }
+        public EdFiApiClient EdFiApiClient { get; set; }
         public string ResourceUrl { get; set; }
         public long Offset { get; set; }
         public int Limit { get; set; }

@@ -24,7 +24,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public string Key { get; set; }
         public string Secret { get; set; }
         public string Scope { get; set; }
-
+        public int? SchoolYear { get; set; }
         public bool? IgnoreIsolation { get; set; }
 
         public long? LastChangeVersionProcessed { get; set; }

@@ -1,13 +1,13 @@
 using System;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 {
     public class StreamResourceMessage
     {
-        public HttpClient HttpClient { get; set; }
+        public EdFiApiClient EdFiApiClient { get; set; }
         public string ResourceUrl { get; set; }
         public Task[] Dependencies { get; set; }
 

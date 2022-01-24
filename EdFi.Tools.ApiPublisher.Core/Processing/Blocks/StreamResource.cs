@@ -135,8 +135,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 _logger.Debug($"{message.ResourceUrl}): Getting item count from source (attempt #{attempt})...");
                             }
 
-                            return message.HttpClient.GetAsync(
-                                $"{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}",
+                            return message.EdFiApiClient.HttpClient.GetAsync(
+                                $"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}",
                                 ct);
                         }, new Context(), cancellationToken);
 
@@ -187,7 +187,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     errorHandlingBlock.Post(
                         new ErrorItemMessage
                         {
-                            ResourceUrl = message.ResourceUrl,
+                            ResourceUrl = $"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                             Method = HttpMethod.Get.ToString(),
                             ResponseStatus = apiResponse.StatusCode,
                             ResponseContent = $"Total-Count: {totalCountHeaderValue}",
@@ -208,7 +208,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 {
                     var pageMessage = new StreamResourcePageMessage<TItemActionMessage>
                     {
-                        HttpClient = message.HttpClient,
+                        EdFiApiClient = message.EdFiApiClient,
                         ResourceUrl = message.ResourceUrl,
                         Limit = limit,
                         Offset = offset,
@@ -262,7 +262,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             // Publish an error for the resource to allow processing to continue, but to force failure.
             errorHandlingBlock.Post(new ErrorItemMessage
             {
-                ResourceUrl = message.ResourceUrl,
+                ResourceUrl = $"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                 Method = HttpMethod.Get.ToString(),
                 ResponseStatus = apiResponse.StatusCode,
                 ResponseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false),

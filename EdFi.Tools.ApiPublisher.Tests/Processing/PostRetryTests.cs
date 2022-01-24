@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using FakeItEasy;
@@ -186,6 +187,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher);
             await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, CancellationToken.None);
 
+            // Console.WriteLine(loggerRepository.LoggedContent());
+            
             // Assert the number of POSTs that should have happened
             A.CallTo(
                     () => fakeTargetRequestHandler.Post(

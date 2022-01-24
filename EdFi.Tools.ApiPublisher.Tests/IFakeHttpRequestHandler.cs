@@ -8,6 +8,8 @@ namespace EdFi.Tools.ApiPublisher.Tests
     public interface IFakeHttpRequestHandler
     {
         string BaseUrl { get; }
+        string DataManagementUrlSegment { get; }
+        string ChangeQueriesUrlSegment { get; }
         HttpResponseMessage Get(string url, HttpRequestMessage request);
         HttpResponseMessage Post(string url, HttpRequestMessage request);
         HttpResponseMessage Put(string url, HttpRequestMessage request);
