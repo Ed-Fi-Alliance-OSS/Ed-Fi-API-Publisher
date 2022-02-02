@@ -406,7 +406,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                                                 return targetEdFiApiClient.HttpClient.PostAsync(
                                                     $"{targetEdFiApiClient.DataManagementApiSegment}{missingDependencyResourcePath}",
-                                                    new StringContent(msg.Item.ToString(), Encoding.UTF8, "application/json"),
+                                                    new StringContent(missingItem.ToString(Formatting.None), Encoding.UTF8, "application/json"),
                                                     ct);
                                             },
                                             new Context(),
