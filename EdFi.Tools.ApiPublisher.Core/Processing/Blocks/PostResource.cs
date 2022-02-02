@@ -414,8 +414,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                                     if (!missingItemPostResponse.IsSuccessStatusCode)
                                     {
+                                        string responseContent = await getByIdResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+
                                         _logger.Error(
-                                            $"{msg.ResourceUrl}: POST of missing '{referencedResourceName}' reference to the target returned status '{missingItemPostResponse.StatusCode}'.");
+                                            $"{msg.ResourceUrl}: POST of missing '{referencedResourceName}' reference to the target returned status '{missingItemPostResponse.StatusCode}': {responseContent}.");
                                     }
                                     else
                                     {
