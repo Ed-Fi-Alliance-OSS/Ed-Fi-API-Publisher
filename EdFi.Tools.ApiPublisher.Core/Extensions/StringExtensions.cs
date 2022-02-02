@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace EdFi.Tools.ApiPublisher.Core.Extensions
 {
     public static class StringExtensions
@@ -53,5 +55,47 @@ namespace EdFi.Tools.ApiPublisher.Core.Extensions
 
             return text;
         }
-    }
+        
+        /// <summary>
+        /// Returns a string that is converted to camel casing, detecting and handling acronyms as prefixes and suffixes.
+        /// </summary>
+        /// <param name="text">The text to be processed.</param>
+        /// <returns>A string that has the first character converted to lower-case.</returns>
+        public static string ToCamelCase(this string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+
+            if (text.Length == 1)
+            {
+                return text.ToLower();
+            }
+
+            int leadingUpperCharsLength = text.TakeWhile(char.IsUpper).Count();
+
+            int prefixLength = leadingUpperCharsLength - 1;
+
+            if (text.Length == leadingUpperCharsLength
+
+                // Handles the case of an acronym with a trailing "s" (e.g. "URIs" -> "uris" not "urIs")
+                || text.Length == leadingUpperCharsLength + 1 && text.EndsWith("s"))
+            {
+                // Convert entire name to lower case
+                return text.ToLower();
+            }
+
+            if (prefixLength > 0)
+            {
+                // Apply lower casing to leading acronym
+                return text.Substring(0, prefixLength)
+                        .ToLower()
+                    + text.Substring(prefixLength);
+            }
+
+            // Apply simple camel casing
+            return char.ToLower(text[0]) + text.Substring(1);
+        }
+}
 }

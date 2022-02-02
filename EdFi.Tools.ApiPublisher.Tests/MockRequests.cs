@@ -16,6 +16,7 @@ using EdFi.Tools.ApiPublisher.Tests.Serialization;
 using FakeItEasy;
 using FakeItEasy.Configuration;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
 namespace EdFi.Tools.ApiPublisher.Tests
@@ -74,6 +75,25 @@ namespace EdFi.Tools.ApiPublisher.Tests
             return fakeRequestHandler;
         }
 
+        public static IFakeHttpRequestHandler GetResourceDataItem<TData>(
+            this IFakeHttpRequestHandler fakeRequestHandler,
+            string url,
+            TData data)
+        {
+            A.CallTo(
+                    () => fakeRequestHandler.Get(
+                        A<string>.Ignored,
+                        A<HttpRequestMessage>.That.Matches(
+                            msg => 
+                                (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)) 
+                                // && !HasTotalCountParameter(msg) 
+                                // && RequestMatchesParameters(msg, parameters)
+                                )))
+                .Returns(FakeResponse.OK(data));
+
+            return fakeRequestHandler;
+        }
+
         private static bool RequestMatchesParameters(HttpRequestMessage request, IDictionary<string,string> parameters)
         {
             if (parameters == null)
@@ -126,6 +146,43 @@ namespace EdFi.Tools.ApiPublisher.Tests
                 }
 
                 return new HttpResponseMessage(statusCode);
+            }
+        }
+
+        public static IFakeHttpRequestHandler PostResource(this IFakeHttpRequestHandler fakeRequestHandler, string url, params (HttpStatusCode, JObject)[] responses)
+        {
+            var mocker = A.CallTo(
+                    () => fakeRequestHandler.Post(
+                        A<string>.Ignored,
+                        A<HttpRequestMessage>.That.Matches(
+                            msg => (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)))))
+                .Returns(CreateMessageWithAppropriateBody(responses.First()))
+                .Once();
+
+            foreach (var httpStatusCode in responses.Skip(1))
+            {
+                mocker.Then.Returns(CreateMessageWithAppropriateBody(httpStatusCode));
+            }
+
+            return fakeRequestHandler;
+
+            HttpResponseMessage CreateMessageWithAppropriateBody((HttpStatusCode, JObject) response)
+            {
+                var (statusCode, body) = response;
+
+                if (body == null)
+                {
+                    return new HttpResponseMessage(statusCode);
+                }
+                
+                // Return a stock body in the response for a 400 or 500 series status code
+                return new HttpResponseMessage(statusCode)
+                {
+                    Content = new StringContent(
+                        body.ToString(),
+                        Encoding.UTF8,
+                        "application/json")
+                };
             }
         }
 

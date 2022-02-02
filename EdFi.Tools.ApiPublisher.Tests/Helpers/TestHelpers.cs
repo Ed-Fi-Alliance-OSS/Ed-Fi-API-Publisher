@@ -32,13 +32,25 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
         public static Faker<FakeKey> GetKeyValueFaker()
         {
+            var linkValueFaker = GetLinkValueFaker();
+            
             // Initialize a generator for the fake natural key class
             var keyValueFaker = new Faker<FakeKey>().StrictMode(true)
                 .RuleFor(o => o.Name, f => f.Name.FirstName())
                 .RuleFor(o => o.RetirementAge, f => f.Random.Int(50, 75))
-                .RuleFor(o => o.BirthDate, f => f.Date.Between(DateTime.Today.AddYears(-75), DateTime.Today.AddYears(5)).Date);
+                .RuleFor(o => o.BirthDate, f => f.Date.Between(DateTime.Today.AddYears(-75), DateTime.Today.AddYears(5)).Date)
+                .RuleFor(o => o.Link, f => linkValueFaker.Generate());
 
             return keyValueFaker;
+        }
+
+        public static Faker<Link> GetLinkValueFaker(string href = null, string rel = "Some")
+        {
+            var linkFaker = new Faker<Link>().StrictMode(true)
+                .RuleFor(o => o.Rel, () => rel)
+                .RuleFor(o => o.Href, f => href ?? $"/ed-fi/somethings/{Guid.NewGuid():n}");
+
+            return linkFaker;
         }
 
         public static Options GetOptions()
