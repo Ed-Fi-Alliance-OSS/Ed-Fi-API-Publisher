@@ -13,6 +13,7 @@ using Newtonsoft.Json.Linq;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
+using Newtonsoft.Json;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 
@@ -312,11 +313,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 // Get the missing reference's source URL
                                 string dependencyItemUrl = msg.Item.SelectToken($"{referenceName}.link.href")?.Value<string>();
 
-                                if (_logger.IsDebugEnabled)
-                                {
-                                    _logger.Debug(
-                                        $"{msg.ResourceUrl}: Attempting to retrieve missing '{referencedResourceName}' reference based on 'authorizationFailureHandling' metadata in apiPublisherSettings.json.");
-                                }
+                                _logger.Info(
+                                    $"{msg.ResourceUrl}: Attempting to retrieve missing '{referencedResourceName}' reference based on 'authorizationFailureHandling' metadata in apiPublisherSettings.json.");
 
                                 var getByIdDelay = Backoff.ExponentialBackoff(
                                     TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
@@ -414,13 +412,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                             new Context(),
                                             CancellationToken.None);
 
-                                    if (_logger.IsDebugEnabled)
+                                    if (!missingItemPostResponse.IsSuccessStatusCode)
                                     {
-                                        _logger.Debug(
+                                        _logger.Error(
+                                            $"{msg.ResourceUrl}: POST of missing '{referencedResourceName}' reference to the target returned status '{missingItemPostResponse.StatusCode}'.");
+                                    }
+                                    else
+                                    {
+                                        _logger.Info(
                                             $"{msg.ResourceUrl}: POST of missing '{referencedResourceName}' reference to the target returned status '{missingItemPostResponse.StatusCode}'.");
                                     }
                                 }
-
+                                else
+                                {
+                                    string responseContent = await getByIdResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                    
+                                    _logger.Error($"{msg.ResourceUrl}: GET by Id request from source API for missing '{referencedResourceName}' reference failed with status '{getByIdResponse.StatusCode}': {responseContent}");
+                                }
                                 //----------------------------------------------------------------------------------------------
                             }
                         }
