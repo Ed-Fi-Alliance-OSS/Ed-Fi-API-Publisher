@@ -16,6 +16,7 @@ using EdFi.Tools.ApiPublisher.Tests.Serialization;
 using FakeItEasy;
 using FakeItEasy.Configuration;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
 namespace EdFi.Tools.ApiPublisher.Tests
@@ -69,6 +70,25 @@ namespace EdFi.Tools.ApiPublisher.Tests
                                 (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)) 
                                 && !HasTotalCountParameter(msg) 
                                 && RequestMatchesParameters(msg, parameters))))
+                .Returns(FakeResponse.OK(data));
+
+            return fakeRequestHandler;
+        }
+
+        public static IFakeHttpRequestHandler GetResourceDataItem<TData>(
+            this IFakeHttpRequestHandler fakeRequestHandler,
+            string url,
+            TData data)
+        {
+            A.CallTo(
+                    () => fakeRequestHandler.Get(
+                        A<string>.Ignored,
+                        A<HttpRequestMessage>.That.Matches(
+                            msg => 
+                                (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)) 
+                                // && !HasTotalCountParameter(msg) 
+                                // && RequestMatchesParameters(msg, parameters)
+                                )))
                 .Returns(FakeResponse.OK(data));
 
             return fakeRequestHandler;
@@ -129,6 +149,43 @@ namespace EdFi.Tools.ApiPublisher.Tests
             }
         }
 
+        public static IFakeHttpRequestHandler PostResource(this IFakeHttpRequestHandler fakeRequestHandler, string url, params (HttpStatusCode, JObject)[] responses)
+        {
+            var mocker = A.CallTo(
+                    () => fakeRequestHandler.Post(
+                        A<string>.Ignored,
+                        A<HttpRequestMessage>.That.Matches(
+                            msg => (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)))))
+                .Returns(CreateMessageWithAppropriateBody(responses.First()))
+                .Once();
+
+            foreach (var httpStatusCode in responses.Skip(1))
+            {
+                mocker.Then.Returns(CreateMessageWithAppropriateBody(httpStatusCode));
+            }
+
+            return fakeRequestHandler;
+
+            HttpResponseMessage CreateMessageWithAppropriateBody((HttpStatusCode, JObject) response)
+            {
+                var (statusCode, body) = response;
+
+                if (body == null)
+                {
+                    return new HttpResponseMessage(statusCode);
+                }
+                
+                // Return a stock body in the response for a 400 or 500 series status code
+                return new HttpResponseMessage(statusCode)
+                {
+                    Content = new StringContent(
+                        body.ToString(),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+        }
+
         public static IFakeHttpRequestHandler ResourceCount(
             this IFakeHttpRequestHandler fakeRequestHandler,
             string resourcePath = null,
@@ -168,6 +225,23 @@ namespace EdFi.Tools.ApiPublisher.Tests
                         $"{fakeRequestHandler.BaseUrl}/metadata/{fakeRequestHandler.DataManagementUrlSegment}/dependencies",
                         A<HttpRequestMessage>.Ignored))
                 .Returns(FakeResponse.OK(TestData.Dependencies.GraphML()));
+
+            return fakeRequestHandler;
+        }
+        
+        public static IFakeHttpRequestHandler Dependencies(this IFakeHttpRequestHandler fakeRequestHandler, string resourcePath)
+        {
+            A.CallTo(
+                    () => fakeRequestHandler.Get(
+                        $"{fakeRequestHandler.BaseUrl}/metadata/{fakeRequestHandler.DataManagementUrlSegment}/dependencies",
+                        A<HttpRequestMessage>.Ignored))
+                .Returns(FakeResponse.OK($@"<?xml version=""1.0"" encoding=""utf-8""?>
+<graphml xmlns=""http://graphml.graphdrawing.org/xmlns"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:schemaLocation=""http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"">
+  <graph id=""EdFi Dependencies"" edgedefault=""directed"">
+    <node id=""{resourcePath}""/>
+  </graph>
+</graphml>
+"));
 
             return fakeRequestHandler;
         }

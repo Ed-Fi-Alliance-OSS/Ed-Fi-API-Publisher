@@ -107,6 +107,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     sourceApiClient, 
                     targetApiClient, 
                     options,
+                    authorizationFailureHandling,
                     publishErrorsIngestionBlock,
                     cancellationToken)
                     .ConfigureAwait(false);
@@ -116,7 +117,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     sourceApiClient, 
                     targetApiClient, 
                     postDependencyKeysByResourceKey, 
-                    options, 
+                    options,
+                    authorizationFailureHandling,
                     changeWindow, 
                     publishErrorsIngestionBlock,
                     cancellationToken);
@@ -127,7 +129,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     postDependencyKeysByResourceKey, 
                     sourceApiClient, 
                     targetApiClient, 
-                    options, 
+                    options,
+                    authorizationFailureHandling,
                     publishErrorsIngestionBlock,
                     cancellationToken)
                     .ConfigureAwait(false);
@@ -664,6 +667,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             EdFiApiClient targetApiClient,
             IDictionary<string, string[]> postDependenciesByResourcePath,
             Options options,
+            AuthorizationFailureHandling[] authorizationFailureHandling,
             ChangeWindow changeWindow,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
             CancellationToken cancellationToken)
@@ -678,6 +682,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 PostResource.CreateBlocks, 
                 PostResource.CreateItemActionMessage,
                 options,
+                authorizationFailureHandling,
                 changeWindow,
                 errorPublishingBlock,
                 processingSemaphore,
@@ -699,6 +704,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             EdFiApiClient sourceApiClient,
             EdFiApiClient targetApiClient,
             Options options,
+            AuthorizationFailureHandling[] authorizationFailureHandling,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
             CancellationToken cancellationToken)
         {
@@ -744,6 +750,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         DeleteResource.CreateBlocks, 
                         DeleteResource.CreateItemActionMessage,
                         options,
+                        authorizationFailureHandling,
                         changeWindow,
                         errorPublishingBlock,
                         processingSemaphore,
@@ -773,6 +780,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             EdFiApiClient sourceApiClient,
             EdFiApiClient targetApiClient,
             Options options,
+            AuthorizationFailureHandling[] authorizationFailureHandling,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
             CancellationToken cancellationToken)
         {
@@ -826,6 +834,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         ChangeResourceKey.CreateBlocks, 
                         ChangeResourceKey.CreateItemActionMessage,
                         options,
+                        authorizationFailureHandling,
                         changeWindow,
                         errorPublishingBlock,
                         processingSemaphore,
@@ -1145,10 +1154,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             EdFiApiClient sourceApiClient,
             EdFiApiClient targetApiClient,
             IDictionary<string, string[]> dependenciesByResourcePath,
-            Func<EdFiApiClient, Options, ITargetBlock<ErrorItemMessage>, (ITargetBlock<TItemActionMessage>,
+            Func<CreateBlocksRequest, (ITargetBlock<TItemActionMessage>,
                 ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
             Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
             Options options,
+            AuthorizationFailureHandling[] authorizationFailureHandling,
             ChangeWindow changeWindow,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             SemaphoreSlim processingSemaphore,
@@ -1171,7 +1181,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 string resourceKey = kvp.Key;
                 string resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
 
-                var (processingInBlock, processingOutBlock) = createProcessingBlocks(targetApiClient, options, errorHandlingBlock);
+                var createBlocksRequest = new CreateBlocksRequest(sourceApiClient, targetApiClient, options, authorizationFailureHandling, errorHandlingBlock);
+                
+                var (processingInBlock, processingOutBlock) = createProcessingBlocks(createBlocksRequest);
 
                 // Is this an authorization retry "resource"? 
                 if (resourceKey.EndsWith(RetryKeySuffix))

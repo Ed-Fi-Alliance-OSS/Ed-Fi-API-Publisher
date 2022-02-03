@@ -22,13 +22,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         private static readonly ILog _logger = LogManager.GetLogger(typeof(DeleteResource));
         
         public static ValueTuple<ITargetBlock<GetItemForDeletionMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
-            EdFiApiClient targetApiClient, Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            CreateBlocksRequest createBlocksRequest)
         {
-            var getItemForDeletionBlock =
-                CreateGetItemForDeletionBlock(targetApiClient, options, errorHandlingBlock);
+            var getItemForDeletionBlock = CreateGetItemForDeletionBlock(
+                createBlocksRequest.TargetApiClient,
+                createBlocksRequest.Options,
+                createBlocksRequest.ErrorHandlingBlock);
 
-            var deleteResourceBlock = CreateDeleteResourceBlock(targetApiClient, options);
+            var deleteResourceBlock = CreateDeleteResourceBlock(createBlocksRequest.TargetApiClient, createBlocksRequest.Options);
 
             getItemForDeletionBlock.LinkTo(deleteResourceBlock, new DataflowLinkOptions {PropagateCompletion = true});
             

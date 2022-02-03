@@ -13,5 +13,17 @@ namespace EdFi.Tools.ApiPublisher.Tests.Models
         
         [JsonProperty("retirementAge")]
         public int RetirementAge { get; set; }
+
+        [JsonProperty("link")]
+        public Link Link { get; set; }
+    }
+
+    public class Link
+    {
+        [JsonProperty("rel")]
+        public string Rel { get; set; }
+        
+        [JsonProperty("href")]
+        public string Href { get; set; }
     }
 }

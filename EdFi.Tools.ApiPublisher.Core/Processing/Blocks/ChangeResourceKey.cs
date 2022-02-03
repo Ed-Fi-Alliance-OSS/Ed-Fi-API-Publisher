@@ -21,21 +21,22 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     public static class ChangeResourceKey
     {
         private static readonly ILog _logger = LogManager.GetLogger(typeof(ChangeResourceKey));
-        
+
         public static ValueTuple<ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
-            EdFiApiClient targetApiClient, Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
-         {
-            var getItemForKeyChangeBlock =
-                CreateGetItemForKeyChangeBlock(targetApiClient, options, errorHandlingBlock);
-            
-            var changeKeyResourceBlock = CreateChangeKeyBlock(targetApiClient, options);
-            
-            getItemForKeyChangeBlock.LinkTo(changeKeyResourceBlock, new DataflowLinkOptions {PropagateCompletion = true});
-            
+            CreateBlocksRequest createBlocksRequest)
+        {
+            var getItemForKeyChangeBlock = CreateGetItemForKeyChangeBlock(
+                createBlocksRequest.TargetApiClient,
+                createBlocksRequest.Options,
+                createBlocksRequest.ErrorHandlingBlock);
+
+            var changeKeyResourceBlock = CreateChangeKeyBlock(createBlocksRequest.TargetApiClient, createBlocksRequest.Options);
+
+            getItemForKeyChangeBlock.LinkTo(changeKeyResourceBlock, new DataflowLinkOptions { PropagateCompletion = true });
+
             return (getItemForKeyChangeBlock, changeKeyResourceBlock);
-         }
-        
+        }
+
         private static TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> CreateGetItemForKeyChangeBlock(
             EdFiApiClient targetApiClient, 
             Options options, 
