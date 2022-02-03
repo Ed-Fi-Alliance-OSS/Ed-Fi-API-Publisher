@@ -177,7 +177,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             var ms = new MemoryStream();
             var sw = new StreamWriter(ms);
 
-            const string logLevel = "INFO";
+            // const string logLevel = "INFO";
             
             await sw.WriteLineAsync(
                 $@"

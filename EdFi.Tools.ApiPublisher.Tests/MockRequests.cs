@@ -228,6 +228,23 @@ namespace EdFi.Tools.ApiPublisher.Tests
 
             return fakeRequestHandler;
         }
+        
+        public static IFakeHttpRequestHandler Dependencies(this IFakeHttpRequestHandler fakeRequestHandler, string resourcePath)
+        {
+            A.CallTo(
+                    () => fakeRequestHandler.Get(
+                        $"{fakeRequestHandler.BaseUrl}/metadata/{fakeRequestHandler.DataManagementUrlSegment}/dependencies",
+                        A<HttpRequestMessage>.Ignored))
+                .Returns(FakeResponse.OK($@"<?xml version=""1.0"" encoding=""utf-8""?>
+<graphml xmlns=""http://graphml.graphdrawing.org/xmlns"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:schemaLocation=""http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"">
+  <graph id=""EdFi Dependencies"" edgedefault=""directed"">
+    <node id=""{resourcePath}""/>
+  </graph>
+</graphml>
+"));
+
+            return fakeRequestHandler;
+        }
 
         public static IFakeHttpRequestHandler ApiVersionMetadata(
             this IFakeHttpRequestHandler fakeRequestHandler,

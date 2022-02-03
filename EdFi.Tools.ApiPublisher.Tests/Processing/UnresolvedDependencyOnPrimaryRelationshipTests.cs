@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -82,8 +83,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
-               
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
+                
+                // Override dependencies to a single resource to minimize extraneous noise
+                _fakeTargetRequestHandler.Dependencies(TestResourcePath);
+                
                 _fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{TestResourcePath}", 
                     (HttpStatusCode.BadRequest, JObject.Parse("{\r\n  \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tSome reference could not be resolved.\\n\"\r\n}")), 
                     (HttpStatusCode.OK, null));
@@ -166,13 +170,34 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             }
             
             [Test]
-            public void Should_attempt_to_post_the_item_for_the_unresolved_reference_to_the_target_API()
+            public void Should_attempt_to_post_the_item_obtained_from_the_source_API_for_the_unresolved_reference_to_the_target_API()
             {
                 A.CallTo(
                         () => _fakeTargetRequestHandler.Post(
-                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/students", // This is from the authorizationFailureHandling
-                            A<HttpRequestMessage>.Ignored))
+                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/students", // This resource path is derived from the authorizationFailureHandling
+                            A<HttpRequestMessage>.That.Matches(HasSuppliedStudentInPostRequestBody, "has supplied source item in POST request body")))
                     .MustHaveHappened();
+            }
+            
+            private bool HasSuppliedStudentInPostRequestBody(HttpRequestMessage req)
+            {
+                string content = req.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+
+                var postedObject = JObject.Parse(content);
+
+                postedObject.ShouldSatisfyAllConditions(
+                        o => o.ShouldNotBeNull(),
+                        o => o.ShouldNotContainKey("id"),
+                        o => o.ShouldNotContainKey("_etag"),
+                    
+                        o => o.ShouldContainKey("firstName"),
+                        o => o.ShouldContainKey("lastSurname"),
+
+                        o => o["firstName"]?.Value<string>().ShouldBe("Bob"),
+                        o => o["lastSurname"]?.Value<string>().ShouldBe("Jones")
+                );
+
+                return true;
             }
         }
     }
