@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -61,10 +62,32 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public IDictionary<string, long> LastChangeVersionProcessedByTargetName { get; private set; }
             = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
-        public string Resources { get; set; }
-        public string ExcludeResources { get; set; }
-        public string SkipResources { get; set; }
-        
+        public string Include { get; set; }
+        public string IncludeOnly { get; set; }
+        public string Exclude { get; set; }
+        public string ExcludeOnly { get; set; }
+
+        [Obsolete("The 'Resources' configuration setting has been replaced by 'Include'. Adjust your connection configuration appropriately and try again.")]
+        public string Resources
+        {
+            get => throw new ConfigurationErrorsException("The 'Connections:Source:Resources' configuration setting has been replaced by 'Connections:Source:Include'. Adjust your connection configuration appropriately and try again."); 
+            set => throw new ConfigurationErrorsException("The 'Connections:Source:Resources' configuration setting has been replaced by 'Connections:Source:Include'. Adjust your connection configuration appropriately and try again.");
+        }
+
+        [Obsolete("The 'ExcludeResources' configuration setting has been replaced by 'Exclude'. Adjust your connection configuration appropriately and try again.")]
+        public string ExcludeResources
+        {
+            get => throw new ConfigurationErrorsException("The 'Connections:Source:ExcludeResources' configuration setting has been replaced by 'Connections:Source:Exclude'. Adjust your connection configuration appropriately and try again."); 
+            set => throw new ConfigurationErrorsException("The 'Connections:Source:ExcludeResources' configuration setting has been replaced by 'Connections:Source:Exclude'. Adjust your connection configuration appropriately and try again.");
+        }
+
+        [Obsolete("The 'SkipResources' configuration setting has been replaced by 'ExcludeOnly'. Adjust your connection configuration appropriately and try again.")]
+        public string SkipResources
+        {
+            get => throw new ConfigurationErrorsException("The 'Connections:Source:SkipResources' configuration setting has been replaced by 'Connections:Source:ExcludeOnly'. Adjust your connection configuration appropriately and try again."); 
+            set => throw new ConfigurationErrorsException("The 'Connections:Source:SkipResources' configuration setting has been replaced by 'Connections:Source:ExcludeOnly'. Adjust your connection configuration appropriately and try again.");
+        }
+
         public bool? TreatForbiddenPostAsWarning { get; set; }
 
         public bool IsFullyDefined()

@@ -10,92 +10,60 @@ using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
+using log4net.Appender;
+using log4net.Core;
+using log4net.Repository;
 using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
     [TestFixture]
-    public class UnresolvedDependencyOnPrimaryRelationshipTests
+    public class IncludeOnlyResourcesTests
     {
         [TestFixture]
-        public class When_publishing_a_primary_relationship_resource_with_a_missing_reference : TestFixtureAsyncBase
+        public class When_including_publishing_of_a_resource_without_its_dependencies : TestFixtureAsyncBase
         {
             private ChangeProcessor _changeProcessor;
-            private ChangeProcessorConfiguration _changeProcessorConfiguration;
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
-            private string _suppliedSourceLinkHref;
-
-            public class MissingPerson
-            {
-                [JsonProperty("id")]
-                public string Id { get; set; }
-                
-                [JsonProperty("firstName")]
-                public string FirstName { get; set; }
-                
-                [JsonProperty("lastSurname")]
-                public string LastSurname { get; set; }
-                
-                [JsonProperty("_etag")]
-                public string ETag { get; set; }
-            }
-
-            const string TestResourcePath = "/ed-fi/studentSchoolAssociations";
-
+            private ChangeProcessorConfiguration _changeProcessorConfiguration;
+            private ILoggerRepository _loggerRepository;
+            private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
+            
             protected override async Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
                 // -----------------------------------------------------------------
                 var sourceResourceFaker = TestHelpers.GetGenericResourceFaker();
-            
-                var suppliedSourceResources = sourceResourceFaker.Generate(1);
+
+                var suppliedSourceResources = sourceResourceFaker.Generate(5);
 
                 // Prepare the fake source API endpoint
                 _fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
+
                     // Test-specific mocks
                     .AvailableChangeVersions(1100)
                     .ResourceCount(responseTotalCountHeader: 1)
-                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{TestResourcePath}", suppliedSourceResources);
+                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}", suppliedSourceResources)
+                    .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}/deletes", Array.Empty<object>());
+
                 // -----------------------------------------------------------------
-
-                // Get the path of the missing item from the 'link' in the reference object
-                _suppliedSourceLinkHref = suppliedSourceResources.Single().SomeReference.Link.Href;
-
-                // Fake the expected response item  
-                var suppliedMissingPerson = new MissingPerson
-                {
-                    Id = Guid.NewGuid().ToString("n"),
-                    FirstName = "Bob",
-                    LastSurname = "Jones",
-                    ETag = "etagvalue"
-                };
-
-                _fakeSourceRequestHandler.GetResourceDataItem(
-                    $"{EdFiApiConstants.DataManagementApiSegment}{_suppliedSourceLinkHref}",
-                    suppliedMissingPerson);
 
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
+               
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
                 
-                // Override dependencies to a single resource to minimize extraneous noise
-                _fakeTargetRequestHandler.Dependencies(TestResourcePath);
-                
-                _fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{TestResourcePath}", 
-                    (HttpStatusCode.BadRequest, JObject.Parse("{\r\n  \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tSome reference could not be resolved.\\n\"\r\n}")), 
-                    (HttpStatusCode.OK, null));
-            
+                // Every POST succeeds
+                _fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}", HttpStatusCode.OK);
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    include: new []{ TestResourcePath });
+                    includeOnly: new []{ "schools" });
             
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
@@ -119,9 +87,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 // Only include descriptors if our test subject resource is a descriptor (trying to avoid any dependencies to keep things simpler)
                 var options = TestHelpers.GetOptions();
-                options.IncludeDescriptors = false;
+                options.IncludeDescriptors = false; // Shorten test execution time
                 
-                var configurationStoreSection = null as IConfigurationSection; //new ConfigurationSection()
+                var configurationStoreSection = null as IConfigurationSection;
 
                 _changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
@@ -134,7 +102,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     configurationStoreSection);
 
                 // Initialize logging
-                var loggerRepository = await TestHelpers.InitializeLogging();
+                _loggerRepository = await TestHelpers.InitializeLogging();
 
                 // Create dependencies
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
@@ -149,55 +117,81 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 await _changeProcessor.ProcessChangesAsync(_changeProcessorConfiguration, CancellationToken.None);
             }
 
-            [Test]
-            public void Should_attempt_to_post_the_resource_with_the_reference_that_cannot_be_resolved_to_the_target_API_twice()
+            [TestCase("localEducationAgencies")]
+            [TestCase("educationServiceCenters")]
+            [TestCase("stateEducationAgencies")]
+            [TestCase("postSecondaryInstitutions")] // Results from the tpdm School extension adding a reference
+            public void Should_NOT_attempt_to_publish_resources_that_are_dependencies_of_the_included_resources(string resourceCollectionName)
             {
-                A.CallTo(
-                        () => _fakeTargetRequestHandler.Post(
-                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{TestResourcePath}",
-                            A<HttpRequestMessage>.Ignored))
-                    .MustHaveHappened(2, Times.Exactly); // Once original attempt, then a second time once the reference has been resolved
-            }
-
-            [Test]
-            public void Should_attempt_to_get_the_item_for_the_unresolved_reference_from_the_source_API()
-            {
+                // Should NOT attempt to GET the unincluded resource
                 A.CallTo(
                         () => _fakeSourceRequestHandler.Get(
-                            $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}{_suppliedSourceLinkHref}",
+                            $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/{resourceCollectionName}",
+                            A<HttpRequestMessage>.Ignored))
+                    .MustNotHaveHappened();
+
+                // Should attempt to POST the unskipped resource
+                A.CallTo(
+                        () => _fakeTargetRequestHandler.Post(
+                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/{resourceCollectionName}",
+                            A<HttpRequestMessage>.Ignored))
+                    .MustNotHaveHappened();
+            }
+
+            [Test]
+            public void Should_attempt_to_publish_the_resource_that_is_included()
+            {
+                // No attempts to GET the skipped resource
+                A.CallTo(
+                        () => _fakeSourceRequestHandler.Get(
+                            $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/schools",
+                            A<HttpRequestMessage>.Ignored))
+                    .MustHaveHappened();
+
+                // No attempts to POST the skipped resource
+                A.CallTo(
+                        () => _fakeTargetRequestHandler.Post(
+                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/schools",
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
             }
             
             [Test]
-            public void Should_attempt_to_post_the_item_obtained_from_the_source_API_for_the_unresolved_reference_to_the_target_API()
+            public void Should_reflect_the_processing_as_an_inclusion_without_its_dependencies_in_the_log()
             {
+                // Inspect the log entries
+                var memoryAppender = _loggerRepository.GetAppenders().OfType<MemoryAppender>().Single();
+                var events = memoryAppender.GetEvents();
+                
+                var initializationEvents = events.Where(e 
+                    => e.RenderedMessage.Contains("Including resource '/ed-fi/schools' without its dependencies...")).ToArray();
+
+                initializationEvents.ShouldSatisfyAllConditions(() =>
+                {
+                    initializationEvents.ShouldNotBeEmpty();
+                    initializationEvents.Select(x => x.Level).ShouldAllBe(x => x == Level.Debug);
+                });
+            }
+
+            [TestCase("students")]
+            [TestCase("studentSchoolAssociations")]
+            [TestCase("educationOrganizationNetworkAssociations")]
+            [TestCase("educationOrganizationNetworks")]
+            public void Should_NOT_attempt_to_publish_resources_that_are_not_dependencies_of_the_included_resource(string resourceCollectionName)
+            {
+                // Should not attempt to GET the dependent of the skipped resource
+                A.CallTo(
+                        () => _fakeSourceRequestHandler.Get(
+                            $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/{resourceCollectionName}",
+                            A<HttpRequestMessage>.Ignored))
+                    .MustNotHaveHappened();
+
+                // Should not attempt to POST the dependent of the skipped resource
                 A.CallTo(
                         () => _fakeTargetRequestHandler.Post(
-                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/students", // This resource path is derived from the authorizationFailureHandling
-                            A<HttpRequestMessage>.That.Matches(HasSuppliedStudentInPostRequestBody, "has supplied source item in POST request body")))
-                    .MustHaveHappened();
-            }
-            
-            private bool HasSuppliedStudentInPostRequestBody(HttpRequestMessage req)
-            {
-                string content = req.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-
-                var postedObject = JObject.Parse(content);
-
-                postedObject.ShouldSatisfyAllConditions(
-                        o => o.ShouldNotBeNull(),
-                        o => o.ShouldNotContainKey("id"),
-                        o => o.ShouldNotContainKey("_etag"),
-                    
-                        o => o.ShouldContainKey("firstName"),
-                        o => o.ShouldContainKey("lastSurname"),
-
-                        o => o["firstName"]?.Value<string>().ShouldBe("Bob"),
-                        o => o["lastSurname"]?.Value<string>().ShouldBe("Jones")
-                );
-
-                return true;
+                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/{resourceCollectionName}",
+                            A<HttpRequestMessage>.Ignored))
+                    .MustNotHaveHappened();
             }
         }
     }

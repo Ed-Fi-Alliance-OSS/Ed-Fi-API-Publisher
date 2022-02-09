@@ -45,9 +45,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--whatIf"] = "Options:WhatIf",
                     
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
+                    ["--include"] = "Connections:Source:Include",
+                    ["--includeOnly"] = "Connections:Source:IncludeOnly",
+                    ["--exclude"] = "Connections:Source:Exclude",
+                    ["--excludeOnly"] = "Connections:Source:ExcludeOnly",
+
+                    // Obsolete command-line arguments (setters throw exceptions for now)
                     ["--resources"] = "Connections:Source:Resources",
                     ["--excludeResources"] = "Connections:Source:ExcludeResources",
                     ["--skipResources"] = "Connections:Source:SkipResources",
+                    
                     ["--treatForbiddenPostAsWarning"] = "Connections:Target:TreatForbiddenPostAsWarning",
                     ["--ignoreIsolation"] = "Connections:Source:IgnoreIsolation",
 

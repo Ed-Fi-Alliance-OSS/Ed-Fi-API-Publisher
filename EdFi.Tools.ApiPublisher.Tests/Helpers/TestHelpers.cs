@@ -74,8 +74,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
         public static ApiConnectionDetails GetSourceApiConnectionDetails(
             int lastVersionProcessedToTarget = 1000,
-            string[] resources = null,
-            string[] skipResources = null,
+            string[] include = null,
+            string[] includeOnly = null,
+            string[] exclude = null,
+            string[] excludeOnly = null,
             bool ignoreIsolation = false,
             int? schoolYear = null)
         {
@@ -87,11 +89,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 Secret = "secret",
                 Scope = null,
                 SchoolYear = schoolYear,
-                
-                Resources = resources == null ? null : string.Join(",", resources),
-                ExcludeResources = null,
-                SkipResources = skipResources == null ? null : string.Join(",", skipResources),
-                
+               
+                Include = include == null ? null : string.Join(",", include),
+                IncludeOnly = includeOnly == null ? null : string.Join(",", includeOnly),
+                Exclude = exclude == null ? null : string.Join(",", exclude),
+                ExcludeOnly = excludeOnly == null ? null : string.Join(",", excludeOnly),
+
                 IgnoreIsolation = ignoreIsolation,
                 
                 // LastChangeVersionProcessed = null,
@@ -115,9 +118,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 Scope = null,
                 SchoolYear = schoolYear,
 
-                Resources = null, // "abc,def,ghi",
-                ExcludeResources = null,
-                SkipResources = null,
+                Include = null, // "abc,def,ghi",
+                Exclude = null,
+                ExcludeOnly = null,
                 
                 IgnoreIsolation = true,
                 
