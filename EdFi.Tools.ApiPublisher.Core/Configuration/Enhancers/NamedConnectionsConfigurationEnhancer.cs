@@ -124,25 +124,32 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers
                         namedApiConnectionDetails.LastChangeVersionsProcessed);
                 }
 
-                if (!string.IsNullOrEmpty(namedApiConnectionDetails.Resources))
+                if (!string.IsNullOrEmpty(namedApiConnectionDetails.Include))
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionType.ToString()}:Resources", 
-                        namedApiConnectionDetails.Resources);
+                        $"Connections:{connectionType.ToString()}:Include", 
+                        namedApiConnectionDetails.Include);
                 }
                 
-                if (!string.IsNullOrEmpty(namedApiConnectionDetails.ExcludeResources))
+                if (!string.IsNullOrEmpty(namedApiConnectionDetails.IncludeOnly))
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionType.ToString()}:ExcludeResources", 
-                        namedApiConnectionDetails.ExcludeResources);
+                        $"Connections:{connectionType.ToString()}:IncludeOnly", 
+                        namedApiConnectionDetails.IncludeOnly);
+                }
+                
+                if (!string.IsNullOrEmpty(namedApiConnectionDetails.Exclude))
+                {
+                    yield return new KeyValuePair<string, string>(
+                        $"Connections:{connectionType.ToString()}:Exclude", 
+                        namedApiConnectionDetails.Exclude);
                 }
 
-                if (!string.IsNullOrEmpty(namedApiConnectionDetails.SkipResources))
+                if (!string.IsNullOrEmpty(namedApiConnectionDetails.ExcludeOnly))
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionType.ToString()}:SkipResources", 
-                        namedApiConnectionDetails.SkipResources);
+                        $"Connections:{connectionType.ToString()}:ExcludeOnly", 
+                        namedApiConnectionDetails.ExcludeOnly);
                 }
 
                 // Treating Forbidden response as warning is only applicable for "target" connections

@@ -92,15 +92,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
             try
             {
-                // Should we skip this resource?
-                if (message.ShouldSkip)
-                {
-                    _logger.Info($"{message.ResourceUrl}: Explicitly skipping resource.");
-                    
-                    // Allow processing to continue with no additional work on this resource
-                    return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
-                }
-
                 if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
                 {
                     _logger.Info(

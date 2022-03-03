@@ -138,7 +138,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // -----------------------------------------------------------------
 
             var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                resources: new []{ resourcePath });
+                include: new []{ resourcePath });
             
             var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 

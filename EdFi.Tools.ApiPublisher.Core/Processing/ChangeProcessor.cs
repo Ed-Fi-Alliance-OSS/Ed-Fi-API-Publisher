@@ -377,88 +377,118 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 .ConfigureAwait(false);
 
             // Remove the Publishing extension, if present on target -- we don't want to publish snapshots
-            // This logic is obsolete starting with Ed-Fi ODS API v5.2
+            // This logic is unnecessary starting with Ed-Fi ODS API v5.2
             postDependencyKeysByResourceKey.Remove("/publishing/snapshots");
             
             AdjustDependenciesForConfiguredAuthorizationConcerns();
 
             // Filter resources down to just those requested, if an explicit inclusion list provided
-            if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Resources))
+            if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Include) || !string.IsNullOrWhiteSpace(sourceApiConnectionDetails.IncludeOnly))
             {
-                _logger.Info($"Filtering processing to the following configured source API resources: {sourceApiConnectionDetails.Resources}");
+                _logger.Info("Applying resource inclusions...");
+                _logger.Debug($"Filtering processing to the following configured inclusion of source API resources:{Environment.NewLine}    Included (with dependencies):    {sourceApiConnectionDetails.Include}{Environment.NewLine}    Included (without dependencies): {sourceApiConnectionDetails.IncludeOnly}");
 
-                var configuredSourceApiResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.Resources);
+                var includeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.Include);
+                var includeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.IncludeOnly);
                 
                 // Evaluate whether any of the included resources have a "retry" dependency
-                var retryDependenciesForConfiguredResourcePaths = configuredSourceApiResourcePaths
+                var retryDependenciesForIncludeResourcePaths = includeResourcePaths
                     .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
                     .Select(p => $"{p}{RetryKeySuffix}")
                     .ToArray();
                 
-                postDependencyKeysByResourceKey = FilterToRequestedResourcesAndDependencies(
-                    postDependencyKeysByResourceKey,
-                    configuredSourceApiResourcePaths
-                        .Concat(retryDependenciesForConfiguredResourcePaths).ToArray());
-
-                _logger.Info(
-                    $"{postDependencyKeysByResourceKey.Count} resources to be processed after adding Ed-Fi dependencies.");
-
-                var reportableResources = GetReportableResources();
-
-                var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Select(x => Environment.NewLine + "\t" + x))))}";
-                
-                if (options.WhatIf)
-                {
-                    _logger.Info(resourceListMessage);
-                }
-                else
-                {
-                    _logger.Debug(resourceListMessage);
-                }
-            }
-            else if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.ExcludeResources))
-            {
-                _logger.Info($"Filtering processing to the following configured exclusion of source API resources: {sourceApiConnectionDetails.ExcludeResources}");
-
-                var configuredSourceApiResourcePathsExcluded = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.ExcludeResources);
-                
-                // Evaluate whether any of the included resources have a "retry" dependency
-                var retryDependenciesForConfiguredResourcePaths = configuredSourceApiResourcePathsExcluded
+                var retryDependenciesForIncludeOnlyResourcePaths = includeOnlyResourcePaths
                     .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
                     .Select(p => $"{p}{RetryKeySuffix}")
                     .ToArray();
                 
-                postDependencyKeysByResourceKey = FilterOutExcludedResourcesAndDependents(
+                postDependencyKeysByResourceKey = ApplyResourceInclusionsToDependencies(
                     postDependencyKeysByResourceKey,
-                    configuredSourceApiResourcePathsExcluded
-                        .Concat(retryDependenciesForConfiguredResourcePaths).ToArray());
+                    includeResourcePaths.Concat(retryDependenciesForIncludeResourcePaths).ToArray(),
+                    includeOnlyResourcePaths.Concat(retryDependenciesForIncludeOnlyResourcePaths).ToArray());
 
-                _logger.Info(
-                    $"{postDependencyKeysByResourceKey.Count} resources to be processed after removing dependent Ed-Fi resources.");
-
-                var reportableResources = GetReportableResources();
-
-                var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Select(x => Environment.NewLine + "\t" + x))))}";
-                
-                if (options.WhatIf)
-                {
-                    _logger.Info(resourceListMessage);
-                }
-                else
-                {
-                    _logger.Debug(resourceListMessage);
-                }
+                // _logger.Info($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusion."); //"adding Ed-Fi dependencies.");
+                //
+                // var reportableResources = GetReportableResources();
+                //
+                // var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Dependencies.Select(x => Environment.NewLine + "\t" + x))))}";
+                //
+                // if (options.WhatIf)
+                // {
+                //     _logger.Info(resourceListMessage);
+                // }
+                // else
+                // {
+                //     _logger.Debug(resourceListMessage);
+                // }
             }
-            else
+            
+            if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Exclude) || !string.IsNullOrWhiteSpace(sourceApiConnectionDetails.ExcludeOnly))
             {
-                // Was non-filtered list of resources to be published requested?
-                if (options.WhatIf)
-                {
-                    var reportableResources = GetReportableResources();
-                    var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Select(x => Environment.NewLine + "\t" + x))))}";
-                    _logger.Info(resourceListMessage);
-                }
+                _logger.Info("Applying resource exclusions...");
+                _logger.Debug($"Filtering processing to the following configured exclusion of source API resources:{Environment.NewLine}    Excluded (along with dependents): {sourceApiConnectionDetails.Exclude}{Environment.NewLine}    Excluded (dependents unaffected): {sourceApiConnectionDetails.ExcludeOnly}");
+
+                var excludeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.Exclude);
+                var excludeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.ExcludeOnly);
+                
+                // Evaluate whether any of the included resources have a "retry" dependency
+                var retryDependenciesForExcludeResourcePaths = excludeResourcePaths
+                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
+                    .Select(p => $"{p}{RetryKeySuffix}")
+                    .ToArray();
+
+                var retryDependenciesForExcludeOnlyResourcePaths = excludeOnlyResourcePaths
+                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
+                    .Select(p => $"{p}{RetryKeySuffix}")
+                    .ToArray();
+                
+                postDependencyKeysByResourceKey = ApplyResourceExclusionsToDependencies(
+                    postDependencyKeysByResourceKey,
+                    excludeResourcePaths.Concat(retryDependenciesForExcludeResourcePaths).ToArray(),
+                    excludeOnlyResourcePaths.Concat(retryDependenciesForExcludeOnlyResourcePaths).ToArray());
+
+                // _logger.Info(
+                //     $"{postDependencyKeysByResourceKey.Count} resources to be processed after removing dependent Ed-Fi resources.");
+                //
+                // var reportableResources = GetReportableResources();
+                //
+                // var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Dependencies.Select(x => Environment.NewLine + "\t" + x))))}";
+                //
+                // if (options.WhatIf)
+                // {
+                //     _logger.Info(resourceListMessage);
+                // }
+                // else
+                // {
+                //     _logger.Debug(resourceListMessage);
+                // }
             }
+            
+            // else
+            // {
+            //     // Was non-filtered list of resources to be published requested?
+            //     if (options.WhatIf)
+            //     {
+            //         var reportableResources = GetReportableResources();
+            //         var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Dependencies.Select(x => Environment.NewLine + "\t" + x))))}";
+            //         _logger.Info(resourceListMessage);
+            //     }
+            // }
+
+            _logger.Info($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusions and/or exclusions.");
+            
+            var reportableResources = GetReportableResources();
+            
+            var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Select(x => Environment.NewLine + "\t" + x))))}";
+            
+            // if (options.WhatIf)
+            // {
+                _logger.Info(resourceListMessage);
+            // }
+            // else
+            // {
+                // _logger.Debug(resourceListMessage);
+            // }
 
             return postDependencyKeysByResourceKey;
 
@@ -496,17 +526,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
             }
 
-            IDictionary<string, string[]> FilterOutExcludedResourcesAndDependents(
+            IDictionary<string, string[]> ApplyResourceExclusionsToDependencies(
                 IDictionary<string, string[]> dependenciesByResourcePath,
-                string[] excludedResourcePaths)
+                string[] excludeResourcePaths, 
+                string[] excludeOnlyResourcePaths)
             {
                 var resourcesToInclude = new HashSet<string>(dependenciesByResourcePath.Keys, StringComparer.OrdinalIgnoreCase);
                 var allExclusionTraceEntries = new List<string>();
 
-                foreach (string excludedResourcePath in excludedResourcePaths)
+                foreach (string excludedResourcePath in excludeResourcePaths)
                 {
                     allExclusionTraceEntries.Add(
-                        $"Processing dependencies for specifically requested resource '{excludedResourcePath}'...");
+                        $"Excluding resource '{excludedResourcePath}' and its dependents...");
                     
                     var exclusionTraceEntries = new List<string>();
                     
@@ -514,15 +545,37 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                     allExclusionTraceEntries.AddRange(exclusionTraceEntries.Distinct());
                 }
+
+                foreach (string excludeOnlyResourcePath in excludeOnlyResourcePaths)
+                {
+                    allExclusionTraceEntries.Add(
+                        $"Excluding resource '{excludeOnlyResourcePath}' leaving dependents intact...");
+                    
+                    resourcesToInclude.Remove(excludeOnlyResourcePath);
+                }
                 
                 var filteredResources = new Dictionary<string, string[]>(
                     dependenciesByResourcePath.Where(kvp => resourcesToInclude.Contains(kvp.Key)),
                     StringComparer.OrdinalIgnoreCase);
 
+                // Remove dependencies on items that have not been included in publishing
+                foreach (var resourceItem in filteredResources.ToArray())
+                {
+                    filteredResources[resourceItem.Key] =
+                        resourceItem.Value.Where(dp => filteredResources.ContainsKey(dp)).ToArray();
+                }
+
                 if (_logger.IsDebugEnabled)
                 {
-                    _logger.Debug(
-                        $"Dependent resources were excluded, as follows:{Environment.NewLine}{string.Join(Environment.NewLine, allExclusionTraceEntries)}");
+                    if (allExclusionTraceEntries.Any())
+                    {
+                        _logger.Debug(
+                            $"Resources exclusions were processed, as follows:{Environment.NewLine}{string.Join(Environment.NewLine, allExclusionTraceEntries)}");
+                    }
+                    else
+                    {
+                        _logger.Debug("No resources exclusions were applied.");
+                    }
                 }
 
                 return filteredResources;
@@ -548,33 +601,55 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
             }
             
-            IDictionary<string, string[]> FilterToRequestedResourcesAndDependencies(
+            IDictionary<string, string[]> ApplyResourceInclusionsToDependencies(
                 IDictionary<string, string[]> dependenciesByResourcePath,
-                string[] requestedResourcePaths)
+                string[] includeResourcePaths, string[] includeOnlyResourcePaths)
             {
                 var resourcesToInclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var allInclusionTraceEntries = new List<string>();
 
-                foreach (string requestedResourcePath in requestedResourcePaths)
+                foreach (string includeResourcePath in includeResourcePaths)
                 {
                     allInclusionTraceEntries.Add(
-                        $"Processing dependencies for specifically requested resource '{requestedResourcePath}'...");
+                        $"Including resource '{includeResourcePath}' and its dependencies...");
 
                     var inclusionTraceEntries = new List<string>();
 
-                    AddDependencyResources(requestedResourcePath, inclusionTraceEntries);
+                    AddDependencyResources(includeResourcePath, inclusionTraceEntries);
 
                     allInclusionTraceEntries.AddRange(inclusionTraceEntries.Distinct());
+                }
+
+                // Ensure the resources (without any additional dependencies) entries are also preserved
+                foreach (string includeOnlyResourcePath in includeOnlyResourcePaths)
+                {
+                    allInclusionTraceEntries.Add($"Including resource '{includeOnlyResourcePath}' without its dependencies...");
+                    
+                    resourcesToInclude.Add(includeOnlyResourcePath);
                 }
 
                 var filteredResources = new Dictionary<string, string[]>(
                     dependenciesByResourcePath.Where(kvp => resourcesToInclude.Contains(kvp.Key)),
                         StringComparer.OrdinalIgnoreCase);
 
+                // Remove dependencies on items that have not been included in publishing
+                foreach (var resourceItem in filteredResources.ToArray())
+                {
+                    filteredResources[resourceItem.Key] =
+                        resourceItem.Value.Where(dp => filteredResources.ContainsKey(dp)).ToArray();
+                }
+                
                 if (_logger.IsDebugEnabled)
                 {
-                    _logger.Debug(
-                        $"Dependent resources were included, as follows:{Environment.NewLine}{string.Join(Environment.NewLine, allInclusionTraceEntries)}");
+                    if (allInclusionTraceEntries.Count > 0)
+                    {
+                        _logger.Debug(
+                            $"Dependency resources were included, as follows:{Environment.NewLine}{string.Join(Environment.NewLine, allInclusionTraceEntries)}");
+                    }
+                    else
+                    {
+                        _logger.Debug("No dependency resources were included.");
+                    }
                 }
 
                 return filteredResources;
@@ -1234,7 +1309,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 postAuthorizationRetryByResourceKey.TryGetValue(resourceKey, out var postRetry);
 
                 var skippedResources = 
-                    ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiClient.ConnectionDetails.SkipResources);
+                    ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiClient.ConnectionDetails.ExcludeOnly);
 
                 var message = new StreamResourceMessage
                 {

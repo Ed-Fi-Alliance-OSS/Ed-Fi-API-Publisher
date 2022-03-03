@@ -13,7 +13,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
         /// <returns>An array of values from the parsed items.</returns>
         public static string[] ParseResourcesCsvToResourcePathArray(string resourcesCsv)
         {
-            if (string.IsNullOrEmpty(resourcesCsv))
+            if (string.IsNullOrWhiteSpace(resourcesCsv))
             {
                 return Array.Empty<string>();
             }

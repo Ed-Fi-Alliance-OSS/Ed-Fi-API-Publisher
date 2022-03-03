@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -28,7 +29,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public bool? IgnoreIsolation { get; set; }
 
         public long? LastChangeVersionProcessed { get; set; }
-        
+
         public string LastChangeVersionsProcessed
         {
             get
@@ -50,21 +51,62 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 var obj = JObject.Parse(string.IsNullOrEmpty(value) ? "{}" : value);
 
                 // Convert the parsed JSON to a case-insensitive dictionary
-                LastChangeVersionProcessedByTargetName = 
-                    obj.Properties().ToDictionary(
-                        p => p.Name,
-                        p => p.Value.Value<long>(),
-                        StringComparer.OrdinalIgnoreCase);
+                LastChangeVersionProcessedByTargetName = obj.Properties()
+                    .ToDictionary(p => p.Name, p => p.Value.Value<long>(), StringComparer.OrdinalIgnoreCase);
             }
         }
 
-        public IDictionary<string, long> LastChangeVersionProcessedByTargetName { get; private set; }
-            = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, long> LastChangeVersionProcessedByTargetName { get; private set; } =
+            new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
-        public string Resources { get; set; }
-        public string ExcludeResources { get; set; }
-        public string SkipResources { get; set; }
-        
+        public string Include { get; set; }
+        public string IncludeOnly { get; set; }
+        public string Exclude { get; set; }
+        public string ExcludeOnly { get; set; }
+
+        [Obsolete(
+            "The 'Resources' configuration setting has been replaced by 'Include'. Adjust your connection configuration appropriately and try again.")]
+        public string Resources
+        {
+            get => null;
+            set
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    throw new ConfigurationErrorsException(
+                        "The 'Connections:Source:Resources' configuration setting has been replaced by 'Connections:Source:Include'. Adjust your connection configuration appropriately and try again.");
+                }
+            }
+        }
+
+        [Obsolete(
+            "The 'ExcludeResources' configuration setting has been replaced by 'Exclude'. Adjust your connection configuration appropriately and try again.")]
+        public string ExcludeResources
+        {
+            get => null;
+            set
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    throw new ConfigurationErrorsException(
+                        "The 'Connections:Source:ExcludeResources' configuration setting has been replaced by 'Connections:Source:Exclude'. Adjust your connection configuration appropriately and try again.");
+                }
+            }
+        }
+
+        [Obsolete("The 'SkipResources' configuration setting has been replaced by 'ExcludeOnly'. Adjust your connection configuration appropriately and try again.")]
+        public string SkipResources
+        {
+            get => null;
+            set
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    throw new ConfigurationErrorsException("The 'Connections:Source:SkipResources' configuration setting has been replaced by 'Connections:Source:ExcludeOnly'. Adjust your connection configuration appropriately and try again.");
+                }
+            }
+        }
+
         public bool? TreatForbiddenPostAsWarning { get; set; }
 
         public bool IsFullyDefined()

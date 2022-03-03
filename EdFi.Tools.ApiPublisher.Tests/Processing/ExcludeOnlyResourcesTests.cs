@@ -20,7 +20,7 @@ using Shouldly;
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
     [TestFixture]
-    public class SkipResourcesTests
+    public class ExcludeOnlyResourcesTests
     {
         [TestFixture]
         public class When_skipping_publishing_on_a_resource : TestFixtureAsyncBase
@@ -63,7 +63,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    skipResources: new []{ "schools" });
+                    excludeOnly: new []{ "schools" });
             
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
@@ -120,14 +120,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             [Test]
             public void Should_attempt_to_read_and_write_resources_that_are_not_skipped()
             {
-                // No attempts to GET the skipped resource
+                // Should attempt to GET the unskipped resource
                 A.CallTo(
                         () => _fakeSourceRequestHandler.Get(
                             $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/localEducationAgencies",
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
 
-                // No attempts to POST the skipped resource
+                // Should attempt to POST the unskipped resource
                 A.CallTo(
                         () => _fakeTargetRequestHandler.Post(
                             $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/localEducationAgencies",
@@ -151,31 +151,35 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/schools",
                             A<HttpRequestMessage>.Ignored))
                     .MustNotHaveHappened();
+            }
 
+            [Test]
+            public void Should_reflect_the_processing_as_an_exclusion_without_affecting_its_dependents_in_the_log()
+            {
                 // Inspect the log entries
                 var memoryAppender = _loggerRepository.GetAppenders().OfType<MemoryAppender>().Single();
                 var events = memoryAppender.GetEvents();
                 
-                var skipEvents = events.Where(e => e.RenderedMessage.Contains("Explicitly skipping")).ToArray();
+                var skipInitializationEvents = events.Where(e => e.RenderedMessage.Contains("Excluding resource '/ed-fi/schools' leaving dependents intact...")).ToArray();
 
-                skipEvents.ShouldSatisfyAllConditions(() =>
+                skipInitializationEvents.ShouldSatisfyAllConditions(() =>
                 {
-                    skipEvents.ShouldNotBeEmpty();
-                    skipEvents.Select(x => x.Level).ShouldAllBe(x => x == Level.Info);
+                    skipInitializationEvents.ShouldNotBeEmpty();
+                    skipInitializationEvents.Select(x => x.Level).ShouldAllBe(x => x == Level.Debug);
                 });
             }
 
             [Test]
             public void Should_still_attempt_to_publish_resources_that_are_dependent_on_the_skipped_resource()
             {
-                // No attempts to GET the skipped resource
+                // Should attempt to GET the dependent of the skipped resource
                 A.CallTo(
                         () => _fakeSourceRequestHandler.Get(
                             $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/sessions",
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
 
-                // No attempts to POST the skipped resource
+                // Should attempt to POST the dependent of the skipped resource
                 A.CallTo(
                         () => _fakeTargetRequestHandler.Post(
                             $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/sessions",
