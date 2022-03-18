@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Extensions
@@ -97,5 +98,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Extensions
             // Apply simple camel casing
             return char.ToLower(text[0]) + text.Substring(1);
         }
-}
+        
+        public static bool EqualsIgnoreCase(this string text, string compareText) => text == null ? compareText == null : text.Equals(compareText, StringComparison.InvariantCultureIgnoreCase);
+
+        public static bool StartsWithIgnoreCase(this string text, string compareText) => text == null ? compareText == null : text.StartsWith(compareText, StringComparison.InvariantCultureIgnoreCase);
+
+        public static bool EndsWithIgnoreCase(this string text, string compareText) => text == null ? compareText == null : text.EndsWith(compareText, StringComparison.InvariantCultureIgnoreCase);
+
+        public static bool ContainsIgnoreCase(this string text, string compareText) => text != null && compareText != null && text.IndexOf(compareText, StringComparison.InvariantCultureIgnoreCase) >= 0;
+    }
 }

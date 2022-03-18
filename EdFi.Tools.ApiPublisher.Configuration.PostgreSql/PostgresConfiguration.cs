@@ -1,5 +1,3 @@
-using EdFi.Tools.ApiPublisher.Core._Installers;
-
 namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
 {
     public class PostgresConfigurationStore

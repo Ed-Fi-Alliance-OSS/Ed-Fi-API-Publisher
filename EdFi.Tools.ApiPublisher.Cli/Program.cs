@@ -5,16 +5,22 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Castle.MicroKernel.Registration;
-using Castle.Windsor;
-using EdFi.Tools.ApiPublisher.Core._Installers;
+using Autofac;
+using Autofac.Core;
+using Autofac.Extensions.DependencyInjection;
+using EdFi.Ods.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
+using EdFi.Tools.ApiPublisher.Core.Modules;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Registration;
+using Jering.Javascript.NodeJS;
 using log4net;
 using log4net.Config;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Module = Autofac.Module;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {
@@ -45,11 +51,20 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 ValidateInitialConnectionConfiguration(connections);
 
                 // Initialize the container
-                var container = new WindsorContainer();
+                var services = new ServiceCollection();
+                
+                // Add services
+                services.AddNodeJS();
+                
+                // Integrate Autofac
+                var containerBuilder = new ContainerBuilder();
+                containerBuilder.Populate(services);
+
+                IContainer container;
 
                 try
                 {
-                    InitializeContainer(container, configurationStoreSection);
+                    container = InitializeContainer(containerBuilder, configurationStoreSection);
                 }
                 catch (Exception ex)
                 {
@@ -58,10 +73,12 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     return -1;
                 }
 
+                var serviceProvider = new AutofacServiceProvider(container);
+
                 // After container has been initialized, now enhance the configuration builder
                 if (connections.Source.NeedsResolution() || connections.Target.NeedsResolution())
                 {
-                    var enhancers = container.ResolveAll<IConfigurationBuilderEnhancer>();
+                    var enhancers = serviceProvider.GetServices<IConfigurationBuilderEnhancer>();
 
                     foreach (var enhancer in enhancers)
                     {
@@ -102,7 +119,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     options,
                     finalConfiguration.GetSection("configurationStore"));
 
-                var changeProcessor = container.Resolve<IChangeProcessor>();
+                var changeProcessor = serviceProvider.GetService<IChangeProcessor>();
 
                 Logger.Info($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
@@ -207,26 +224,39 @@ namespace EdFi.Tools.ApiPublisher.Cli
             }
         }
 
-        private static IWindsorContainer InitializeContainer(
-            IWindsorContainer container,
+        private static IContainer InitializeContainer(
+            ContainerBuilder containerBuilder,
             IConfigurationSection configurationStoreSection)
         {
-            container.Install(new EdFiToolsApiPublisherCoreInstaller());
+            containerBuilder.RegisterModule<EdFiToolsApiPublisherCoreModule>();
             
-            InstallApiConnectionConfigurationSupport(container, configurationStoreSection);
+            InstallApiConnectionConfigurationSupport(containerBuilder, configurationStoreSection);
 
-            return container;
+            AssemblyLoaderHelper.LoadAssembliesFromExecutingFolder();
+            
+            // Register all modules in all assemblies
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => a.GetName().Name.Contains("EdFi.")) // NOTE: May eventually need better approach to filtering
+                .ToArray();
+
+            // Register all types found matching the simple "default service" naming convention (Foo for IFoo)
+            containerBuilder.RegisterAssemblyModules(assemblies);
+            
+            // Finally, add "default" registrations, leaving existing registrations intact
+            containerBuilder.RegisterAssemblyTypes(assemblies).UsingDefaultImplementationConvention();
+
+            return containerBuilder.Build();
         }
 
         private static void InstallApiConnectionConfigurationSupport(
-            IWindsorContainer container,
+            ContainerBuilder containerBuilder,
             IConfigurationSection configurationStoreSection)
         {
             EnsureEdFiAssembliesLoaded();
 
             string configurationSourceName = configurationStoreSection.GetValue<string>("provider");
             
-            var installerType = FindApiConnectionConfigurationInstallerType();
+            var installerType = FindApiConnectionConfigurationModuleType();
 
             if (installerType == null)
             {
@@ -234,8 +264,8 @@ namespace EdFi.Tools.ApiPublisher.Cli
             }
 
             // Install chosen support for API connection configuration
-            var installer = (IWindsorInstaller) Activator.CreateInstance(installerType);
-            container.Install(installer);
+            var module = (Module) Activator.CreateInstance(installerType);
+            containerBuilder.RegisterModule(module);
 
             // Ensure all Ed-Fi API Publisher assemblies are loaded
             void EnsureEdFiAssembliesLoaded()
@@ -249,16 +279,16 @@ namespace EdFi.Tools.ApiPublisher.Cli
             }
 
             // Search for the installer for the chosen configuration source
-            Type FindApiConnectionConfigurationInstallerType()
+            Type FindApiConnectionConfigurationModuleType()
             {
-                var locatedInstallerType = AppDomain.CurrentDomain.GetAssemblies()
+                var locatedModuleType = AppDomain.CurrentDomain.GetAssemblies()
                     .SelectMany(a => a.GetExportedTypes())
-                    .Where(t => t.GetInterfaces().Any(i => i == typeof(IWindsorInstaller)))
+                    .Where(t => t.GetInterfaces().Any(i => i == typeof(IModule)))
                     .FirstOrDefault(t => t.GetCustomAttributes<ApiConnectionsConfigurationSourceNameAttribute>()
                         .FirstOrDefault()
                         ?.Name.Equals(configurationSourceName, StringComparison.OrdinalIgnoreCase) == true);
                 
-                return locatedInstallerType;
+                return locatedModuleType;
             }
         }
 
