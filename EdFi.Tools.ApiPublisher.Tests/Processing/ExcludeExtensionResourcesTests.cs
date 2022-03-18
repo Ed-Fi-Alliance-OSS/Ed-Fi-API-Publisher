@@ -20,10 +20,10 @@ using Shouldly;
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
     [TestFixture]
-    public class ExcludeResourcesTests
+    public class ExcludeExtensionResourcesTests
     {
         [TestFixture]
-        public class When_excluding_publishing_of_a_resource_and_its_dependents : TestFixtureAsyncBase
+        public class When_excluding_publishing_of_an_extension_resource_and_its_dependents : TestFixtureAsyncBase
         {
             private ChangeProcessor _changeProcessor;
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
@@ -63,7 +63,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    exclude: new []{ "schools" });
+                    exclude: new []{ "assessments", "/ed-fi/sections", "/tpdm/candidates" });
             
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
@@ -118,7 +118,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             }
 
             [TestCase("/ed-fi/localEducationAgencies")]
-            [TestCase("/ed-fi/educationOrganizationNetworks")]
+            [TestCase("/ed-fi/schools")]
+            [TestCase("/tpdm/applications")] // This is a dependency (not a dependent) for candidates
             public void Should_attempt_to_publish_resources_that_are_not_excluded(string resourceCollectionUrl)
             {
                 // Should attempt to GET the unskipped resource
@@ -136,7 +137,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .MustHaveHappened();
             }
 
-            [TestCase("/ed-fi/schools")]
+            [TestCase("/ed-fi/assessments")]
+            [TestCase("/ed-fi/sections")]
+            [TestCase("/tpdm/candidates")]
             public void Should_not_attempt_to_publish_the_resource_to_be_skipped(string resourceCollectionUrl)
             {
                 // No attempts to GET the skipped resource
@@ -154,7 +157,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .MustNotHaveHappened();
             }
 
-            [TestCase("/ed-fi/schools")]
+            [TestCase("/ed-fi/assessments")]
+            [TestCase("/ed-fi/sections")]
+            [TestCase("/tpdm/candidates")]
             public void Should_reflect_the_processing_as_an_exclusion_with_its_dependents_in_the_log(string resourceCollectionUrl)
             {
                 // Inspect the log entries
@@ -171,30 +176,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 });
             }
 
-            [TestCase("/ed-fi/sessions")]
-            [TestCase("/ed-fi/studentSectionAssociations")]
+            [TestCase("/ed-fi/studentAssessments")] // Depends on assessments
+            [TestCase("/ed-fi/studentSectionAssociations")] // Depends on sections
+            [TestCase("/tpdm/candidateRelationshipToStaffAssociations")] // Depends on candidates
             public void Should_NOT_attempt_to_publish_resources_that_are_dependent_on_the_excluded_resource(string resourceCollectionUrl)
-            {
-                // Should not attempt to GET the dependent of the skipped resource
-                A.CallTo(
-                        () => _fakeSourceRequestHandler.Get(
-                            $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}{resourceCollectionUrl}",
-                            A<HttpRequestMessage>.Ignored))
-                    .MustNotHaveHappened();
-
-                // Should not attempt to POST the dependent of the skipped resource
-                A.CallTo(
-                        () => _fakeTargetRequestHandler.Post(
-                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{resourceCollectionUrl}",
-                            A<HttpRequestMessage>.Ignored))
-                    .MustNotHaveHappened();
-            }
-            
-            [TestCase("/ed-fi/assessments")] // Dependent on EducationOrganization
-            [TestCase("/ed-fi/programs")] // Dependent on EducationOrganization
-            [TestCase("/ed-fi/educationOrganizationNetworkAssociations")] // Dependent on EducationOrganization
-            [TestCase("/tpdm/applications")] // Dependent on EducationOrganization
-            public void Should_NOT_attempt_to_publish_resources_that_are_dependent_on_the_excluded_resources_base_class(string resourceCollectionUrl)
             {
                 // Should not attempt to GET the dependent of the skipped resource
                 A.CallTo(
