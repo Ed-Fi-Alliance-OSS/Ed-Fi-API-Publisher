@@ -61,6 +61,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     // PostgreSQL configuration store
                     ["--configurationStoreProvider"] = "ConfigurationStore:Provider",
                     ["--postgreSqlEncryptionPassword"] = "ConfigurationStore:PostgreSql:EncryptionPassword",
+                    
+                    // Path to the folder containing for JavaScript extension for special handling and retries
+                    ["--remediationsScriptFile"] = "Options:RemediationsScriptFile",
                 });
 
             return configBuilder;

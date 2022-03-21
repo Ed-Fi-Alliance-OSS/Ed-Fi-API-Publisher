@@ -53,9 +53,13 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 // Initialize the container
                 var services = new ServiceCollection();
                 
-                // Add services
+                // Add support for NodeJS
                 services.AddNodeJS();
-                
+
+                // Allow for multiple node processes to support processing
+                services.Configure<OutOfProcessNodeJSServiceOptions>(
+                    options => { options.Concurrency = Concurrency.MultiProcess; });
+                        
                 // Integrate Autofac
                 var containerBuilder = new ContainerBuilder();
                 containerBuilder.Populate(services);
@@ -108,6 +112,13 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 
                 EdFiApiClient CreateSourceApiClient() => new EdFiApiClient("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
                 EdFiApiClient CreateTargetApiClient() => new EdFiApiClient("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+
+                Func<string> moduleFactory = null;
+
+                if (!string.IsNullOrWhiteSpace(options.RemediationsScriptFile))
+                {
+                    moduleFactory = () => File.ReadAllText(options.RemediationsScriptFile);
+                }
                 
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
@@ -116,10 +127,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     targetApiConnectionDetails,
                     CreateSourceApiClient,
                     CreateTargetApiClient,
+                    moduleFactory,
                     options,
                     finalConfiguration.GetSection("configurationStore"));
 
-                var changeProcessor = serviceProvider.GetService<IChangeProcessor>();
+                var changeProcessor = serviceProvider.GetRequiredService<IChangeProcessor>();
 
                 Logger.Info($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
@@ -179,6 +191,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForStreamResourcePages)} must be greater than 0.");
             }
 
+            if (!string.IsNullOrEmpty(options.RemediationsScriptFile) && !File.Exists(options.RemediationsScriptFile))
+            {
+                validationErrors.Add($"{nameof(options.RemediationsScriptFile)} must be a local file path to an existing JavaScript module.");
+            }
+            
             if (validationErrors.Any())
             {
                 throw new Exception($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");

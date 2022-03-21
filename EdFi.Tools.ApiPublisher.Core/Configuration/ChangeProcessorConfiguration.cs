@@ -20,6 +20,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             ApiConnectionDetails targetApiConnectionDetails,
             Func<EdFiApiClient> sourceApiClientFactory,
             Func<EdFiApiClient> targetApiClientFactory,
+            Func<string>? javascriptModuleFactory,
             Options options,
             IConfigurationSection configurationStoreSection)
         {
@@ -27,6 +28,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             ResourcesWithUpdatableKeys = resourcesWithUpdatableKeys;
             SourceApiConnectionDetails = sourceApiConnectionDetails;
             TargetApiConnectionDetails = targetApiConnectionDetails;
+            JavascriptModuleFactory = javascriptModuleFactory;
+            
             Options = options;
             ConfigurationStoreSection = configurationStoreSection;
 
@@ -53,7 +56,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public ApiConnectionDetails SourceApiConnectionDetails { get; }
         
         public ApiConnectionDetails TargetApiConnectionDetails { get; }
-        
+        public Func<string>? JavascriptModuleFactory { get; }
+
         public EdFiApiClient SourceApiClient
         {
             get => _sourceApiClient.Value;

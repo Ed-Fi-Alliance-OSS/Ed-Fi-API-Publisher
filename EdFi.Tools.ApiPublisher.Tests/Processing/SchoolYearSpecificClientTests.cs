@@ -7,9 +7,11 @@ using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
+using Jering.Javascript.NodeJS;
 using log4net.Repository;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
@@ -96,6 +98,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     targetApiConnectionDetails,
                     SourceApiClientFactory,
                     TargetApiClientFactory,
+                    null,
                     options,
                     configurationStoreSection);
 
@@ -106,8 +109,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
                 var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
                 var errorPublisher = A.Fake<IErrorPublisher>();
+                var nodeJsService = A.Fake<INodeJSService>();
 
-                _changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher);
+                var postResourceBlocksFactory = new PostResourceBlocksFactory(nodeJsService); 
+
+                _changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher, postResourceBlocksFactory);
             }
 
             protected override async Task ActAsync()
@@ -228,6 +234,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     targetApiConnectionDetails,
                     SourceApiClientFactory,
                     TargetApiClientFactory,
+                    null,
                     options,
                     configurationStoreSection);
 
@@ -238,8 +245,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
                 var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
                 var errorPublisher = A.Fake<IErrorPublisher>();
+                var nodeJsService = A.Fake<INodeJSService>();
 
-                _changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher);
+                var postResourceBlocksFactory = new PostResourceBlocksFactory(nodeJsService); 
+
+                _changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher, postResourceBlocksFactory);
             }
 
             protected override async Task ActAsync()
@@ -363,6 +373,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     targetApiConnectionDetails,
                     SourceApiClientFactory,
                     TargetApiClientFactory,
+                    null,
                     options,
                     configurationStoreSection);
 
@@ -373,8 +384,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
                 var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
                 var errorPublisher = A.Fake<IErrorPublisher>();
+                var nodeJsService = A.Fake<INodeJSService>();
 
-                _changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher);
+                var postResourceBlocksFactory = new PostResourceBlocksFactory(nodeJsService); 
+
+                _changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher, postResourceBlocksFactory);
             }
 
             protected override async Task ActAsync()

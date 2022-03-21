@@ -75,5 +75,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public int ErrorPublishingBatchSize { get; set; } = 25;
 
         public bool IgnoreSSLErrors { get; set; } = false;
+
+        public string RemediationsScriptFile { get; set; }
     }
 }
