@@ -516,7 +516,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     
                     var remediationResponse = await targetEdFiApiClient.HttpClient.PostAsync(
                         $"{targetEdFiApiClient.DataManagementApiSegment}{remediationRequest.resource}",
-                        new StringContent(remediationRequest.body, Encoding.UTF8, "application/json"));
+                        new StringContent(remediationRequest.body.ToString(), Encoding.UTF8, "application/json"));
 
                     if (remediationResponse.IsSuccessStatusCode)
                     {
@@ -532,6 +532,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             }
             catch (InvocationException ex)
             {
+                _logger.Error($"Error occurred during remediation invocation: {ex}");
                 return false;
             }
         }
@@ -565,7 +566,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         public class RemediationRequest
         {
             public string resource { get; set; }
-            public string body { get; set; }
+            public dynamic body { get; set; }
         }
     }
 }

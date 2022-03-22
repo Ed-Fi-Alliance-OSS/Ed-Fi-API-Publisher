@@ -44,6 +44,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     .CreateConfigurationBuilder(args);
                 
                 var initialConfiguration = configBuilder.Build();
+                
                 var configurationStoreSection = initialConfiguration.GetSection("configurationStore");
                 
                 // Validate initial connection configuration
@@ -52,14 +53,17 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
                 // Initialize the container
                 var services = new ServiceCollection();
-                
-                // Add support for NodeJS
-                services.AddNodeJS();
 
-                // Allow for multiple node processes to support processing
-                services.Configure<OutOfProcessNodeJSServiceOptions>(
-                    options => { options.Concurrency = Concurrency.MultiProcess; });
-                        
+                if (!string.IsNullOrEmpty(initialConfiguration.GetValue<string>("Options:RemediationsScriptFile")))
+                {
+                    // Add support for NodeJS
+                    services.AddNodeJS();
+
+                    // Allow for multiple node processes to support processing
+                    services.Configure<OutOfProcessNodeJSServiceOptions>(
+                        options => { options.Concurrency = Concurrency.MultiProcess; });
+                };
+
                 // Integrate Autofac
                 var containerBuilder = new ContainerBuilder();
                 containerBuilder.Populate(services);
@@ -110,8 +114,8 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var sourceApiConnectionDetails = apiConnections.Source;
                 var targetApiConnectionDetails = apiConnections.Target;
                 
-                EdFiApiClient CreateSourceApiClient() => new EdFiApiClient("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
-                EdFiApiClient CreateTargetApiClient() => new EdFiApiClient("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                EdFiApiClient CreateSourceApiClient() => new ("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                EdFiApiClient CreateTargetApiClient() => new ("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
 
                 Func<string> moduleFactory = null;
 
