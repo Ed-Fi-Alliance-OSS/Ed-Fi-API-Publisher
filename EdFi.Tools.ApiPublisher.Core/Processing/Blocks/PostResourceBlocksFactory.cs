@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,7 @@ using log4net;
 using Newtonsoft.Json;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
@@ -111,9 +113,29 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             || (!r.IsSuccessStatusCode && javaScriptModuleFactory != null && MayHaveRemediation(msg.ResourceUrl, r.StatusCode)))
                         .WaitAndRetryAsync(delay, async (result, ts, retryAttempt, ctx) =>
                         {
-                            if (javaScriptModuleFactory != null && !await TryRemediateFailureAsync(javaScriptModuleFactory, retryAttempt, targetEdFiApiClient, sourceEdFiApiClient.ConnectionDetails.Name, msg.ResourceUrl, result.Result, msg.Item.ToString()))
+                            if (javaScriptModuleFactory != null)
                             {
-                                knownUnremediatedRequests.Add((msg.ResourceUrl, result.Result.StatusCode));
+                                var remediationResult = await TryRemediateFailureAsync(
+                                    javaScriptModuleFactory,
+                                    retryAttempt,
+                                    targetEdFiApiClient,
+                                    sourceEdFiApiClient.ConnectionDetails.Name,
+                                    msg.ResourceUrl,
+                                    result.Result,
+                                    msg.Item.ToString());
+
+                                if (!remediationResult.FoundRemediation)
+                                {
+                                    knownUnremediatedRequests.Add((msg.ResourceUrl, result.Result.StatusCode));
+
+                                    return;
+                                }
+                                
+                                // Check for a modified request body, and save it to the context
+                                if (remediationResult.ModifiedRequestBody is JsonElement modifiedRequestBody && modifiedRequestBody.ValueKind != JsonValueKind.Null)
+                                {
+                                    ctx["ModifiedRequestBody"] = remediationResult.ModifiedRequestBody;
+                                }
                             }
 
                             if (result.Exception != null)
@@ -143,9 +165,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 }
                             }
 
+                            // Prepare request body
+                            string requestBodyJson;
+
+                            if (ctx.TryGetValue("ModifiedRequestBody", out dynamic modifiedRequestBody))
+                            {
+                                requestBodyJson = JsonSerializer.Serialize(modifiedRequestBody);
+                            }
+                            else
+                            {
+                                requestBodyJson = msg.Item.ToString();
+                            }
+                            
                             var response = await targetEdFiApiClient.HttpClient.PostAsync(
                                 $"{targetEdFiApiClient.DataManagementApiSegment}{msg.ResourceUrl}",
-                                new StringContent(msg.Item.ToString(), Encoding.UTF8, "application/json"),
+                                new StringContent(requestBodyJson, Encoding.UTF8, "application/json"),
                                 ct);
 
                             await HandleMissingDependencyAsync(response, msg);
@@ -468,7 +502,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             }
         }
 
-        private async Task<bool> TryRemediateFailureAsync(
+        private async Task<RemediationResult> TryRemediateFailureAsync(
             Func<string> javaScriptModuleFactory,
             int retryAttempt,
             EdFiApiClient targetEdFiApiClient,
@@ -481,7 +515,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
             try
             {
-                var remediationPlan = await _nodeJsService.InvokeFromStringAsync<RemediationPlan>(
+                var remediationPlanContent = await _nodeJsService.InvokeFromStringAsync<string>(
                     javaScriptModuleFactory,
                     "RemediationsModule",
                     remediationFunctionName,
@@ -499,14 +533,22 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     }
                 );
 
-                var remediationPlanRequests = remediationPlan?.requests ?? Array.Empty<RemediationPlan.RemediationRequest>();
+                var remediationPlan = JsonSerializer.Deserialize<RemediationPlan>(remediationPlanContent);
+                
+                var modifiedRequestBody = remediationPlan?.modifiedRequestBody;
+
+                var remediationResult = (modifiedRequestBody?.ValueKind == JsonValueKind.Null)
+                    ? RemediationResult.Found
+                    : new RemediationResult(modifiedRequestBody);
+                
+                var remediationPlanRequests = remediationPlan?.additionalRequests ?? Array.Empty<RemediationPlan.RemediationRequest>();
 
                 if (!remediationPlanRequests.Any())
                 {
                     if (_logger.IsDebugEnabled)
                     {
                         _logger.Debug($"{resourceUrl}: Remediation plan for {responseMessage.StatusCode} did not return any remediation requests. Skipping remediation of the current request...");
-                        return true;
+                        return remediationResult;
                     }
                 }
 
@@ -528,12 +570,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     }
                 }
 
-                return true;
+                return remediationResult;
             }
             catch (InvocationException ex)
             {
-                _logger.Error($"Error occurred during remediation invocation: {ex}");
-                return false;
+                if (!ex.Message.Contains("has no export named"))
+                {
+                    _logger.Error($"{resourceUrl}: Error occurred during remediation invocation: {ex}");
+                }
+                else
+                {
+                    _logger.Debug($"{resourceUrl}: No remediation found for status code '{responseMessage.StatusCode}'.");
+                }
+                
+                return RemediationResult.NotFound;
             }
         }
 
@@ -546,6 +596,27 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 PostAuthorizationFailureRetry = msg.PostAuthorizationFailureRetry,
             };
         }
+    }
+
+    public class RemediationResult
+    {
+        public static RemediationResult Found = new (true);
+        public static RemediationResult NotFound = new (false);
+
+        private RemediationResult(bool foundRemediation)
+        {
+            FoundRemediation = foundRemediation;
+        }
+        
+        public RemediationResult(dynamic modifiedRequestBody)
+        {
+            FoundRemediation = true;
+            ModifiedRequestBody = modifiedRequestBody;
+        }
+        
+        public bool FoundRemediation { get; }
+
+        public dynamic? ModifiedRequestBody { get; }
     }
     
     public class FailureContext
@@ -561,7 +632,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     
     public class RemediationPlan
     {
-        public RemediationRequest[] requests { get; set; }
+        public dynamic? modifiedRequestBody { get; set; }
+
+        public RemediationRequest[]? additionalRequests { get; set; }
 
         public class RemediationRequest
         {

@@ -23,6 +23,7 @@ Defines general behavior of the Ed-Fi API Publisher.
 | Options:StreamingPageSize<br/>`--streamingPageSize`                                                       | Indicates the number of items to include in each page when streaming resources from the source API.<br/>(_Default value: 75_)                                                                                                                                                              |
 | Options:IncludeDescriptors<br/>`--includeDescriptors`                                                     | Indicates whether or not to attempt to publish descriptors.<br/>(_Default value: false_)                                                                                                                                                                                                   |
 | Options:ErrorPublishingBatchSize<br/>`--errorPublishingBatchSize`                                         | Indicates the number of items to batch in each call to the error writer. This could be used to optimize the size of a batch write depending on the operating environment (e.g. Amazon DynamoDB allows for 25 items to be written in a BatchWriteItem operation).<br/>(_Default value: 25_) |
+| Options:RemediationsScriptFile<br/>`--remediationsScriptFile`                                             | Indicates the file system path to a JavaScript file containing [remediations](Remediations.md) for failed POST requests against the target API. |
 
 ## API Connections
 

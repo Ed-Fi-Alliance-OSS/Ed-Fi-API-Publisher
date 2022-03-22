@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
@@ -13,12 +14,15 @@ using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using Jering.Javascript.NodeJS;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Shouldly;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing;
 
+[TestFixture]
 public class RemediationTests
 {
     private const string StaffDisciplineIncidentAssociations = "/ed-fi/staffDisciplineIncidentAssociations";
@@ -126,29 +130,31 @@ public class RemediationTests
             var nodeJsService = A.Fake<INodeJSService>();
 
             A.CallTo(
-                    () => nodeJsService.InvokeFromStringAsync<RemediationPlan>(
+                    () => nodeJsService.InvokeFromStringAsync<string>(
                         javaScriptModuleFactory,
                         "RemediationsModule",
                         "/ed-fi/staffDisciplineIncidentAssociations/403",
                         A<object[]>.Ignored,
                         A<CancellationToken>.Ignored))
                 .Returns(
-                    new RemediationPlan
-                    {
-                        requests = new[]
+                    JsonSerializer.Serialize(
+                        new RemediationPlan
                         {
-                            new RemediationPlan.RemediationRequest
+                            modifiedRequestBody = new { type = "modified" },
+                            additionalRequests = new[]
                             {
-                                resource = "/ed-fi/staffs",
-                                body = JObject.Parse("{ 'message': 'Staff Request Body' }")
-                            },
-                            new RemediationPlan.RemediationRequest
-                            {
-                                resource = "/ed-fi/staffEducationOrganizationAssignmentAssociation",
-                                body = JObject.Parse("{ 'message': 'Staff EdOrg Assignment Request Body' }")
+                                new RemediationPlan.RemediationRequest
+                                {
+                                    resource = "/ed-fi/staffs",
+                                    body = new { message = "Staff Request Body" }
+                                },
+                                new RemediationPlan.RemediationRequest
+                                {
+                                    resource = "/ed-fi/staffEducationOrganizationAssignmentAssociation",
+                                    body = new { message = "Staff EdOrg Assignment Request Body" }
+                                }
                             }
-                        }
-                    });
+                        }));
 
             var postResourceBlocksFactory = new PostResourceBlocksFactory(nodeJsService);
 
@@ -165,18 +171,38 @@ public class RemediationTests
         }
 
         [Test]
-        public void Should_retry_even_on_otherwise_permanent_failures()
+        public void Should_attempt_original_unmodified_request_once()
         {
             // Console.WriteLine(loggerRepository.LoggedContent());
 
-            // Assert the number of POSTs that should have happened
+            // Should try POST once with original (unmodified) request body
             A.CallTo(
                     () => _fakeTargetRequestHandler.Post(
                         $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{resourcePath}",
-                        A<HttpRequestMessage>.Ignored))
-                .MustHaveHappened(shouldRetry ? 2 : 1, Times.Exactly);
+                        A<HttpRequestMessage>.That.Matches(req => !HasModifiedRequestBody(req))))
+                .MustHaveHappened(1, Times.Exactly);
+        }
+        
+        [Test]
+        public void Should_retry_request_even_after_an_otherwise_permanent_failure_with_the_modified_request_provided_by_the_remediation_extension()
+        {
+            // Should try POST once with modified request body, as directed by the JavaScript extension
+            A.CallTo(
+                    () => _fakeTargetRequestHandler.Post(
+                        $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{resourcePath}",
+                        A<HttpRequestMessage>.That.Matches(req => HasModifiedRequestBody(req))))
+                .MustHaveHappened(1, Times.Exactly);
         }
 
+        private bool HasModifiedRequestBody(HttpRequestMessage requestMessage)
+        {
+            string content = requestMessage.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+
+            var modifiedRequest = JsonConvert.DeserializeObject<dynamic>(content);
+
+            return (modifiedRequest.type == "modified");
+        }
+        
         [Test]
         public void Should_process_remediation_requests_returned_from_nodejs_service_invocation_with_the_supplied_message_bodies()
         {
