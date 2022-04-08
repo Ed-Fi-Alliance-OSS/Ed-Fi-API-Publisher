@@ -13,6 +13,7 @@ using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
 using EdFi.Tools.ApiPublisher.Core.Modules;
+using EdFi.Tools.ApiPublisher.Core.NodeJs;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Registration;
 using Jering.Javascript.NodeJS;
@@ -62,7 +63,12 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     // Allow for multiple node processes to support processing
                     services.Configure<OutOfProcessNodeJSServiceOptions>(
                         options => { options.Concurrency = Concurrency.MultiProcess; });
-                };
+                }
+                else
+                {
+                    // Provide an instance of an implementations that throws exceptions if called
+                    services.AddSingleton<INodeJSService>(new NullNodeJsService());
+                }
 
                 // Integrate Autofac
                 var containerBuilder = new ContainerBuilder();
@@ -276,6 +282,8 @@ namespace EdFi.Tools.ApiPublisher.Cli
             EnsureEdFiAssembliesLoaded();
 
             string configurationSourceName = configurationStoreSection.GetValue<string>("provider");
+            
+            Logger.Debug($"Configuration store provider is '{configurationSourceName}...'");
             
             var installerType = FindApiConnectionConfigurationModuleType();
 
