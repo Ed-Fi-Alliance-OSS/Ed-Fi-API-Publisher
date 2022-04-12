@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Configuration.Internal;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
@@ -15,7 +14,6 @@ using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using Jering.Javascript.NodeJS;
 using log4net;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
