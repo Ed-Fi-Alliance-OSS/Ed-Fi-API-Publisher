@@ -263,21 +263,15 @@ namespace EdFi.Tools.ApiPublisher.Cli
             IConfigurationSection configurationStoreSection)
         {
             containerBuilder.RegisterModule<EdFiToolsApiPublisherCoreModule>();
-            
+
+            // NOTE: Consider a plugin model here
             InstallApiConnectionConfigurationSupport(containerBuilder, configurationStoreSection);
 
-            AssemblyLoaderHelper.LoadAssembliesFromExecutingFolder();
-            
-            // Register all modules in all assemblies
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-                .Where(a => a.GetName().Name.Contains("EdFi.")) // NOTE: May eventually need better approach to filtering
-                .ToArray();
-
-            // Register all types found matching the simple "default service" naming convention (Foo for IFoo)
-            containerBuilder.RegisterAssemblyModules(assemblies);
-            
-            // Finally, add "default" registrations, leaving existing registrations intact
-            containerBuilder.RegisterAssemblyTypes(assemblies).UsingDefaultImplementationConvention();
+            // Add "default" registrations from the "core" assembly, leaving any existing registrations intact
+            // Registers types found matching the simple "default service" naming convention (Foo for IFoo)
+            containerBuilder
+                .RegisterAssemblyTypes(typeof(EdFiToolsApiPublisherCoreModule).Assembly)
+                .UsingDefaultImplementationConvention();
 
             return containerBuilder.Build();
         }
