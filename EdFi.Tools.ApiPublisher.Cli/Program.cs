@@ -46,8 +46,6 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 
                 var initialConfiguration = configBuilder.Build();
                 
-                var configurationStoreSection = initialConfiguration.GetSection("configurationStore");
-                
                 // Validate initial connection configuration
                 var connections = initialConfiguration.Get<ConnectionConfiguration>().Connections;
                 ValidateInitialConnectionConfiguration(connections);
@@ -78,6 +76,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
                 try
                 {
+                    var configurationStoreSection = initialConfiguration.GetSection("configurationStore");
                     container = InitializeContainer(containerBuilder, configurationStoreSection);
                 }
                 catch (Exception ex)
@@ -92,10 +91,13 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 // After container has been initialized, now enhance the configuration builder
                 if (connections.Source.NeedsResolution() || connections.Target.NeedsResolution())
                 {
+                    Logger.Debug($"API connection details are incomplete from initial configuration. Beginning configuration enhancement processing...");
+                    
                     var enhancers = serviceProvider.GetServices<IConfigurationBuilderEnhancer>();
 
                     foreach (var enhancer in enhancers)
                     {
+                        Logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
                         enhancer.Enhance(configBuilder);
                     }
                 }
@@ -108,7 +110,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var publisherSettings = finalConfiguration.Get<ApiPublisherSettings>();
                 
                 var options = publisherSettings.Options;
-
+                Logger.Debug($"Validating configuration options...");
                 ValidateOptions(options);
                 
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
@@ -189,6 +191,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
             if (options.StreamingPagesWaitDurationSeconds < 1)
             {
                 validationErrors.Add($"{nameof(options.StreamingPagesWaitDurationSeconds)} must be greater than 0.");
+            }
+            
+            if (options.MaxDegreeOfParallelismForResourceProcessing < 1)
+            {
+                validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForResourceProcessing)} must be greater than 0.");
             }
             
             if (options.MaxDegreeOfParallelismForPostResourceItem < 1)
@@ -283,17 +290,25 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
             string configurationSourceName = configurationStoreSection.GetValue<string>("provider");
             
-            Logger.Debug($"Configuration store provider is '{configurationSourceName}...'");
+            Logger.Debug($"Configuration store provider is '{configurationSourceName}'...");
             
-            var installerType = FindApiConnectionConfigurationModuleType();
+            var moduleType = FindApiConnectionConfigurationModuleType();
 
-            if (installerType == null)
+            if (moduleType == null)
             {
-                throw new Exception($"Unable to find installer for API connection configuration source '{configurationSourceName}'.");
+                throw new Exception($"Unable to find an installer for API connection configuration source '{configurationSourceName}'.");
             }
 
             // Install chosen support for API connection configuration
-            var module = (Module) Activator.CreateInstance(installerType);
+            var module = (Module?) Activator.CreateInstance(moduleType);
+
+            if (module == null)
+            {
+                throw new Exception($"Unable to create the installer module '{moduleType.Name}' for connection configuration source '{configurationSourceName}'.");
+            }
+            
+            Logger.Debug($"Registering configuration store provider module '{moduleType.FullName}'...");
+            
             containerBuilder.RegisterModule(module);
 
             // Ensure all Ed-Fi API Publisher assemblies are loaded
@@ -303,12 +318,13 @@ namespace EdFi.Tools.ApiPublisher.Cli
             
                 foreach (FileInfo fileInfo in directoryInfo.GetFiles("EdFi*.dll"))
                 {
+                    Logger.Debug($"Ensuring that assembly '{fileInfo.Name}' is loaded...");
                     Assembly.LoadFrom(fileInfo.FullName);
                 }
             }
 
             // Search for the installer for the chosen configuration source
-            Type FindApiConnectionConfigurationModuleType()
+            Type? FindApiConnectionConfigurationModuleType()
             {
                 var locatedModuleType = AppDomain.CurrentDomain.GetAssemblies()
                     .SelectMany(a => a.GetExportedTypes())
