@@ -139,8 +139,8 @@ public class RemediationIntegrationTests
                                     resource: ""/ed-fi/staffs"", 
                                     body: {{ 
                                          staffUniqueId: `${{data.staffs[m.groups['Index']].staffReference.staffUniqueId}}`, 
-                                         firstName: ""Non-DSST Staff"", 
-                                         lastSurname: ""Non-DSST Staff"" 
+                                         firstName: ""Unknown Staff"", 
+                                         lastSurname: ""Unknown Staff"" 
                                      }}
                                  }}
                              }})
