@@ -72,9 +72,9 @@ module.exports = {
       // Perform regular expression matching
       const matches = [...response.message.matchAll(indexRegEx)];
 
-      // Prepare the requests of the remediation plan
+      // Prepare the additional requests of the remediation plan
       return { 
-        requests:
+        additionalRequests:
           // Map the missing staff into requests for the remediation
           matches.map(m => { 
             return {
@@ -124,22 +124,6 @@ module.exports = {
 
       // Return the modified request body
       return {{ modifiedRequestBody: request }};
-
-      // Prepare the requests of the remediation plan
-      return { 
-        requests:
-          // Map the missing staff into requests for the remediation
-          matches.map(m => { 
-            return {
-              resource: "/ed-fi/staffs", 
-              body: { 
-                staffUniqueId: `${request.staffs[m.groups['Index']].staffReference.staffUniqueId}`, 
-                firstName: "Unknown Staff", 
-                lastSurname: "Unknown Staff" 
-              }
-            }
-          })
-      };
     }
 
     // Take no action for the current request
