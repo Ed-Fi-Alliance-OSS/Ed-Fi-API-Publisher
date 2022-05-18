@@ -121,6 +121,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                     targetEdFiApiClient,
                                     sourceEdFiApiClient.ConnectionDetails.Name,
                                     msg.ResourceUrl,
+                                    id,
                                     result.Result,
                                     msg.Item.ToString());
 
@@ -134,6 +135,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 // Check for a modified request body, and save it to the context
                                 if (remediationResult.ModifiedRequestBody is JsonElement modifiedRequestBody && modifiedRequestBody.ValueKind != JsonValueKind.Null)
                                 {
+                                    if (_logger.IsDebugEnabled)
+                                    {
+                                        string modifiedRequestBodyJson = JsonSerializer.Serialize(remediationResult.ModifiedRequestBody, new JsonSerializerOptions { WriteIndented = true });
+                                        
+                                        _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Remediation plan provided a modified request body: {modifiedRequestBodyJson} ");
+                                    }
+                                    
                                     ctx["ModifiedRequestBody"] = remediationResult.ModifiedRequestBody;
                                 }
                             }
@@ -170,6 +178,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                             if (ctx.TryGetValue("ModifiedRequestBody", out dynamic modifiedRequestBody))
                             {
+                                _logger.Info($"{msg.ResourceUrl} (source id: {id}): Applying modified request body from remediation plan...");
                                 requestBodyJson = JsonSerializer.Serialize(modifiedRequestBody);
                             }
                             else
@@ -508,6 +517,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             EdFiApiClient targetEdFiApiClient,
             string sourceConnectionName,
             string resourceUrl,
+            string sourceId,
             HttpResponseMessage responseMessage,
             string requestBody)
         {
@@ -541,32 +551,39 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     ? RemediationResult.Found
                     : new RemediationResult(modifiedRequestBody);
                 
-                var remediationPlanRequests = remediationPlan?.additionalRequests ?? Array.Empty<RemediationPlan.RemediationRequest>();
+                var remediationPlanAdditionalRequests = remediationPlan?.additionalRequests ?? Array.Empty<RemediationPlan.RemediationRequest>();
 
-                if (!remediationPlanRequests.Any())
+                if (!remediationPlanAdditionalRequests.Any())
                 {
                     if (_logger.IsDebugEnabled)
                     {
-                        _logger.Debug($"{resourceUrl}: Remediation plan for {responseMessage.StatusCode} did not return any remediation requests. Skipping remediation of the current request...");
-                        return remediationResult;
+                        _logger.Debug($"{resourceUrl} (source id: {sourceId}): Remediation plan for '{responseMessage.StatusCode}' did not return any additional remediation requests.");
                     }
+                    
+                    return remediationResult;
                 }
 
-                foreach (var remediationRequest in remediationPlanRequests)
+                // Perform the additional remediation requests
+                foreach (var remediationRequest in remediationPlanAdditionalRequests)
                 {
-                    _logger.Debug($"{resourceUrl}: Remediating request with POST request to '{remediationRequest.resource}' on target API...");
-                    
+                    var remediationRequestBodyJson = (string) remediationRequest.body.ToString();
+
+                    if (_logger.IsDebugEnabled)
+                    {
+                        _logger.Debug($"{resourceUrl} (source id: {sourceId}): Remediating request with POST request to '{remediationRequest.resource}' on target API: {remediationRequestBodyJson}");
+                    }
+
                     var remediationResponse = await targetEdFiApiClient.HttpClient.PostAsync(
                         $"{targetEdFiApiClient.DataManagementApiSegment}{remediationRequest.resource}",
-                        new StringContent(remediationRequest.body.ToString(), Encoding.UTF8, "application/json"));
+                        new StringContent(remediationRequestBodyJson, Encoding.UTF8, "application/json"));
 
                     if (remediationResponse.IsSuccessStatusCode)
                     {
-                        _logger.Info($"{resourceUrl}: Remediation for retry attempt {retryAttempt} with POST request to '{remediationRequest.resource}' on target API succeeded with status '{remediationResponse.StatusCode}'.");
+                        _logger.Info($"{resourceUrl} (source id: {sourceId}): Remediation for retry attempt {retryAttempt} with POST request to '{remediationRequest.resource}' on target API succeeded with status '{remediationResponse.StatusCode}'.");
                     }
                     else
                     {
-                        _logger.Warn($"{resourceUrl}: Remediation for retry attempt {retryAttempt} with POST request to '{remediationRequest.resource}' on target API failed with status '{remediationResponse.StatusCode}'.");
+                        _logger.Warn($"{resourceUrl} (source id: {sourceId}): Remediation for retry attempt {retryAttempt} with POST request to '{remediationRequest.resource}' on target API failed with status '{remediationResponse.StatusCode}'.");
                     }
                 }
 
@@ -576,11 +593,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             {
                 if (!ex.Message.Contains("has no export named"))
                 {
-                    _logger.Error($"{resourceUrl}: Error occurred during remediation invocation: {ex}");
+                    _logger.Error($"{resourceUrl} (source id: {sourceId}): Error occurred during remediation invocation: {ex}");
                 }
                 else
                 {
-                    _logger.Debug($"{resourceUrl}: No remediation found for status code '{responseMessage.StatusCode}'.");
+                    _logger.Debug($"{resourceUrl} (source id: {sourceId}): No remediation found for status code '{responseMessage.StatusCode}'.");
                 }
                 
                 return RemediationResult.NotFound;

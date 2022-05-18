@@ -123,7 +123,7 @@ module.exports = {
       request.staffs = request.staffs.filter(i => i != null);
 
       // Return the modified request body
-      return {{ modifiedRequestBody: request }};
+      return { modifiedRequestBody: request };
     }
 
     // Take no action for the current request

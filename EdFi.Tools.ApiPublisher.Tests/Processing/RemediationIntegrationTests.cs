@@ -110,14 +110,12 @@ public class RemediationIntegrationTests
         ""studentDisciplineIncidentBehaviorAssociations"": []
     }}";
 
-        private static int DisciplineActionsPostResponseStatusCode = 400;
+        // private static int _disciplineActionsPostResponseStatusCode = 400;
 
         private const string DisciplineIncidentActionsPostResponseErrorJson = $@"
 {{ ""message"": ""Validation of 'DisciplineAction' failed.\\r\\n\\tValidation of 'DisciplineActionStaffs' failed.\\n\\t\\tDisciplineActionStaff[0]: Staff reference could not be resolved.\\n\\t\\tDisciplineActionStaff[2]: Staff reference could not be resolved.\\n""}}";
 
-        private const string AssessmentsResourcePath = "/ed-fi/assessments";
-
-        Func<string> RemediationJavaScriptModuleFactory = () => @$"
+        readonly Func<string> _remediationJavaScriptModuleFactory = () => @$"
          module.exports = {{
              '/ed-fi/disciplineActions/400': async (failureContext) => {{
                  // Parse the request/response data
@@ -229,7 +227,7 @@ public class RemediationIntegrationTests
                 targetApiConnectionDetails,
                 SourceApiClientFactory,
                 TargetApiClientFactory,
-                RemediationJavaScriptModuleFactory,
+                _remediationJavaScriptModuleFactory,
                 options,
                 configurationStoreSection);
 
@@ -414,14 +412,14 @@ public class RemediationIntegrationTests
         ""studentDisciplineIncidentBehaviorAssociations"": []
     }}";
 
-        private static int DisciplineActionsPostResponseStatusCode = 400;
+        // private static int DisciplineActionsPostResponseStatusCode = 400;
 
         private const string DisciplineIncidentActionsPostResponseErrorJson = $@"
 {{ ""message"": ""Validation of 'DisciplineAction' failed.\\r\\n\\tValidation of 'DisciplineActionStaffs' failed.\\n\\t\\tDisciplineActionStaff[0]: Staff reference could not be resolved.\\n\\t\\tDisciplineActionStaff[2]: Staff reference could not be resolved.\\n""}}";
 
         private const string AssessmentsResourcePath = "/ed-fi/assessments";
 
-        Func<string> RemediationJavaScriptModuleFactory = () => @$"
+        readonly Func<string> _remediationJavaScriptModuleFactory = () => @$"
          module.exports = {{
              '/ed-fi/disciplineActions/400': async (failureContext) => {{
                  // Parse the request/response data
@@ -525,7 +523,7 @@ public class RemediationIntegrationTests
                 targetApiConnectionDetails,
                 SourceApiClientFactory,
                 TargetApiClientFactory,
-                RemediationJavaScriptModuleFactory,
+                _remediationJavaScriptModuleFactory,
                 options,
                 configurationStoreSection);
 
