@@ -6,9 +6,8 @@ using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
-using EdFi.Tools.ApiPublisher.Core.Processing;
 using log4net;
+
 // ReSharper disable InconsistentNaming
 
 namespace EdFi.Tools.ApiPublisher.Core.Dependencies

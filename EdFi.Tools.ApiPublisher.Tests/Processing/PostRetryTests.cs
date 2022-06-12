@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -8,12 +9,15 @@ using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using FakeItEasy;
+using Jering.Javascript.NodeJS;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
+using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -173,6 +177,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 targetApiConnectionDetails,
                 SourceApiClientFactory,
                 TargetApiClientFactory,
+                null,
                 options,
                 configurationStoreSection);
 
@@ -183,8 +188,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
             var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
             var errorPublisher = A.Fake<IErrorPublisher>();
+            var nodeJsService = A.Fake<INodeJSService>();
 
-            var changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher);
+            var postResourceBlocksFactory = new PostResourceBlocksFactory(nodeJsService); 
+
+            var changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher, postResourceBlocksFactory);
             await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, CancellationToken.None);
 
             // Console.WriteLine(loggerRepository.LoggedContent());

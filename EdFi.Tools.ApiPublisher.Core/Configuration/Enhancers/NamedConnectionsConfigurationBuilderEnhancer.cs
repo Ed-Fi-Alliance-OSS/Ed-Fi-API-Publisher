@@ -7,13 +7,13 @@ using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers
 {
-    public class NamedConnectionsConfigurationEnhancer : IConfigurationBuilderEnhancer
+    public class NamedConnectionsConfigurationBuilderEnhancer : IConfigurationBuilderEnhancer
     {
         private readonly INamedApiConnectionDetailsReader _namedApiConnectionDetailsReader;
 
-        private readonly ILog _logger = LogManager.GetLogger(typeof(NamedConnectionsConfigurationEnhancer));
+        private readonly ILog _logger = LogManager.GetLogger(typeof(NamedConnectionsConfigurationBuilderEnhancer));
         
-        public NamedConnectionsConfigurationEnhancer(INamedApiConnectionDetailsReader namedApiConnectionDetailsReader)
+        public NamedConnectionsConfigurationBuilderEnhancer(INamedApiConnectionDetailsReader namedApiConnectionDetailsReader)
         {
             _namedApiConnectionDetailsReader = namedApiConnectionDetailsReader;
         }

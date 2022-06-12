@@ -28,8 +28,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public int? SchoolYear { get; set; }
         public bool? IgnoreIsolation { get; set; }
 
+        /// <summary>
+        /// Gets or sets the explicitly provided value to use for the last change version processed.
+        /// </summary>
         public long? LastChangeVersionProcessed { get; set; }
 
+        /// <summary>
+        /// Gets or sets a JSON object representing the change versions processed by target connection name.
+        /// </summary>
         public string LastChangeVersionsProcessed
         {
             get

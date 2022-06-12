@@ -30,15 +30,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly IResourceDependencyProvider _resourceDependencyProvider;
         private readonly IChangeVersionProcessedWriter _changeVersionProcessedWriter;
         private readonly IErrorPublisher _errorPublisher;
+        private readonly IPostResourceBlocksFactory _postResourceBlocksFactory;
 
         public ChangeProcessor(
             IResourceDependencyProvider resourceDependencyProvider,
             IChangeVersionProcessedWriter changeVersionProcessedWriter,
-            IErrorPublisher errorPublisher)
+            IErrorPublisher errorPublisher,
+            IPostResourceBlocksFactory postResourceBlocksFactory)
         {
             _resourceDependencyProvider = resourceDependencyProvider;
             _changeVersionProcessedWriter = changeVersionProcessedWriter;
             _errorPublisher = errorPublisher;
+            _postResourceBlocksFactory = postResourceBlocksFactory;
         }
         
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
@@ -52,6 +55,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             var sourceApiClient = configuration.SourceApiClient;
             var targetApiClient = configuration.TargetApiClient;
             var options = configuration.Options;
+            var javascriptModuleFactory = configuration.JavascriptModuleFactory;
 
             _logger.Debug($"Options for processing:{Environment.NewLine}{JsonConvert.SerializeObject(options, Formatting.Indented)}");
             
@@ -121,6 +125,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     authorizationFailureHandling,
                     changeWindow, 
                     publishErrorsIngestionBlock,
+                    javascriptModuleFactory,
                     cancellationToken);
 
                 // Process all the deletions
@@ -745,6 +750,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             AuthorizationFailureHandling[] authorizationFailureHandling,
             ChangeWindow changeWindow,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
+            Func<string>? javascriptModuleFactory,
             CancellationToken cancellationToken)
         {
             using var processingSemaphore = new SemaphoreSlim(options.MaxDegreeOfParallelismForResourceProcessing, options.MaxDegreeOfParallelismForResourceProcessing);
@@ -754,13 +760,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 sourceApiClient,
                 targetApiClient,
                 postDependenciesByResourcePath,
-                PostResource.CreateBlocks, 
-                PostResource.CreateItemActionMessage,
+                _postResourceBlocksFactory.CreateBlocks, 
+                PostResourceBlocksFactory.CreateItemActionMessage,
                 options,
                 authorizationFailureHandling,
                 changeWindow,
                 errorPublishingBlock,
                 processingSemaphore,
+                javascriptModuleFactory,
                 cancellationToken);
 
             // Wait for all upsert publishing to finish
@@ -829,6 +836,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         changeWindow,
                         errorPublishingBlock,
                         processingSemaphore,
+                        null,
                         cancellationToken,
                         EdFiApiConstants.DeletesPathSuffix);
 
@@ -913,6 +921,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         changeWindow,
                         errorPublishingBlock,
                         processingSemaphore,
+                        null,
                         cancellationToken,
                         EdFiApiConstants.KeyChangesPathSuffix);
 
@@ -1237,6 +1246,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             ChangeWindow changeWindow,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             SemaphoreSlim processingSemaphore,
+            Func<string>? javascriptModuleFactory,
             CancellationToken cancellationToken,
             string resourceUrlPathSuffix = null)
         {
@@ -1256,7 +1266,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 string resourceKey = kvp.Key;
                 string resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
 
-                var createBlocksRequest = new CreateBlocksRequest(sourceApiClient, targetApiClient, options, authorizationFailureHandling, errorHandlingBlock);
+                var createBlocksRequest = new CreateBlocksRequest(sourceApiClient, targetApiClient, options, authorizationFailureHandling, errorHandlingBlock, javascriptModuleFactory);
                 
                 var (processingInBlock, processingOutBlock) = createProcessingBlocks(createBlocksRequest);
 

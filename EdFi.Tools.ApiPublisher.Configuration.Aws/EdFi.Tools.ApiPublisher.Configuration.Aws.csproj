@@ -1,15 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netcoreapp3.1</TargetFramework>
+        <TargetFramework>net6.0</TargetFramework>
+        <LangVersion>10</LangVersion>
+        <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>
       <PackageReference Include="Amazon.Extensions.Configuration.SystemsManager" Version="2.1.0" />
       <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.0.1" />
       <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="3.7.3.11" />
-      <PackageReference Include="Castle.Core" Version="4.4.0" />
-      <PackageReference Include="Castle.Windsor" Version="5.0.1" />
       <PackageReference Include="Microsoft.Extensions.Configuration" Version="5.0.0" />
     </ItemGroup>
 

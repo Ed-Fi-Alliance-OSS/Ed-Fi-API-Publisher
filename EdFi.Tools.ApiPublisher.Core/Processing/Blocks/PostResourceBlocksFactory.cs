@@ -5,30 +5,50 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using Newtonsoft.Json.Linq;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using Jering.Javascript.NodeJS;
 using log4net;
 using Newtonsoft.Json;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-    public static class PostResource
+    public interface IPostResourceBlocksFactory
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(PostResource));
+        ValueTuple<ITargetBlock<PostItemMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
+            CreateBlocksRequest createBlocksRequest);
+    }
+    
+    public class PostResourceBlocksFactory : IPostResourceBlocksFactory
+    {
+        private readonly ILog _logger = LogManager.GetLogger(typeof(PostResourceBlocksFactory));
+        private readonly INodeJSService _nodeJsService;
 
-        public static ValueTuple<ITargetBlock<PostItemMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(CreateBlocksRequest createBlocksRequest)
+        public PostResourceBlocksFactory(INodeJSService nodeJsService)
         {
+            _nodeJsService = nodeJsService;
+        }
+        
+        public ValueTuple<ITargetBlock<PostItemMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(CreateBlocksRequest createBlocksRequest)
+        {
+            var knownUnremediatedRequests = new HashSet<(string resourceUrl, HttpStatusCode statusCode)>(); 
+
             var options = createBlocksRequest.Options;
             var targetEdFiApiClient = createBlocksRequest.TargetApiClient;
             var sourceEdFiApiClient = createBlocksRequest.SourceApiClient;
             
+            var javaScriptModuleFactory = createBlocksRequest.JavaScriptModuleFactory;
+                
             var ignoredResourceByUrl = new ConcurrentDictionary<string, bool>();
 
             var missingDependencyByResourcePath = new Dictionary<string, string>();
@@ -89,9 +109,43 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             // Descriptor Conflicts are not to be retried
                             (r.StatusCode == HttpStatusCode.Conflict && !msg.ResourceUrl.EndsWith("Descriptors", StringComparison.OrdinalIgnoreCase)) 
                             || r.StatusCode.IsPotentiallyTransientFailure()
-                            || IsBadRequestForUnresolvedReferenceOfPrimaryRelationship(r, msg))
+                            || IsBadRequestForUnresolvedReferenceOfPrimaryRelationship(r, msg)
+                            || (!r.IsSuccessStatusCode && javaScriptModuleFactory != null && MayHaveRemediation(msg.ResourceUrl, r.StatusCode)))
                         .WaitAndRetryAsync(delay, async (result, ts, retryAttempt, ctx) =>
                         {
+                            if (javaScriptModuleFactory != null)
+                            {
+                                var remediationResult = await TryRemediateFailureAsync(
+                                    javaScriptModuleFactory,
+                                    retryAttempt,
+                                    targetEdFiApiClient,
+                                    sourceEdFiApiClient.ConnectionDetails.Name,
+                                    msg.ResourceUrl,
+                                    id,
+                                    result.Result,
+                                    msg.Item.ToString());
+
+                                if (!remediationResult.FoundRemediation)
+                                {
+                                    knownUnremediatedRequests.Add((msg.ResourceUrl, result.Result.StatusCode));
+
+                                    return;
+                                }
+                                
+                                // Check for a modified request body, and save it to the context
+                                if (remediationResult.ModifiedRequestBody is JsonElement modifiedRequestBody && modifiedRequestBody.ValueKind != JsonValueKind.Null)
+                                {
+                                    if (_logger.IsDebugEnabled)
+                                    {
+                                        string modifiedRequestBodyJson = JsonSerializer.Serialize(remediationResult.ModifiedRequestBody, new JsonSerializerOptions { WriteIndented = true });
+                                        
+                                        _logger.Debug($"{msg.ResourceUrl} (source id: {id}): Remediation plan provided a modified request body: {modifiedRequestBodyJson} ");
+                                    }
+                                    
+                                    ctx["ModifiedRequestBody"] = remediationResult.ModifiedRequestBody;
+                                }
+                            }
+
                             if (result.Exception != null)
                             {
                                 _logger.Error($"{msg.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with an exception. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{result.Exception}");
@@ -119,9 +173,22 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 }
                             }
 
+                            // Prepare request body
+                            string requestBodyJson;
+
+                            if (ctx.TryGetValue("ModifiedRequestBody", out dynamic modifiedRequestBody))
+                            {
+                                _logger.Info($"{msg.ResourceUrl} (source id: {id}): Applying modified request body from remediation plan...");
+                                requestBodyJson = JsonSerializer.Serialize(modifiedRequestBody);
+                            }
+                            else
+                            {
+                                requestBodyJson = msg.Item.ToString();
+                            }
+                            
                             var response = await targetEdFiApiClient.HttpClient.PostAsync(
                                 $"{targetEdFiApiClient.DataManagementApiSegment}{msg.ResourceUrl}",
-                                new StringContent(msg.Item.ToString(), Encoding.UTF8, "application/json"),
+                                new StringContent(requestBodyJson, Encoding.UTF8, "application/json"),
                                 ct);
 
                             await HandleMissingDependencyAsync(response, msg);
@@ -286,6 +353,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                 return false;
             }
+
+            bool MayHaveRemediation(string resourceUrl, HttpStatusCode statusCode)
+            {
+                return !knownUnremediatedRequests.Contains((resourceUrl, statusCode));
+            }
             
             async Task HandleMissingDependencyAsync(HttpResponseMessage postItemResponse, PostItemMessage msg)
             {
@@ -439,6 +511,99 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             }
         }
 
+        private async Task<RemediationResult> TryRemediateFailureAsync(
+            Func<string> javaScriptModuleFactory,
+            int retryAttempt,
+            EdFiApiClient targetEdFiApiClient,
+            string sourceConnectionName,
+            string resourceUrl,
+            string sourceId,
+            HttpResponseMessage responseMessage,
+            string requestBody)
+        {
+            string remediationFunctionName = $"{resourceUrl}/{(int) responseMessage.StatusCode}";
+
+            try
+            {
+                var remediationPlanContent = await _nodeJsService.InvokeFromStringAsync<string>(
+                    javaScriptModuleFactory,
+                    "RemediationsModule",
+                    remediationFunctionName,
+                    new []
+                    {
+                        new FailureContext()
+                        {
+                            resourceUrl = resourceUrl,
+                            requestBody = requestBody,
+                            responseBody = await responseMessage.Content.ReadAsStringAsync(),
+                            responseStatusCode = (int) responseMessage.StatusCode,
+                            targetConnectionName = targetEdFiApiClient.ConnectionDetails.Name,
+                            sourceConnectionName = sourceConnectionName,
+                        }
+                    }
+                );
+
+                var remediationPlan = JsonSerializer.Deserialize<RemediationPlan>(remediationPlanContent);
+                
+                var modifiedRequestBody = remediationPlan?.modifiedRequestBody;
+
+                var remediationResult = (modifiedRequestBody?.ValueKind == JsonValueKind.Null)
+                    ? RemediationResult.Found
+                    : new RemediationResult(modifiedRequestBody);
+                
+                var remediationPlanAdditionalRequests = remediationPlan?.additionalRequests ?? Array.Empty<RemediationPlan.RemediationRequest>();
+
+                if (!remediationPlanAdditionalRequests.Any())
+                {
+                    if (_logger.IsDebugEnabled)
+                    {
+                        _logger.Debug($"{resourceUrl} (source id: {sourceId}): Remediation plan for '{responseMessage.StatusCode}' did not return any additional remediation requests.");
+                    }
+                    
+                    return remediationResult;
+                }
+
+                // Perform the additional remediation requests
+                foreach (var remediationRequest in remediationPlanAdditionalRequests)
+                {
+                    var remediationRequestBodyJson = (string) remediationRequest.body.ToString();
+
+                    if (_logger.IsDebugEnabled)
+                    {
+                        _logger.Debug($"{resourceUrl} (source id: {sourceId}): Remediating request with POST request to '{remediationRequest.resource}' on target API: {remediationRequestBodyJson}");
+                    }
+
+                    var remediationResponse = await targetEdFiApiClient.HttpClient.PostAsync(
+                        $"{targetEdFiApiClient.DataManagementApiSegment}{remediationRequest.resource}",
+                        new StringContent(remediationRequestBodyJson, Encoding.UTF8, "application/json"));
+
+                    if (remediationResponse.IsSuccessStatusCode)
+                    {
+                        _logger.Info($"{resourceUrl} (source id: {sourceId}): Remediation for retry attempt {retryAttempt} with POST request to '{remediationRequest.resource}' on target API succeeded with status '{remediationResponse.StatusCode}'.");
+                    }
+                    else
+                    {
+                        _logger.Warn($"{resourceUrl} (source id: {sourceId}): Remediation for retry attempt {retryAttempt} with POST request to '{remediationRequest.resource}' on target API failed with status '{remediationResponse.StatusCode}'.");
+                    }
+                }
+
+                return remediationResult;
+            }
+            catch (InvocationException ex)
+            {
+                if (!ex.Message.Contains("has no export named"))
+                {
+                    _logger.Error($"{resourceUrl} (source id: {sourceId}): Error occurred during remediation invocation: {ex}");
+                }
+                else
+                {
+                    _logger.Debug($"{resourceUrl} (source id: {sourceId}): No remediation found for status code '{responseMessage.StatusCode}'.");
+                }
+                
+                return RemediationResult.NotFound;
+            }
+        }
+
         public static PostItemMessage CreateItemActionMessage(StreamResourcePageMessage<PostItemMessage> msg, JObject j)
         {
             return new PostItemMessage
@@ -447,6 +612,51 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 ResourceUrl = msg.ResourceUrl,
                 PostAuthorizationFailureRetry = msg.PostAuthorizationFailureRetry,
             };
+        }
+    }
+
+    public class RemediationResult
+    {
+        public static RemediationResult Found = new (true);
+        public static RemediationResult NotFound = new (false);
+
+        private RemediationResult(bool foundRemediation)
+        {
+            FoundRemediation = foundRemediation;
+        }
+        
+        public RemediationResult(dynamic modifiedRequestBody)
+        {
+            FoundRemediation = true;
+            ModifiedRequestBody = modifiedRequestBody;
+        }
+        
+        public bool FoundRemediation { get; }
+
+        public dynamic? ModifiedRequestBody { get; }
+    }
+    
+    public class FailureContext
+    {
+        public string resourceUrl { get; set; }
+        public string requestBody { get; set; }
+        public int responseStatusCode { get; set; }
+        public string responseBody { get; set; }
+        
+        public string sourceConnectionName { get; set; }
+        public string targetConnectionName { get; set; }
+    }
+    
+    public class RemediationPlan
+    {
+        public dynamic? modifiedRequestBody { get; set; }
+
+        public RemediationRequest[]? additionalRequests { get; set; }
+
+        public class RemediationRequest
+        {
+            public string resource { get; set; }
+            public dynamic body { get; set; }
         }
     }
 }

@@ -5,16 +5,23 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Castle.MicroKernel.Registration;
-using Castle.Windsor;
-using EdFi.Tools.ApiPublisher.Core._Installers;
+using Autofac;
+using Autofac.Core;
+using Autofac.Extensions.DependencyInjection;
+using EdFi.Ods.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
+using EdFi.Tools.ApiPublisher.Core.Modules;
+using EdFi.Tools.ApiPublisher.Core.NodeJs;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Registration;
+using Jering.Javascript.NodeJS;
 using log4net;
 using log4net.Config;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Module = Autofac.Module;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {
@@ -38,18 +45,39 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     .CreateConfigurationBuilder(args);
                 
                 var initialConfiguration = configBuilder.Build();
-                var configurationStoreSection = initialConfiguration.GetSection("configurationStore");
                 
                 // Validate initial connection configuration
                 var connections = initialConfiguration.Get<ConnectionConfiguration>().Connections;
                 ValidateInitialConnectionConfiguration(connections);
 
                 // Initialize the container
-                var container = new WindsorContainer();
+                var services = new ServiceCollection();
+
+                if (!string.IsNullOrEmpty(initialConfiguration.GetValue<string>("Options:RemediationsScriptFile")))
+                {
+                    // Add support for NodeJS
+                    services.AddNodeJS();
+
+                    // Allow for multiple node processes to support processing
+                    services.Configure<OutOfProcessNodeJSServiceOptions>(
+                        options => { options.Concurrency = Concurrency.MultiProcess; });
+                }
+                else
+                {
+                    // Provide an instance of an implementations that throws exceptions if called
+                    services.AddSingleton<INodeJSService>(new NullNodeJsService());
+                }
+
+                // Integrate Autofac
+                var containerBuilder = new ContainerBuilder();
+                containerBuilder.Populate(services);
+
+                IContainer container;
 
                 try
                 {
-                    InitializeContainer(container, configurationStoreSection);
+                    var configurationStoreSection = initialConfiguration.GetSection("configurationStore");
+                    container = InitializeContainer(containerBuilder, configurationStoreSection);
                 }
                 catch (Exception ex)
                 {
@@ -58,13 +86,18 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     return -1;
                 }
 
+                var serviceProvider = new AutofacServiceProvider(container);
+
                 // After container has been initialized, now enhance the configuration builder
                 if (connections.Source.NeedsResolution() || connections.Target.NeedsResolution())
                 {
-                    var enhancers = container.ResolveAll<IConfigurationBuilderEnhancer>();
+                    Logger.Debug($"API connection details are incomplete from initial configuration. Beginning configuration enhancement processing...");
+                    
+                    var enhancers = serviceProvider.GetServices<IConfigurationBuilderEnhancer>();
 
                     foreach (var enhancer in enhancers)
                     {
+                        Logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
                         enhancer.Enhance(configBuilder);
                     }
                 }
@@ -77,7 +110,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var publisherSettings = finalConfiguration.Get<ApiPublisherSettings>();
                 
                 var options = publisherSettings.Options;
-
+                Logger.Debug($"Validating configuration options...");
                 ValidateOptions(options);
                 
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
@@ -89,8 +122,15 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var sourceApiConnectionDetails = apiConnections.Source;
                 var targetApiConnectionDetails = apiConnections.Target;
                 
-                EdFiApiClient CreateSourceApiClient() => new EdFiApiClient("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
-                EdFiApiClient CreateTargetApiClient() => new EdFiApiClient("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                EdFiApiClient CreateSourceApiClient() => new ("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                EdFiApiClient CreateTargetApiClient() => new ("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+
+                Func<string> moduleFactory = null;
+
+                if (!string.IsNullOrWhiteSpace(options.RemediationsScriptFile))
+                {
+                    moduleFactory = () => File.ReadAllText(options.RemediationsScriptFile);
+                }
                 
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
@@ -99,10 +139,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     targetApiConnectionDetails,
                     CreateSourceApiClient,
                     CreateTargetApiClient,
+                    moduleFactory,
                     options,
                     finalConfiguration.GetSection("configurationStore"));
 
-                var changeProcessor = container.Resolve<IChangeProcessor>();
+                var changeProcessor = serviceProvider.GetRequiredService<IChangeProcessor>();
 
                 Logger.Info($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
@@ -152,6 +193,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.StreamingPagesWaitDurationSeconds)} must be greater than 0.");
             }
             
+            if (options.MaxDegreeOfParallelismForResourceProcessing < 1)
+            {
+                validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForResourceProcessing)} must be greater than 0.");
+            }
+            
             if (options.MaxDegreeOfParallelismForPostResourceItem < 1)
             {
                 validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForPostResourceItem)} must be greater than 0.");
@@ -162,6 +208,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForStreamResourcePages)} must be greater than 0.");
             }
 
+            if (!string.IsNullOrEmpty(options.RemediationsScriptFile) && !File.Exists(options.RemediationsScriptFile))
+            {
+                validationErrors.Add($"{nameof(options.RemediationsScriptFile)} must be a local file path to an existing JavaScript module.");
+            }
+            
             if (validationErrors.Any())
             {
                 throw new Exception($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");
@@ -207,35 +258,52 @@ namespace EdFi.Tools.ApiPublisher.Cli
             }
         }
 
-        private static IWindsorContainer InitializeContainer(
-            IWindsorContainer container,
+        private static IContainer InitializeContainer(
+            ContainerBuilder containerBuilder,
             IConfigurationSection configurationStoreSection)
         {
-            container.Install(new EdFiToolsApiPublisherCoreInstaller());
-            
-            InstallApiConnectionConfigurationSupport(container, configurationStoreSection);
+            containerBuilder.RegisterModule<EdFiToolsApiPublisherCoreModule>();
 
-            return container;
+            // NOTE: Consider a plugin model here
+            InstallApiConnectionConfigurationSupport(containerBuilder, configurationStoreSection);
+
+            // Add "default" registrations from the "core" assembly, leaving any existing registrations intact
+            // Registers types found matching the simple "default service" naming convention (Foo for IFoo)
+            containerBuilder
+                .RegisterAssemblyTypes(typeof(EdFiToolsApiPublisherCoreModule).Assembly)
+                .UsingDefaultImplementationConvention();
+
+            return containerBuilder.Build();
         }
 
         private static void InstallApiConnectionConfigurationSupport(
-            IWindsorContainer container,
+            ContainerBuilder containerBuilder,
             IConfigurationSection configurationStoreSection)
         {
             EnsureEdFiAssembliesLoaded();
 
             string configurationSourceName = configurationStoreSection.GetValue<string>("provider");
             
-            var installerType = FindApiConnectionConfigurationInstallerType();
+            Logger.Debug($"Configuration store provider is '{configurationSourceName}'...");
+            
+            var moduleType = FindApiConnectionConfigurationModuleType();
 
-            if (installerType == null)
+            if (moduleType == null)
             {
-                throw new Exception($"Unable to find installer for API connection configuration source '{configurationSourceName}'.");
+                throw new Exception($"Unable to find an installer for API connection configuration source '{configurationSourceName}'.");
             }
 
             // Install chosen support for API connection configuration
-            var installer = (IWindsorInstaller) Activator.CreateInstance(installerType);
-            container.Install(installer);
+            var module = (Module?) Activator.CreateInstance(moduleType);
+
+            if (module == null)
+            {
+                throw new Exception($"Unable to create the installer module '{moduleType.Name}' for connection configuration source '{configurationSourceName}'.");
+            }
+            
+            Logger.Debug($"Registering configuration store provider module '{moduleType.FullName}'...");
+            
+            containerBuilder.RegisterModule(module);
 
             // Ensure all Ed-Fi API Publisher assemblies are loaded
             void EnsureEdFiAssembliesLoaded()
@@ -244,21 +312,22 @@ namespace EdFi.Tools.ApiPublisher.Cli
             
                 foreach (FileInfo fileInfo in directoryInfo.GetFiles("EdFi*.dll"))
                 {
+                    Logger.Debug($"Ensuring that assembly '{fileInfo.Name}' is loaded...");
                     Assembly.LoadFrom(fileInfo.FullName);
                 }
             }
 
             // Search for the installer for the chosen configuration source
-            Type FindApiConnectionConfigurationInstallerType()
+            Type? FindApiConnectionConfigurationModuleType()
             {
-                var locatedInstallerType = AppDomain.CurrentDomain.GetAssemblies()
+                var locatedModuleType = AppDomain.CurrentDomain.GetAssemblies()
                     .SelectMany(a => a.GetExportedTypes())
-                    .Where(t => t.GetInterfaces().Any(i => i == typeof(IWindsorInstaller)))
+                    .Where(t => t.GetInterfaces().Any(i => i == typeof(IModule)))
                     .FirstOrDefault(t => t.GetCustomAttributes<ApiConnectionsConfigurationSourceNameAttribute>()
                         .FirstOrDefault()
                         ?.Name.Equals(configurationSourceName, StringComparison.OrdinalIgnoreCase) == true);
                 
-                return locatedInstallerType;
+                return locatedModuleType;
             }
         }
 
