@@ -339,9 +339,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
             return changeKey;
 
-            JObject ParseToJObjectOrDefault(string json)
+            JObject? ParseToJObjectOrDefault(string json)
             {
-                JObject body = null;
+                JObject? body = null;
 
                 try
                 {

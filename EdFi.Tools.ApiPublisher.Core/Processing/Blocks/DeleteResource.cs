@@ -24,12 +24,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         public static ValueTuple<ITargetBlock<GetItemForDeletionMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
-            var getItemForDeletionBlock = CreateGetItemForDeletionBlock(
+            TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> getItemForDeletionBlock = CreateGetItemForDeletionBlock(
                 createBlocksRequest.TargetApiClient,
                 createBlocksRequest.Options,
                 createBlocksRequest.ErrorHandlingBlock);
 
-            var deleteResourceBlock = CreateDeleteResourceBlock(createBlocksRequest.TargetApiClient, createBlocksRequest.Options);
+            TransformManyBlock<DeleteItemMessage, ErrorItemMessage> deleteResourceBlock = CreateDeleteResourceBlock(createBlocksRequest.TargetApiClient, createBlocksRequest.Options);
 
             getItemForDeletionBlock.LinkTo(deleteResourceBlock, new DataflowLinkOptions {PropagateCompletion = true});
             
@@ -196,7 +196,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         private static TransformManyBlock<DeleteItemMessage, ErrorItemMessage> CreateDeleteResourceBlock(
             EdFiApiClient targetApiClient, Options options)
         {
-            var deleteResource = new TransformManyBlock<DeleteItemMessage, ErrorItemMessage>(
+            var deleteResourceBlock = new TransformManyBlock<DeleteItemMessage, ErrorItemMessage>(
                 async msg =>
             {
                 string id = msg.Id;
@@ -288,7 +288,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
             });
 
-            return deleteResource;
+            return deleteResourceBlock;
         }
 
         public static GetItemForDeletionMessage CreateItemActionMessage(StreamResourcePageMessage<GetItemForDeletionMessage> msg, JObject j)

@@ -17,10 +17,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         
         public string ResourceUrl { get; set; }
         
-        public string Id { get; set; }
+        public string? Id { get; set; }
 
         //[JsonIgnore]
-        public JObject Body { get; set; }
+        public JObject? Body { get; set; }
 
         public HttpStatusCode? ResponseStatus { get; set; }
         

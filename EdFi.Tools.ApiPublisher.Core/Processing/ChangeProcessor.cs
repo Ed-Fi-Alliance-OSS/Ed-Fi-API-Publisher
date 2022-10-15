@@ -21,10 +21,13 @@ using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
+    public static class Conventions
+    {
+        public const string RetryKeySuffix = "#Retry";
+    }
+    
     public class ChangeProcessor : IChangeProcessor
     {
-        private const string RetryKeySuffix = "#Retry";
-        
         private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeProcessor));
 
         private readonly IResourceDependencyProvider _resourceDependencyProvider;
@@ -68,7 +71,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 if (sourceApiConnectionDetails.IgnoreIsolation != true)
                 {
                     // Determine if source API provides a snapshot, and apply the HTTP header to the client 
-                    await ApplySourceSnapshotIdentifierAsync(sourceApiClient, sourceApiConnectionDetails, configuration.SourceApiVersion)
+                    await ApplySourceSnapshotIdentifierAsync(
+                            sourceApiClient,
+                            sourceApiConnectionDetails,
+                            configuration.SourceApiVersion)
                         .ConfigureAwait(false);
                 }
 
@@ -79,7 +85,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Name) 
                     && !string.IsNullOrWhiteSpace(targetApiConnectionDetails.Name))
                 {
-                    changeWindow = await EstablishChangeWindow(sourceApiClient, sourceApiConnectionDetails, targetApiConnectionDetails)
+                    changeWindow = await EstablishChangeWindow(
+                            sourceApiClient,
+                            sourceApiConnectionDetails,
+                            targetApiConnectionDetails)
                         .ConfigureAwait(false);
                 }
 
@@ -90,7 +99,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     return;
                 }
 
-                var postDependencyKeysByResourceKey = await PrepareResourceDependenciesAsync(targetApiClient, options, authorizationFailureHandling, sourceApiConnectionDetails)
+                var postDependencyKeysByResourceKey = await PrepareResourceDependenciesAsync(
+                        targetApiClient,
+                        options,
+                        authorizationFailureHandling,
+                        sourceApiConnectionDetails)
                     .ConfigureAwait(false);
 
                 // If we just wanted to know what resources are to be published, quit now.
@@ -398,13 +411,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 
                 // Evaluate whether any of the included resources have a "retry" dependency
                 var retryDependenciesForIncludeResourcePaths = includeResourcePaths
-                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
-                    .Select(p => $"{p}{RetryKeySuffix}")
+                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{Conventions.RetryKeySuffix}"))
+                    .Select(p => $"{p}{Conventions.RetryKeySuffix}")
                     .ToArray();
                 
                 var retryDependenciesForIncludeOnlyResourcePaths = includeOnlyResourcePaths
-                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
-                    .Select(p => $"{p}{RetryKeySuffix}")
+                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{Conventions.RetryKeySuffix}"))
+                    .Select(p => $"{p}{Conventions.RetryKeySuffix}")
                     .ToArray();
                 
                 postDependencyKeysByResourceKey = ApplyResourceInclusionsToDependencies(
@@ -438,13 +451,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 
                 // Evaluate whether any of the included resources have a "retry" dependency
                 var retryDependenciesForExcludeResourcePaths = excludeResourcePaths
-                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
-                    .Select(p => $"{p}{RetryKeySuffix}")
+                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{Conventions.RetryKeySuffix}"))
+                    .Select(p => $"{p}{Conventions.RetryKeySuffix}")
                     .ToArray();
 
                 var retryDependenciesForExcludeOnlyResourcePaths = excludeOnlyResourcePaths
-                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{RetryKeySuffix}"))
-                    .Select(p => $"{p}{RetryKeySuffix}")
+                    .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{Conventions.RetryKeySuffix}"))
+                    .Select(p => $"{p}{Conventions.RetryKeySuffix}")
                     .ToArray();
                 
                 postDependencyKeysByResourceKey = ApplyResourceExclusionsToDependencies(
@@ -503,7 +516,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 var dependencyAdjustments = authorizationFailureHandling
                     .Select(x => new
                     {
-                        RetryResourceKey = $"{x.Path}{RetryKeySuffix}",
+                        RetryResourceKey = $"{x.Path}{Conventions.RetryKeySuffix}",
                         UpdatePrerequisiteResourceKeys = x.UpdatePrerequisitePaths,
                         AffectedDependencyEntryKeys =
                             postDependencyKeysByResourceKey
@@ -679,7 +692,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             List<KeyValuePair<string, string[]>> GetReportableResources()
             {
                 return postDependencyKeysByResourceKey
-                    .Where(e => !e.Key.EndsWith("Descriptors") && !e.Key.EndsWith(RetryKeySuffix))
+                    .Where(e => !e.Key.EndsWith("Descriptors") && !e.Key.EndsWith(Conventions.RetryKeySuffix))
                     .OrderBy(e => e.Key)
                     .ToList();
             }
@@ -753,7 +766,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             Func<string>? javascriptModuleFactory,
             CancellationToken cancellationToken)
         {
-            using var processingSemaphore = new SemaphoreSlim(options.MaxDegreeOfParallelismForResourceProcessing, options.MaxDegreeOfParallelismForResourceProcessing);
+            using var processingSemaphore = new SemaphoreSlim(
+                options.MaxDegreeOfParallelismForResourceProcessing,
+                options.MaxDegreeOfParallelismForResourceProcessing);
 
             // Start processing resources in dependency order
             var streamingPagesOfPostsByResourcePath = InitiateResourceStreaming(
@@ -807,7 +822,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             
             // Invert the dependencies for use in deletion, excluding descriptors (if present) and the special #Retry nodes
             var deleteDependenciesByResourcePath = InvertDependencies(postDependenciesByResourcePath, 
-                path => path.EndsWith("Descriptors") || path.EndsWith(RetryKeySuffix));
+                path => path.EndsWith("Descriptors") || path.EndsWith(Conventions.RetryKeySuffix));
 
             if (deleteDependenciesByResourcePath.Any())
             {
@@ -908,7 +923,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'. Initiating key changes processing.");
 
-                    using var processingSemaphore = new SemaphoreSlim(options.MaxDegreeOfParallelismForResourceProcessing, options.MaxDegreeOfParallelismForResourceProcessing);
+                    using var processingSemaphore = new SemaphoreSlim(
+                        options.MaxDegreeOfParallelismForResourceProcessing,
+                        options.MaxDegreeOfParallelismForResourceProcessing);
 
                     var streamingPagesOfKeyChangesByResourcePath = InitiateResourceStreaming(
                         sourceApiClient,
@@ -1266,12 +1283,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 string resourceKey = kvp.Key;
                 string resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
 
-                var createBlocksRequest = new CreateBlocksRequest(sourceApiClient, targetApiClient, options, authorizationFailureHandling, errorHandlingBlock, javascriptModuleFactory);
+                var createBlocksRequest = new CreateBlocksRequest(
+                    sourceApiClient,
+                    targetApiClient,
+                    options,
+                    authorizationFailureHandling,
+                    errorHandlingBlock,
+                    javascriptModuleFactory);
                 
                 var (processingInBlock, processingOutBlock) = createProcessingBlocks(createBlocksRequest);
 
                 // Is this an authorization retry "resource"? 
-                if (resourceKey.EndsWith(RetryKeySuffix))
+                if (resourceKey.EndsWith(Conventions.RetryKeySuffix))
                 {
                     // Save the action delegate, keyed by the main resource
                     postAuthorizationRetryByResourceKey.Add(
