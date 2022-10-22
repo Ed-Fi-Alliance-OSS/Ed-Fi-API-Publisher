@@ -66,6 +66,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 Options options,
                 CancellationToken cancellationToken)
         {
+            // ==============================================================
+            // BEGIN POSSIBLE SEAM: Dependency management
+            // ==============================================================
             if (message.Dependencies.Any())
             {
                 if (_logger.IsDebugEnabled)
@@ -83,15 +86,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 if (_logger.IsDebugEnabled)
                     _logger.Debug($"{message.ResourceUrl}: Resource has no dependencies. Waiting for an available processing slot...");
             }
+            // ==============================================================
+            // END POSSIBLE SEAM: Dependency management
+            // ==============================================================
 
             // Wait for an available processing slot
             await message.ProcessingSemaphore.WaitAsync(cancellationToken);
 
             if (_logger.IsDebugEnabled)
+            {
                 _logger.Debug($"{message.ResourceUrl}: Processing slot acquired ({message.ProcessingSemaphore.CurrentCount} remaining). Starting streaming of resources...");
+            }
 
             try
             {
+                // ======================================================================
+                // BEGIN POSSIBLE SEAM: Limit/offset paging strategy
+                // ======================================================================
                 if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
                 {
                     _logger.Info(
@@ -102,7 +113,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     _logger.Info($"{message.ResourceUrl}: Retrieving total count of items.");
                 }
 
-                string changeWindowParms = RequestHelper.GetChangeWindowParms(message.ChangeWindow);
+                // ======================================================================
+                // BEGIN POSSIBLE SEAM: Get Total count strategy
+                // ======================================================================
+                // Source-specific: Ed-Fi ODS API
+                string changeWindowQueryStringParameters = ApiRequestHelper.GetChangeWindowQueryStringParameters(message.ChangeWindow);
 
                 var delay = Backoff.ExponentialBackoff(
                     TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
@@ -127,7 +142,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             }
 
                             return message.EdFiApiClient.HttpClient.GetAsync(
-                                $"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowParms}",
+                                $"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}",
                                 ct);
                         }, new Context(), cancellationToken);
 
@@ -160,6 +175,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 }
 
                 string totalCountHeaderValue = headerValues.First();
+
                 
                 _logger.Debug($"{message.ResourceUrl}: Total count header value = {totalCountHeaderValue}");
 
@@ -187,6 +203,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     // Allow processing to continue without performing additional work on this resource.
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                 }
+                // ==============================================
+                // END POSSIBLE SEAM: Get Total count strategy
+                // ==============================================
 
                 _logger.Info($"{message.ResourceUrl}: Total count = {totalCount}");
 
@@ -199,14 +218,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 {
                     var pageMessage = new StreamResourcePageMessage<TItemActionMessage>
                     {
-                        EdFiApiClient = message.EdFiApiClient,
+                        // Resource-specific context
                         ResourceUrl = message.ResourceUrl,
+                        PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
+
+                        // Page-strategy specific context
                         Limit = limit,
                         Offset = offset,
+                        
+                        // Source Ed-Fi ODS API processing context (shared)
+                        EdFiApiClient = message.EdFiApiClient,
+
+                        // Global processing context
                         ChangeWindow = message.ChangeWindow,
                         CreateItemActionMessage = createItemActionMessage,
                         CancellationSource = message.CancellationSource,
-                        PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
                     };
 
                     pageMessages.Add(pageMessage);
@@ -217,8 +243,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 // Flag the last page for special "continuation" processing
                 if (pageMessages.Any())
                 {
+                    // Page-strategy specific context
                     pageMessages.Last().IsFinalPage = true;
                 }
+                // ======================================================================
+                // END POSSIBLE SEAM: Limit/offset paging strategy
+                // ======================================================================
 
                 return pageMessages;
             }

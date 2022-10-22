@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,7 +21,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     {
         private static readonly ILog _logger = LogManager.GetLogger(typeof(StreamResourcePages));
         
-        public static TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> GetBlock<TItemActionMessage>(
+        public static TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> CreateBlock<TItemActionMessage>(
             Options options, 
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
@@ -30,7 +31,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     {
                         try
                         {
-                            return await StreamResourcePage(msg, options, errorHandlingBlock).ConfigureAwait(false);
+                            return await HandleStreamResourcePage(msg, options, errorHandlingBlock).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -46,7 +47,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             return streamResourcePagesBlock;
         }
         
-        private static async Task<IEnumerable<TItemActionMessage>> StreamResourcePage<TItemActionMessage>(
+        // ======================================================
+        // BEGIN POSSIBLE SEAM: Page data source (Ed-Fi ODS API) 
+        // ======================================================
+        private static async Task<IEnumerable<TItemActionMessage>> HandleStreamResourcePage<TItemActionMessage>(
             StreamResourcePageMessage<TItemActionMessage> message,
             Options options, 
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
@@ -54,7 +58,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             long offset = message.Offset;
             int limit = message.Limit;
 
-            string changeWindowParms = RequestHelper.GetChangeWindowParms(message.ChangeWindow);
+            string changeWindowQueryStringParameters = ApiRequestHelper.GetChangeWindowQueryStringParameters(message.ChangeWindow);
             
             try
             {
@@ -97,14 +101,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                     _logger.Debug($"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} from source attempt #{attempts}.");
                                 }
                             }
-                                
-                            return message.EdFiApiClient.HttpClient.GetAsync($"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}", ct);
+                            
+                            // Possible seam for getting a page of data (here, using Ed-Fi ODS API w/ offset/limit paging strategy)
+                            return message.EdFiApiClient.HttpClient.GetAsync($"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}", ct);
                         }, new Context(), CancellationToken.None);
                     
                     // Detect null content and provide a better error message (which happens only during unit testing if mocked requests aren't properly defined)
                     if (apiResponse.Content == null)
                     {
-                        throw new NullReferenceException($"Content of response for '{message.EdFiApiClient.HttpClient.BaseAddress}{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowParms}' was null.");
+                        throw new NullReferenceException($"Content of response for '{message.EdFiApiClient.HttpClient.BaseAddress}{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}' was null.");
                     }
                     
                     string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -135,53 +140,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} attempt #{attempts} returned {apiResponse.StatusCode}.");
                     }
 
-                    JArray items;
-                    
-                    try
-                    {
-                        items = JArray.Parse(responseContent);
-                    }
-                    catch (Exception ex)
-                    {
-                        var error = new ErrorItemMessage
-                        {
-                            Method = HttpMethod.Get.ToString(),
-                            ResourceUrl = $"{message.EdFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
-                            Id = null,
-                            Body = null,
-                            ResponseStatus = apiResponse.StatusCode,
-                            ResponseContent = responseContent
-                        };
+                    // -------------------------------------------------------------------------------------------------------
+                    transformedMessages.AddRange(TransformDataPageToItemActions(responseContent, apiResponse.StatusCode, message, errorHandlingBlock));
+                    // -------------------------------------------------------------------------------------------------------
 
-                        // Publish the failure
-                        errorHandlingBlock.Post(error);
-                        
-                        _logger.Error($"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}");
-                        break;
-                    }
-
-                    // Iterate through the returned items
-                    foreach (var item in items.OfType<JObject>())
-                    {
-                        var actionMessage = message.CreateItemActionMessage(message, item);
-
-                        // Stop processing individual items if cancellation has been requested
-                        if (message.CancellationSource.IsCancellationRequested)
-                        {
-                            _logger.Debug($"{message.ResourceUrl}: Cancellation requested during item '{typeof(TItemActionMessage).Name}' creation.");
-                            return Enumerable.Empty<TItemActionMessage>();
-                        }
-                        
-                        // Add the item to the buffer for processing into the target API
-                        if (_logger.IsDebugEnabled)
-                        {
-                            _logger.Debug($"{message.ResourceUrl}: Adding individual action message of type '{typeof(TItemActionMessage).Name}' for item {item["id"].Value<string>()}...");
-                        }
-
-                        transformedMessages.Add(actionMessage);
-                    }
-
-                    if (message.IsFinalPage && items.Count == limit)
+                    if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
                     {
                         if (_logger.IsDebugEnabled)
                         {
@@ -192,7 +155,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         offset += limit;
                         continue;
                     }
-                
+
                     break;
                 } while (true);
 
@@ -204,5 +167,70 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 return Array.Empty<TItemActionMessage>();
             }
         }
+        // ==========================================================
+        // END POSSIBLE SEAM: Page data source (using Ed-Fi ODS API) 
+        // ==========================================================
+
+        // ======================================================================================
+        // BEGIN POSSIBLE SEAM: Handle page of raw JSON content, return "Item Action Messages"
+        // ======================================================================================
+        // This implementation parses the JSON content and creates "ItemActionMessage" instances with a JsonObject for each resource item
+        private static IEnumerable<TItemActionMessage> TransformDataPageToItemActions<TItemActionMessage>(
+            string responseContent,
+            HttpStatusCode responseStatusCode,
+            StreamResourcePageMessage<TItemActionMessage> pageMessage,
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+        {
+            JArray items;
+            
+            try
+            {
+                items = JArray.Parse(responseContent);
+            }
+            catch (Exception ex)
+            {
+                var error = new ErrorItemMessage
+                {
+                    Method = HttpMethod.Get.ToString(),
+                    ResourceUrl = $"{pageMessage.EdFiApiClient.DataManagementApiSegment}{pageMessage.ResourceUrl}",
+                    Id = null,
+                    Body = null,
+                    ResponseStatus = responseStatusCode,
+                    ResponseContent = responseContent
+                };
+
+                // Publish the failure
+                errorHandlingBlock.Post(error);
+                
+                _logger.Error($"{pageMessage.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}");
+
+                throw new Exception("JSON parsing of source page data failed.", ex);
+            }
+
+            // Iterate through the returned items
+            foreach (var item in items.OfType<JObject>())
+            {
+                var actionMessage = pageMessage.CreateItemActionMessage(pageMessage, item);
+
+                // Stop processing individual items if cancellation has been requested
+                if (pageMessage.CancellationSource.IsCancellationRequested)
+                {
+                    _logger.Debug($"{pageMessage.ResourceUrl}: Cancellation requested during item '{typeof(TItemActionMessage).Name}' creation.");
+
+                    yield break;
+                }
+
+                // Add the item to the buffer for processing into the target API
+                if (_logger.IsDebugEnabled)
+                {
+                    _logger.Debug($"{pageMessage.ResourceUrl}: Adding individual action message of type '{typeof(TItemActionMessage).Name}' for item {item["id"].Value<string>()}...");
+                }
+
+                yield return actionMessage;
+            }
+        }
+        // ======================================================
+        // END POSSIBLE SEAM: Handle page of raw JSON content
+        // ======================================================
     }
 }

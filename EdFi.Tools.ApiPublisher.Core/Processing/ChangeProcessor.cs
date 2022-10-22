@@ -1255,8 +1255,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             EdFiApiClient sourceApiClient,
             EdFiApiClient targetApiClient,
             IDictionary<string, string[]> dependenciesByResourcePath,
-            Func<CreateBlocksRequest, (ITargetBlock<TItemActionMessage>,
-                ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
+            // Defines the pipeline of blocks that receives the "Item Action", and transforms to "Error Items"
+            Func<CreateBlocksRequest, (ITargetBlock<TItemActionMessage>, ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
+            // Factory function signature for creating an ItemAction message, but assumes JSON parsing (uses the wrong abstraction)
             Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
@@ -1291,30 +1292,37 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     errorHandlingBlock,
                     javascriptModuleFactory);
                 
-                var (processingInBlock, processingOutBlock) = createProcessingBlocks(createBlocksRequest);
+                // This creates the actual processing sub-pipeline ingesting TItemActionMessage through to ErrorItemMessages
+                var (processingInputBlock, processingOutputBlock) = createProcessingBlocks(createBlocksRequest);
 
                 // Is this an authorization retry "resource"? 
                 if (resourceKey.EndsWith(Conventions.RetryKeySuffix))
                 {
-                    // Save the action delegate, keyed by the main resource
+                    // Save an action delegate for processing the item, keyed by the resource path
                     postAuthorizationRetryByResourceKey.Add(
                         resourcePath, 
-                        msg => processingInBlock.Post((TItemActionMessage) msg));
+                        msg => processingInputBlock.Post((TItemActionMessage) msg));
                 }
 
                 streamingPagesByResourceKey.Add(
                     resourceKey,
                     new StreamingPagesItem
                     {
-                        CompletionBlock = processingOutBlock
+                        CompletionBlock = processingOutputBlock
                     });
 
-                var streamResourceBlock = StreamResource.CreateBlock(createItemActionMessage, errorHandlingBlock, options, cancellationToken);
-                var streamResourcePagesBlock = StreamResourcePages.GetBlock<TItemActionMessage>(options, errorHandlingBlock);
+                // Create a new StreamResource block for the resource
+                TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TItemActionMessage>> streamResourceBlock 
+                    = StreamResource.CreateBlock(createItemActionMessage, errorHandlingBlock, options, cancellationToken);
+                
+                // Create a new StreamResourcePages block
+                TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> streamResourcePagesBlock 
+                    = StreamResourcePages.CreateBlock<TItemActionMessage>(options, errorHandlingBlock);
 
+                // Link together the general pipeline
                 streamResourceBlock.LinkTo(streamResourcePagesBlock, linkOptions);
-                streamResourcePagesBlock.LinkTo(processingInBlock, linkOptions);
-                processingOutBlock.LinkTo(errorHandlingBlock, new DataflowLinkOptions { Append = true });
+                streamResourcePagesBlock.LinkTo(processingInputBlock, linkOptions);
+                processingOutputBlock.LinkTo(errorHandlingBlock, new DataflowLinkOptions { Append = true });
 
                 streamingResourceBlockByResourceKey.Add(resourceKey, streamResourceBlock);
             }

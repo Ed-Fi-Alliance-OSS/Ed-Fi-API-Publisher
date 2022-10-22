@@ -3,9 +3,9 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 
 namespace EdFi.Tools.ApiPublisher.Core.Helpers
 {
-    public static class RequestHelper
+    public static class ApiRequestHelper
     {
-        public static string GetChangeWindowParms(ChangeWindow changeWindow)
+        public static string GetChangeWindowQueryStringParameters(ChangeWindow changeWindow)
         {
             string changeWindowParms = changeWindow == null
                 ? String.Empty
