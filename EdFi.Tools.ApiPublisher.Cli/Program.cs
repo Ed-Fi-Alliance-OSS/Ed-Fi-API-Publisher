@@ -44,6 +44,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var configBuilder = new ConfigurationBuilderFactory()
                     .CreateConfigurationBuilder(args);
                 
+                // Build the initial configuration, incorporating command-line arguments
                 var initialConfiguration = configBuilder.Build();
                 
                 // Validate initial connection configuration
@@ -51,26 +52,9 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 ValidateInitialConnectionConfiguration(connections);
 
                 // Initialize the container
-                var services = new ServiceCollection();
-
-                if (!string.IsNullOrEmpty(initialConfiguration.GetValue<string>("Options:RemediationsScriptFile")))
-                {
-                    // Add support for NodeJS
-                    services.AddNodeJS();
-
-                    // Allow for multiple node processes to support processing
-                    services.Configure<OutOfProcessNodeJSServiceOptions>(
-                        options => { options.Concurrency = Concurrency.MultiProcess; });
-                }
-                else
-                {
-                    // Provide an instance of an implementations that throws exceptions if called
-                    services.AddSingleton<INodeJSService>(new NullNodeJsService());
-                }
-
-                // Integrate Autofac
                 var containerBuilder = new ContainerBuilder();
-                containerBuilder.Populate(services);
+
+                InitializeNodeJsForRemediations(containerBuilder, initialConfiguration);
 
                 IContainer container;
 
@@ -157,6 +141,30 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 
                 return -1;
             }
+        }
+
+        private static void InitializeNodeJsForRemediations(ContainerBuilder containerBuilder, IConfigurationRoot initialConfiguration)
+        {
+            string remediationsScriptFile = initialConfiguration.GetValue<string>("Options:RemediationsScriptFile");
+
+            var services = new ServiceCollection();
+
+            if (!string.IsNullOrEmpty(remediationsScriptFile))
+            {
+                // Add support for NodeJS
+                services.AddNodeJS();
+
+                // Allow for multiple node processes to support processing
+                services.Configure<OutOfProcessNodeJSServiceOptions>(options => { options.Concurrency = Concurrency.MultiProcess; });
+            }
+            else
+            {
+                // Provide an instance of an implementations that throws exceptions if called
+                services.AddSingleton<INodeJSService>(new NullNodeJsService());
+            }
+
+            // Populate the container with the service collection
+            containerBuilder.Populate(services);
         }
 
         private static void ValidateOptions(Options options)

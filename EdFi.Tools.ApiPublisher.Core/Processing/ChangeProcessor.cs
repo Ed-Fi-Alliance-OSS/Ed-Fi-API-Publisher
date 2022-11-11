@@ -838,7 +838,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'. Initiating delete processing.");
 
-                    using var processingSemaphore = new SemaphoreSlim(options.MaxDegreeOfParallelismForResourceProcessing, options.MaxDegreeOfParallelismForResourceProcessing);
+                    using var processingSemaphore = new SemaphoreSlim(
+                        options.MaxDegreeOfParallelismForResourceProcessing,
+                        options.MaxDegreeOfParallelismForResourceProcessing);
 
                     var streamingPagesOfDeletesByResourcePath = InitiateResourceStreaming(
                         sourceApiClient,
@@ -1266,7 +1268,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             SemaphoreSlim processingSemaphore,
             Func<string>? javascriptModuleFactory,
             CancellationToken cancellationToken,
-            string resourceUrlPathSuffix = null)
+            string? resourceUrlPathSuffix = null)
         {
             _logger.Info($"Initiating resource streaming.");
 

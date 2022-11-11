@@ -17,7 +17,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public Action<object> PostAuthorizationFailureRetry { get; set; }
 
         // -------------------------------
-        // Page-strategy specific context
+        // Paging-strategy specific context
         // --------------------------------
         public long Offset { get; set; }
         public int Limit { get; set; }

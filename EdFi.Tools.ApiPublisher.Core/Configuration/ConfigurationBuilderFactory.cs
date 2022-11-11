@@ -7,6 +7,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
     public class ConfigurationBuilderFactory 
         //: IConfigurationBuilderFactory
     {
+        /// <summary>
+        /// Creates a configuration builder incorporating settings files, environment variables and command-line arguments.
+        /// </summary>
+        /// <param name="commandLineArgs"></param>
+        /// <returns></returns>
         public IConfigurationBuilder CreateConfigurationBuilder(string[] commandLineArgs)
         {
             var configBuilder = new ConfigurationBuilder()
