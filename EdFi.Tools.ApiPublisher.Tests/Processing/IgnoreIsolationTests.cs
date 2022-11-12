@@ -88,19 +88,21 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 _changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
                     Array.Empty<string>(),
-                    sourceApiConnectionDetails,
-                    targetApiConnectionDetails,
-                    SourceApiClientFactory,
-                    TargetApiClientFactory,
+                    // sourceApiConnectionDetails,
+                    // targetApiConnectionDetails,
+                    // SourceApiClientFactory,
+                    // TargetApiClientFactory,
                     null,
                     options,
-                    configurationStoreSection);
+                    configurationStoreSection,
+                    new EdFiApiClientProvider(new Lazy<EdFiApiClient>(SourceApiClientFactory)),
+                    new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)));
 
                 // Initialize logging
                 _loggerRepository = await TestHelpers.InitializeLogging();
 
                 // Create dependencies
-                var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
+                var resourceDependencyProvider = new ResourceDependencyProvider();
                 var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
                 var errorPublisher = A.Fake<IErrorPublisher>();
                 var nodeJsService = A.Fake<INodeJSService>();

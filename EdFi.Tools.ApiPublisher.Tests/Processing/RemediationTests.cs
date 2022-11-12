@@ -112,19 +112,21 @@ public class RemediationTests
             _changeProcessorConfiguration = new ChangeProcessorConfiguration(
                 authorizationFailureHandling,
                 Array.Empty<string>(),
-                sourceApiConnectionDetails,
-                targetApiConnectionDetails,
-                SourceApiClientFactory,
-                TargetApiClientFactory,
+                // sourceApiConnectionDetails,
+                // targetApiConnectionDetails,
+                // SourceApiClientFactory,
+                // TargetApiClientFactory,
                 javaScriptModuleFactory,
                 options,
-                configurationStoreSection);
+                configurationStoreSection,
+                new EdFiApiClientProvider(new Lazy<EdFiApiClient>(SourceApiClientFactory)),
+                new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)));
 
             // Initialize logging
             var loggerRepository = await TestHelpers.InitializeLogging();
 
             // Create dependencies
-            var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
+            var resourceDependencyProvider = new ResourceDependencyProvider();
             var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
             var errorPublisher = A.Fake<IErrorPublisher>();
             var nodeJsService = A.Fake<INodeJSService>();
