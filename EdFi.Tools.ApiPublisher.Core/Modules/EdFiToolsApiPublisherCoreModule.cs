@@ -13,7 +13,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
                 .As<IConfigurationBuilderEnhancer>()
                 .SingleInstance();
 
-            builder.RegisterType<EdFiV3ApiResourceDependencyProvider>()
+            builder.RegisterType<ResourceDependencyProvider>()
                 .As<IResourceDependencyProvider>()
                 .SingleInstance();
 

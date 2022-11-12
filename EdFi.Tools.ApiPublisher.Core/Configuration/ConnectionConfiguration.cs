@@ -18,7 +18,35 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public ApiConnectionDetails Target { get; set; }
     }
 
-    public class ApiConnectionDetails
+    public interface INamedSourceOrSink
+    {
+        string Name { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the explicitly provided value to use for the last change version processed.
+        /// </summary>
+        long? LastChangeVersionProcessed { get; set; }
+        // TODO: Should this property really be here?
+    }
+
+    public interface IEdFiDataSourceDetails : INamedSourceOrSink
+    {
+        public bool? IgnoreIsolation { get; set; }
+
+        IDictionary<string, long> LastChangeVersionProcessedByTargetName { get; }
+        
+        public string Include { get; set; }
+        
+        public string IncludeOnly { get; set; }
+        
+        public string Exclude { get; set; }
+        
+        public string ExcludeOnly { get; set; }
+    }
+    
+    public interface IEdFiDataSinkDetails : INamedSourceOrSink { }
+    
+    public class ApiConnectionDetails : IEdFiDataSourceDetails, IEdFiDataSinkDetails
     {
         public string Name { get; set; }
         public string Url { get; set; }

@@ -8,65 +8,74 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
     public class ChangeProcessorConfiguration
     {
-        private readonly Lazy<EdFiApiClient> _sourceApiClient;
-        private readonly Lazy<EdFiApiClient> _targetApiClient;
+        // private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
+        // private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
+        
+        // private readonly Lazy<EdFiApiClient> _sourceApiClient;
+        // private readonly Lazy<EdFiApiClient> _targetApiClient;
 
         private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeProcessorConfiguration));
         
         public ChangeProcessorConfiguration(
             AuthorizationFailureHandling[] authorizationFailureHandling,
             string[] resourcesWithUpdatableKeys,
-            ApiConnectionDetails sourceApiConnectionDetails,
-            ApiConnectionDetails targetApiConnectionDetails,
-            Func<EdFiApiClient> sourceApiClientFactory,
-            Func<EdFiApiClient> targetApiClientFactory,
+            // ApiConnectionDetails sourceApiConnectionDetails,
+            // ApiConnectionDetails targetApiConnectionDetails,
+            // Func<EdFiApiClient> sourceApiClientFactory,
+            // Func<EdFiApiClient> targetApiClientFactory,
             Func<string>? javascriptModuleFactory,
             Options options,
             IConfigurationSection configurationStoreSection)
+            // ISourceEdFiApiClientProvider sourceEdFiApiClientProvider,
+            // ITargetEdFiApiClientProvider targetEdFiApiClientProvider)
         {
+            // _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
+            // _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
             AuthorizationFailureHandling = authorizationFailureHandling;
             ResourcesWithUpdatableKeys = resourcesWithUpdatableKeys;
-            SourceApiConnectionDetails = sourceApiConnectionDetails;
-            TargetApiConnectionDetails = targetApiConnectionDetails;
+            // SourceApiConnectionDetails = sourceApiConnectionDetails;
+            // TargetApiConnectionDetails = targetApiConnectionDetails;
             JavascriptModuleFactory = javascriptModuleFactory;
             
             Options = options;
             ConfigurationStoreSection = configurationStoreSection;
 
-            _sourceApiClient = new Lazy<EdFiApiClient>(() =>
-            {
-                // Establish connection to source API
-                _logger.Info("Initializing source API client...");
-
-                return sourceApiClientFactory();
-            });
-            
-            _targetApiClient = new Lazy<EdFiApiClient>(() =>
-            {
-                // Establish connection to target API
-                _logger.Info("Initializing target API client...");
-
-                return targetApiClientFactory();
-            });
+            // _sourceApiClient = new Lazy<EdFiApiClient>(() =>
+            // {
+            //     // Establish connection to source API
+            //     _logger.Info("Initializing source API client...");
+            //
+            //     return sourceApiClientFactory();
+            // });
+            //
+            // _targetApiClient = new Lazy<EdFiApiClient>(() =>
+            // {
+            //     // Establish connection to target API
+            //     _logger.Info("Initializing target API client...");
+            //
+            //     return targetApiClientFactory();
+            // });
         }
 
         public AuthorizationFailureHandling[] AuthorizationFailureHandling { get; }
         public string[] ResourcesWithUpdatableKeys { get; }
 
-        public ApiConnectionDetails SourceApiConnectionDetails { get; }
+        // public ApiConnectionDetails SourceApiConnectionDetails => _sourceEdFiApiClientProvider.GetApiClient().ConnectionDetails;
+        //
+        // public ApiConnectionDetails TargetApiConnectionDetails => _targetEdFiApiClientProvider.GetApiClient().ConnectionDetails;
         
-        public ApiConnectionDetails TargetApiConnectionDetails { get; }
         public Func<string>? JavascriptModuleFactory { get; }
 
-        public EdFiApiClient SourceApiClient
-        {
-            get => _sourceApiClient.Value;
-        }
-        
-        public EdFiApiClient TargetApiClient
-        {
-            get => _targetApiClient.Value;
-        }
+        // public EdFiApiClient SourceApiClient
+        // {
+        //     // get => _sourceApiClient.Value;
+        //     get => _sourceEdFiApiClientProvider.GetApiClient();
+        // }
+        //
+        // public EdFiApiClient TargetApiClient
+        // {
+        //     get => _targetEdFiApiClientProvider.GetApiClient();
+        // }
         
         public Options Options { get; }
         public IConfigurationSection ConfigurationStoreSection { get; }

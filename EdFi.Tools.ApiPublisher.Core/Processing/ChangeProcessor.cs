@@ -8,12 +8,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
+using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using EdFi.Tools.ApiPublisher.Core.Versioning;
 using log4net;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -34,17 +37,35 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly IChangeVersionProcessedWriter _changeVersionProcessedWriter;
         private readonly IErrorPublisher _errorPublisher;
         private readonly IPostResourceBlocksFactory _postResourceBlocksFactory;
+        private readonly IEdFiVersionsChecker _edFiVersionsChecker;
+        private readonly ISourceCurrentChangeVersionProvider _sourceCurrentChangeVersionProvider;
+        private readonly IEdFiDataSourceDetails _edFiDataSourceDetails;
+        private readonly IEdFiDataSinkDetails _edFiDataSinkDetails;
+        private readonly ISourceIsolationApplicator _sourceIsolationApplicator;
+        private readonly IDataSourceCapabilities _dataSourceCapabilities;
 
         public ChangeProcessor(
             IResourceDependencyProvider resourceDependencyProvider,
             IChangeVersionProcessedWriter changeVersionProcessedWriter,
             IErrorPublisher errorPublisher,
-            IPostResourceBlocksFactory postResourceBlocksFactory)
+            IPostResourceBlocksFactory postResourceBlocksFactory,
+            IEdFiVersionsChecker edFiVersionsChecker,
+            ISourceCurrentChangeVersionProvider sourceCurrentChangeVersionProvider,
+            IEdFiDataSourceDetails edFiDataSourceDetails,
+            IEdFiDataSinkDetails edFiDataSinkDetails,
+            ISourceIsolationApplicator sourceIsolationApplicator,
+            IDataSourceCapabilities dataSourceCapabilities)
         {
             _resourceDependencyProvider = resourceDependencyProvider;
             _changeVersionProcessedWriter = changeVersionProcessedWriter;
             _errorPublisher = errorPublisher;
             _postResourceBlocksFactory = postResourceBlocksFactory;
+            _edFiVersionsChecker = edFiVersionsChecker;
+            _sourceCurrentChangeVersionProvider = sourceCurrentChangeVersionProvider;
+            _edFiDataSourceDetails = edFiDataSourceDetails;
+            _edFiDataSinkDetails = edFiDataSinkDetails;
+            _sourceIsolationApplicator = sourceIsolationApplicator;
+            _dataSourceCapabilities = dataSourceCapabilities;
         }
         
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
@@ -52,11 +73,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             var processStopwatch = new Stopwatch();
             processStopwatch.Start();
             
-            var authorizationFailureHandling = configuration.AuthorizationFailureHandling;
-            var sourceApiConnectionDetails = configuration.SourceApiConnectionDetails;
-            var targetApiConnectionDetails = configuration.TargetApiConnectionDetails;
-            var sourceApiClient = configuration.SourceApiClient;
-            var targetApiClient = configuration.TargetApiClient;
+            var authorizationFailureHandling= configuration.AuthorizationFailureHandling;
+
+            // var sourceApiConnectionDetails = configuration.SourceApiConnectionDetails;
+            // var targetApiConnectionDetails = configuration.TargetApiConnectionDetails;
+            // var sourceApiClient = configuration.SourceApiClient;
+            // var targetApiClient = configuration.TargetApiClient;
+
             var options = configuration.Options;
             var javascriptModuleFactory = configuration.JavascriptModuleFactory;
 
@@ -65,45 +88,36 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             try
             {
                 // Check Ed-Fi API and Standard versions for compatibility
-                await CheckApiVersionsAsync(configuration).ConfigureAwait(false);
+                await _edFiVersionsChecker.CheckApiVersionsAsync(configuration).ConfigureAwait(false);
 
                 // Look for and apply snapshots if flag was not provided
-                if (sourceApiConnectionDetails.IgnoreIsolation != true)
+                if (_edFiDataSourceDetails.IgnoreIsolation != true)
                 {
                     // Determine if source API provides a snapshot, and apply the HTTP header to the client 
-                    await ApplySourceSnapshotIdentifierAsync(
-                            sourceApiClient,
-                            sourceApiConnectionDetails,
-                            configuration.SourceApiVersion)
+                    await _sourceIsolationApplicator.ApplySourceSnapshotIdentifierAsync(configuration.SourceApiVersion)
                         .ConfigureAwait(false);
                 }
 
                 // Establish the change window we're processing, if any.
-                ChangeWindow changeWindow = null;
+                ChangeWindow? changeWindow = null;
 
                 // Only named (managed) connections can use a Change Window for processing.
-                if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Name) 
-                    && !string.IsNullOrWhiteSpace(targetApiConnectionDetails.Name))
+                if (!string.IsNullOrWhiteSpace(_edFiDataSourceDetails.Name) 
+                    && !string.IsNullOrWhiteSpace(_edFiDataSinkDetails.Name))
                 {
-                    changeWindow = await EstablishChangeWindow(
-                            sourceApiClient,
-                            sourceApiConnectionDetails,
-                            targetApiConnectionDetails)
-                        .ConfigureAwait(false);
+                    changeWindow = await EstablishChangeWindow().ConfigureAwait(false);
                 }
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
                 {
-                    _logger.Info($"Last change version processed of '{GetLastChangeVersionProcessed(sourceApiConnectionDetails, targetApiConnectionDetails)}' for target API '{targetApiConnectionDetails.Name}' indicates that all available changes have already been published.");
+                    _logger.Info($"Last change version processed of '{GetLastChangeVersionProcessed()}' for target '{_edFiDataSinkDetails.Name}' indicates that all available changes have already been published.");
                     return;
                 }
 
                 var postDependencyKeysByResourceKey = await PrepareResourceDependenciesAsync(
-                        targetApiClient,
                         options,
-                        authorizationFailureHandling,
-                        sourceApiConnectionDetails)
+                        authorizationFailureHandling)
                     .ConfigureAwait(false);
 
                 // If we just wanted to know what resources are to be published, quit now.
@@ -121,8 +135,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     changeWindow,
                     postDependencyKeysByResourceKey,
                     configuration.ResourcesWithUpdatableKeys,
-                    sourceApiClient, 
-                    targetApiClient, 
+                    // sourceApiClient, 
+                    // targetApiClient, 
                     options,
                     authorizationFailureHandling,
                     publishErrorsIngestionBlock,
@@ -131,8 +145,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 
                 // Process all the "Upserts"
                 var postTaskStatuses = ProcessUpsertsToCompletion(
-                    sourceApiClient, 
-                    targetApiClient, 
+                    // sourceApiClient, 
+                    // targetApiClient, 
                     postDependencyKeysByResourceKey, 
                     options,
                     authorizationFailureHandling,
@@ -145,8 +159,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 var deleteTaskStatuses = await ProcessDeletesToCompletionAsync(
                     changeWindow, 
                     postDependencyKeysByResourceKey, 
-                    sourceApiClient, 
-                    targetApiClient, 
+                    // sourceApiClient, 
+                    // targetApiClient, 
                     options,
                     authorizationFailureHandling,
                     publishErrorsIngestionBlock,
@@ -176,188 +190,33 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private async Task CheckApiVersionsAsync(ChangeProcessorConfiguration configuration)
-        {
-            var sourceApiClient = configuration.SourceApiClient;
-            var targetApiClient = configuration.TargetApiClient;
-            
-            _logger.Debug($"Loading source and target API version information...");
-            
-            var sourceResponse = sourceApiClient.HttpClient.GetAsync("");
-            var targetResponse = targetApiClient.HttpClient.GetAsync("");
-
-            await Task.WhenAll(sourceResponse, targetResponse).ConfigureAwait(false);
-
-            if (!sourceResponse.Result.IsSuccessStatusCode)
-            {
-                throw new Exception($"Source API at '{sourceApiClient.HttpClient.BaseAddress}' returned status code '{sourceResponse.Result.StatusCode}' for request for version information.");
-            }
-            
-            if (!targetResponse.Result.IsSuccessStatusCode)
-            {
-                throw new Exception($"Target API at '{targetApiClient.HttpClient.BaseAddress}' returned status code '{targetResponse.Result.StatusCode}' for request for version information.");
-            }
-            
-            string sourceJson = await sourceResponse.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
-            string targetJson = await targetResponse.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-            var sourceVersionObject = GetVersionObject(sourceJson, "Source");
-            var targetVersionObject = GetVersionObject(targetJson, "Target");
-
-            string sourceApiVersionText = sourceVersionObject["version"].Value<string>();
-            string targetApiVersionText = targetVersionObject["version"].Value<string>();
-
-            var sourceApiVersion = new Version(sourceApiVersionText);
-            var targetApiVersion = new Version(targetApiVersionText);
-
-            // Apply resolved API version number to the runtime configuration
-            configuration.SourceApiVersion = sourceApiVersion;
-            configuration.TargetApiVersion = targetApiVersion;
-            
-            // Warn if API versions don't match
-            if (!sourceApiVersion.Equals(targetApiVersion))
-            {
-                _logger.Warn($"Source API version {sourceApiVersion} and target API version {targetApiVersion} do not match.");
-            }
-            
-            // Try comparing Ed-Fi versions
-            if (sourceApiVersion.IsAtLeast(3, 1) && targetApiVersion.IsAtLeast(3, 1))
-            {
-                var sourceEdFiVersion = GetEdFiStandardVersion(sourceVersionObject);
-                var targetEdFiVersion = GetEdFiStandardVersion(targetVersionObject);
-
-                if (sourceEdFiVersion != targetEdFiVersion)
-                {
-                    _logger.Warn($"Source API is using Ed-Fi {sourceEdFiVersion} but target API is using Ed-Fi {targetEdFiVersion}. Some resources may not be publishable.");
-                }
-            }
-            else
-            {
-                throw new NotSupportedException("The Ed-Fi API Publisher is not compatible with Ed-Fi ODS API versions prior to v3.1.");
-                // Consider: _logger.Warn("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
-            }
-
-            /*
-             Sample responses:
-             
-            {
-                version: "3.0.0",
-                informationalVersion: "3.0",
-                build: "3.0.0.2088",
-                apiMode: "Sandbox"
-            }    
-
-            {
-                version: "3.1.0",
-                informationalVersion: "3.1",
-                build: "3.1.0.3450",
-                apiMode: "Sandbox"
-            }
-            
-            {
-                version: "3.1.1",
-                informationalVersion: "3.1.1",
-                build: "3.1.1.3888",
-                apiMode: "Sandbox",
-                dataModels: [
-                    {
-                        name: "Ed-Fi",
-                        version: "3.1.0"
-                    },
-                    {
-                        name: "GrandBend",
-                        version: "1.0.0"
-                    }
-                ]
-            }
-
-            {
-                version: "3.2.0",
-                informationalVersion: "3.2.0",
-                build: "3.2.0.4982",
-                apiMode: "Sandbox",
-                dataModels: [
-                    {
-                        name: "Ed-Fi",
-                        version: "3.1.0"
-                    },
-                    {
-                        name: "GrandBend",
-                        version: "1.0.0"
-                    }
-                ]
-            }
-                     
-            {
-                version: "3.3.0",
-                informationalVersion: "3.3.0-prerelease",
-                build: "1.0.0.0",
-                apiMode: "Sandbox",
-                dataModels: [
-                    {
-                        name: "Ed-Fi",
-                        version: "3.2.0"
-                    }
-                ]
-            }
-             */
-            
-            JObject GetVersionObject(string versionJson, string role)
-            {
-                JObject versionObject;
-
-                try
-                {
-                    versionObject = JObject.Parse(versionJson);
-                    _logger.Info($"{role} API version information: {versionObject.ToString(Formatting.Indented)}");
-                }
-                catch (Exception)
-                {
-                    throw new Exception($"Unable to parse version information returned from {role.ToLower()} API.");
-                }
-
-                return versionObject;
-            }
-
-            string GetEdFiStandardVersion(JObject jObject)
-            {
-                string edFiVersion;
-
-                var dataModels = (JArray) jObject["dataModels"];
-
-                edFiVersion = dataModels.Where(o => o["name"].Value<string>() == "Ed-Fi")
-                    .Select(o => o["version"].Value<string>())
-                    .SingleOrDefault();
-                return edFiVersion;
-            }
-        }
-
         private async Task UpdateChangeVersionAsync(
             ChangeProcessorConfiguration configuration, 
             ChangeWindow changeWindow)
         {
-            var sourceApiConnectionDetails = configuration.SourceApiConnectionDetails;
-            var targetApiConnectionDetails = configuration.TargetApiConnectionDetails;
+            var sourceDetails = _edFiDataSourceDetails;
+            var sinkDetails = _edFiDataSinkDetails;
+            
             var configurationStoreSection = configuration.ConfigurationStoreSection;
             
             // If we have a name for source and target connections, write the change version
-            if (!string.IsNullOrEmpty(sourceApiConnectionDetails.Name)
-                && !string.IsNullOrEmpty(targetApiConnectionDetails.Name))
+            if (!string.IsNullOrEmpty(sourceDetails.Name)
+                && !string.IsNullOrEmpty(sinkDetails.Name))
             {
                 if (changeWindow == null)
                 {
                     _logger.Warn(
-                        $"No change window was defined, so last processed change version for source connection '{sourceApiConnectionDetails.Name}' cannot be updated.");
+                        $"No change window was defined, so last processed change version for source connection '{sourceDetails.Name}' cannot be updated.");
                 }
-                else if (GetLastChangeVersionProcessed(sourceApiConnectionDetails, targetApiConnectionDetails) != changeWindow.MaxChangeVersion)
+                else if (GetLastChangeVersionProcessed() != changeWindow.MaxChangeVersion)
                 {
                     _logger.Info(
-                        $"Updating last processed change version from '{GetLastChangeVersionProcessed(sourceApiConnectionDetails, targetApiConnectionDetails)}' to '{changeWindow.MaxChangeVersion}' for target connection '{targetApiConnectionDetails.Name}'.");
+                        $"Updating last processed change version from '{GetLastChangeVersionProcessed()}' to '{changeWindow.MaxChangeVersion}' for target connection '{sinkDetails.Name}'.");
 
                     // Record the successful completion of the change window
                     await _changeVersionProcessedWriter.SetProcessedChangeVersionAsync(
-                        sourceApiConnectionDetails.Name,
-                        targetApiConnectionDetails.Name,
+                        sourceDetails.Name,
+                        sinkDetails.Name,
                         changeWindow.MaxChangeVersion,
                         configurationStoreSection)
                         .ConfigureAwait(false);
@@ -367,47 +226,43 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             {
                 if (changeWindow?.MaxChangeVersion != null && changeWindow.MaxChangeVersion != default(long))
                 {
-                    if (string.IsNullOrEmpty(sourceApiConnectionDetails.Name))
+                    if (string.IsNullOrEmpty(sourceDetails.Name))
                     {
-                        _logger.Info($"Unable to update the last change version processed because no connection name for source '{sourceApiConnectionDetails.Url}' was provided.");
+                        _logger.Info($"Unable to update the last change version processed because no name was provided for the source.");
                     }
                     else
                     {
-                        _logger.Info($"Unable to update the last change version processed because no connection name for target '{targetApiConnectionDetails.Url}' was provided.");
+                        _logger.Info($"Unable to update the last change version processed because no name was provided for the target.");
                     }
                     
-                    _logger.Info($"Last Change Version Processed for source '{sourceApiConnectionDetails.Url}' to target '{targetApiConnectionDetails.Url}': {changeWindow.MaxChangeVersion}");
+                    _logger.Info($"Last Change Version Processed for source to target: {changeWindow.MaxChangeVersion}");
                 }
             }
         }
 
         private async Task<IDictionary<string, string[]>> PrepareResourceDependenciesAsync(
-            EdFiApiClient targetApiClient, 
             Options options,
-            AuthorizationFailureHandling[] authorizationFailureHandling, 
-            ApiConnectionDetails sourceApiConnectionDetails)
+            AuthorizationFailureHandling[] authorizationFailureHandling)
         {
             // Get the dependencies
             var postDependencyKeysByResourceKey = 
-                await _resourceDependencyProvider.GetDependenciesByResourcePathAsync(
-                    targetApiClient,
-                    options.IncludeDescriptors)
+                await _resourceDependencyProvider.GetDependenciesByResourcePathAsync(options.IncludeDescriptors)
                 .ConfigureAwait(false);
 
-            // Remove the Publishing extension, if present on target -- we don't want to publish snapshots
-            // This logic is unnecessary starting with Ed-Fi ODS API v5.2
+            // Ensure the Publishing extension is not present in dependencies -- we don't want to publish snapshots as a resource
+            // NOTE: This logic is unnecessary starting with Ed-Fi ODS API v5.2
             postDependencyKeysByResourceKey.Remove("/publishing/snapshots");
             
             AdjustDependenciesForConfiguredAuthorizationConcerns();
 
             // Filter resources down to just those requested, if an explicit inclusion list provided
-            if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Include) || !string.IsNullOrWhiteSpace(sourceApiConnectionDetails.IncludeOnly))
+            if (!string.IsNullOrWhiteSpace(_edFiDataSourceDetails.Include) || !string.IsNullOrWhiteSpace(_edFiDataSourceDetails.IncludeOnly))
             {
                 _logger.Info("Applying resource inclusions...");
-                _logger.Debug($"Filtering processing to the following configured inclusion of source API resources:{Environment.NewLine}    Included (with dependencies):    {sourceApiConnectionDetails.Include}{Environment.NewLine}    Included (without dependencies): {sourceApiConnectionDetails.IncludeOnly}");
+                _logger.Debug($"Filtering processing to the following configured inclusion of source API resources:{Environment.NewLine}    Included (with dependencies):    {_edFiDataSourceDetails.Include}{Environment.NewLine}    Included (without dependencies): {_edFiDataSourceDetails.IncludeOnly}");
 
-                var includeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.Include);
-                var includeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.IncludeOnly);
+                var includeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.Include);
+                var includeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.IncludeOnly);
                 
                 // Evaluate whether any of the included resources have a "retry" dependency
                 var retryDependenciesForIncludeResourcePaths = includeResourcePaths
@@ -441,13 +296,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // }
             }
             
-            if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Exclude) || !string.IsNullOrWhiteSpace(sourceApiConnectionDetails.ExcludeOnly))
+            if (!string.IsNullOrWhiteSpace(_edFiDataSourceDetails.Exclude) || !string.IsNullOrWhiteSpace(_edFiDataSourceDetails.ExcludeOnly))
             {
                 _logger.Info("Applying resource exclusions...");
-                _logger.Debug($"Filtering processing to the following configured exclusion of source API resources:{Environment.NewLine}    Excluded (along with dependents): {sourceApiConnectionDetails.Exclude}{Environment.NewLine}    Excluded (dependents unaffected): {sourceApiConnectionDetails.ExcludeOnly}");
+                _logger.Debug($"Filtering processing to the following configured exclusion of source API resources:{Environment.NewLine}    Excluded (along with dependents): {_edFiDataSourceDetails.Exclude}{Environment.NewLine}    Excluded (dependents unaffected): {_edFiDataSourceDetails.ExcludeOnly}");
 
-                var excludeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.Exclude);
-                var excludeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.ExcludeOnly);
+                var excludeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.Exclude);
+                var excludeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.ExcludeOnly);
                 
                 // Evaluate whether any of the included resources have a "retry" dependency
                 var retryDependenciesForExcludeResourcePaths = excludeResourcePaths
@@ -698,42 +553,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private async Task ApplySourceSnapshotIdentifierAsync(
-            EdFiApiClient sourceApiClient,
-            ApiConnectionDetails sourceApiConnectionDetails,
-            Version sourceApiVersion)
-        {
-            string snapshotIdentifier = await GetSourceSnapshotIdentifierAsync(sourceApiClient, sourceApiVersion).ConfigureAwait(false);
-
-            // Confirm that a snapshot exists or --ignoreIsolation=true has been provided
-            if (snapshotIdentifier == null)
-            {
-                string message = $"Snapshot identifier could not be obtained from API at '{sourceApiConnectionDetails.Url}', and \"force\" option was not specified. Publishing cannot proceed due to lack of guaranteed isolation from ongoing changes at the source. Use --ignoreIsolation=true (or a corresponding configuration value) to force processing.";
-                throw new Exception(message);
-            }
-            else
-            {
-                // Configure source HTTP client to add the snapshot identifier header to every request against the source API
-                sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Snapshot-Identifier", snapshotIdentifier);
-            }
-        }
-
-        private async Task<ChangeWindow> EstablishChangeWindow(
-            EdFiApiClient sourceApiClient,
-            ApiConnectionDetails sourceApiConnectionDetails,
-            ApiConnectionDetails targetApiConnectionDetails)
+        private async Task<ChangeWindow?> EstablishChangeWindow()
         {
             // Get the current change version of the source database (or snapshot database)
-            long? currentSourceChangeVersion = await GetCurrentSourceChangeVersionAsync(sourceApiClient).ConfigureAwait(false);
+            long? currentSourceChangeVersion =
+                await _sourceCurrentChangeVersionProvider.GetCurrentChangeVersionAsync().ConfigureAwait(false);
 
             // Establish change window
-            ChangeWindow changeWindow = null;
+            ChangeWindow? changeWindow = null;
 
             if (currentSourceChangeVersion.HasValue)
             {
                 changeWindow = new ChangeWindow
                 {
-                    MinChangeVersion = 1 + GetLastChangeVersionProcessed(sourceApiConnectionDetails, targetApiConnectionDetails),
+                    MinChangeVersion = 1 + GetLastChangeVersionProcessed(),
                     MaxChangeVersion = currentSourceChangeVersion.Value
                 };
             }
@@ -741,23 +574,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             return changeWindow;
         }
 
-        private static long GetLastChangeVersionProcessed(ApiConnectionDetails sourceApiConnectionDetails, ApiConnectionDetails targetApiConnectionDetails)
+        private long GetLastChangeVersionProcessed()
         {
             // If an explicit value was provided, use that first
-            if (sourceApiConnectionDetails.LastChangeVersionProcessed.HasValue)
+            if (_edFiDataSourceDetails.LastChangeVersionProcessed.HasValue)
             {
-                return sourceApiConnectionDetails.LastChangeVersionProcessed.Value;
+                return _edFiDataSourceDetails.LastChangeVersionProcessed.Value;
             }
             
             // Fall back to using the pre-configured change version
-            return sourceApiConnectionDetails
+            return _edFiDataSourceDetails
                 .LastChangeVersionProcessedByTargetName
-                .GetValueOrDefault(targetApiConnectionDetails.Name);
+                .GetValueOrDefault(_edFiDataSinkDetails.Name);
         }
 
         private TaskStatus[] ProcessUpsertsToCompletion(
-            EdFiApiClient sourceApiClient,
-            EdFiApiClient targetApiClient,
+            // EdFiApiClient sourceApiClient,
+            // EdFiApiClient targetApiClient,
             IDictionary<string, string[]> postDependenciesByResourcePath,
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
@@ -772,8 +605,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             // Start processing resources in dependency order
             var streamingPagesOfPostsByResourcePath = InitiateResourceStreaming(
-                sourceApiClient,
-                targetApiClient,
+                // sourceApiClient,
+                // targetApiClient,
                 postDependenciesByResourcePath,
                 _postResourceBlocksFactory.CreateBlocks, 
                 PostResourceBlocksFactory.CreateItemActionMessage,
@@ -798,8 +631,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private async Task<TaskStatus[]> ProcessDeletesToCompletionAsync(
             ChangeWindow changeWindow,
             IDictionary<string, string[]> postDependenciesByResourcePath,
-            EdFiApiClient sourceApiClient,
-            EdFiApiClient targetApiClient,
+            // EdFiApiClient sourceApiClient,
+            // EdFiApiClient targetApiClient,
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
@@ -827,24 +660,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             if (deleteDependenciesByResourcePath.Any())
             {
                 // Probe for deletes support
-                string resourcePathSegment = deleteDependenciesByResourcePath.First().Key;
-                string probeUrl = $"{sourceApiClient.DataManagementApiSegment}{resourcePathSegment}{EdFiApiConstants.DeletesPathSuffix}";
+                string probeResourceKey = deleteDependenciesByResourcePath.First().Key;
+                var supportsDeletes = await _dataSourceCapabilities.SupportsDeletesAsync(probeResourceKey);
 
-                _logger.Debug($"Probing source API for deletes support at '{probeUrl}'.");
-                
-                var probeResponse = await sourceApiClient.HttpClient.GetAsync($"{probeUrl}?limit=1").ConfigureAwait(false);
-
-                if (probeResponse.IsSuccessStatusCode)
+                if (supportsDeletes)
                 {
-                    _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'. Initiating delete processing.");
+                    // _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'. Initiating delete processing.");
 
                     using var processingSemaphore = new SemaphoreSlim(
                         options.MaxDegreeOfParallelismForResourceProcessing,
                         options.MaxDegreeOfParallelismForResourceProcessing);
 
                     var streamingPagesOfDeletesByResourcePath = InitiateResourceStreaming(
-                        sourceApiClient,
-                        targetApiClient,
+                        // sourceApiClient,
+                        // targetApiClient,
                         deleteDependenciesByResourcePath,
                         DeleteResource.CreateBlocks, 
                         DeleteResource.CreateItemActionMessage,
@@ -866,19 +695,19 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
                 else
                 {
-                    _logger.Warn($"Request to Source API for the '{EdFiApiConstants.DeletesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Delete processing cannot be performed.");
+                    _logger.Warn($"Source indicated a lack of support for deletes. Delete processing cannot be performed.");
                 }
             }
 
             return deleteTaskStatuses;
         }
-        
+
         private async Task<TaskStatus[]> ProcessKeyChangesToCompletionAsync(
             ChangeWindow changeWindow,
             IDictionary<string, string[]> postDependenciesByResourcePath,
             string[] resourcesWithUpdatableKeys,
-            EdFiApiClient sourceApiClient,
-            EdFiApiClient targetApiClient,
+            // EdFiApiClient sourceApiClient,
+            // EdFiApiClient targetApiClient,
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
@@ -904,34 +733,28 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 var keyChangeDependenciesByResourcePath = GetKeyChangeDependencies(postDependenciesByResourcePath, resourcesWithUpdatableKeys);
 
                 // Probe for key changes support (using first by name sorted alphabetically for deterministic behavior)
-                string resourcePathSegment = keyChangeDependenciesByResourcePath.Keys
+                string probeResourceKey = keyChangeDependenciesByResourcePath.Keys
                     .OrderBy(x => x)
                     .FirstOrDefault();
 
-                if (resourcePathSegment == null)
+                if (probeResourceKey == null)
                 {
-                    _logger.Info($"None of the API resources configured to allow key changes were found in the resources to be processed (based on dependency metadata retrieved from the target API).");
+                    _logger.Info($"None of the API resources configured to allow key changes were found in the resources to be processed (based on the resource dependency metadata).");
 
                     return Array.Empty<TaskStatus>();
                 }
 
-                string probeUrl = $"{sourceApiClient.DataManagementApiSegment}{resourcePathSegment}{EdFiApiConstants.KeyChangesPathSuffix}";
-
-                _logger.Debug($"Probing source API for key changes support at '{probeUrl}'.");
+                var supportsKeyChanges = await _dataSourceCapabilities.SupportsKeyChangesAsync(probeResourceKey);
                 
-                var probeResponse = await sourceApiClient.HttpClient.GetAsync($"{probeUrl}?limit=1").ConfigureAwait(false);
-
-                if (probeResponse.IsSuccessStatusCode)
+                if (supportsKeyChanges)
                 {
-                    _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'. Initiating key changes processing.");
+                    _logger.Debug($"Source supports key changes. Initiating key changes processing.");
 
                     using var processingSemaphore = new SemaphoreSlim(
                         options.MaxDegreeOfParallelismForResourceProcessing,
                         options.MaxDegreeOfParallelismForResourceProcessing);
 
                     var streamingPagesOfKeyChangesByResourcePath = InitiateResourceStreaming(
-                        sourceApiClient,
-                        targetApiClient,
                         keyChangeDependenciesByResourcePath,
                         ChangeResourceKey.CreateBlocks, 
                         ChangeResourceKey.CreateItemActionMessage,
@@ -953,7 +776,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
                 else
                 {
-                    _logger.Warn($"Request to Source API for the '{EdFiApiConstants.KeyChangesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Key change processing cannot be performed.");
+                    _logger.Warn($"Source indicated a lack of support for key changes. Key change processing cannot be performed.");
                 }
             }
 
@@ -1132,130 +955,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             
             return deleteDependenciesByResourcePath;
         }
-        
-        private async Task<string> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)
-        {
-            string snapshotsRelativePath;
-
-            // Get available snapshot information
-            if (sourceApiVersion.IsAtLeast(5, 2))
-            {
-                snapshotsRelativePath = $"{sourceApiClient.ChangeQueriesApiSegment}/snapshots";
-            }
-            else
-            {
-                snapshotsRelativePath = $"{sourceApiClient.DataManagementApiSegment}/publishing/snapshots";
-            }
-            
-            var snapshotsResponse = await sourceApiClient.HttpClient.GetAsync(snapshotsRelativePath).ConfigureAwait(false);
-
-            if (snapshotsResponse.StatusCode == HttpStatusCode.NotFound)
-            {
-                _logger.Warn($"Source API at '{sourceApiClient.HttpClient.BaseAddress}' does not support the necessary isolation for reliable API publishing. Errors may occur, or some data may not be published without causing failures.");
-                return null;
-            }
-            
-            if (snapshotsResponse.StatusCode == HttpStatusCode.Forbidden)
-            {
-                _logger.Warn($"The API publisher does not have permissions to access the source API's 'snapshots' resource at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Make sure that the source API is using a correctly configured claim set for your API Publisher's API client.");
-                return null;
-            }
-
-            if (snapshotsResponse.IsSuccessStatusCode)
-            {
-                // Detect null content and provide a better error message (which happens during unit testing if mocked requests aren't properly defined)
-                if (snapshotsResponse.Content == null)
-                {
-                    throw new NullReferenceException($"Content of response for '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}' was null.");
-                }
-
-                string snapshotResponseText = await snapshotsResponse.Content.ReadAsStringAsync()
-                    .ConfigureAwait(false);
-
-                var snapshotResponseArray = JArray.Parse(snapshotResponseText);
-
-                if (!snapshotResponseArray.Any())
-                {
-                    // No snapshots available.
-                    _logger.Warn($"Snapshots are supported, but no snapshots are available from source API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'.");
-                    return null;
-                }
-                
-                var snapshot = 
-                    snapshotResponseArray
-                    .Select(jt =>
-                    {
-                        string snapshotIdentifier = jt["snapshotIdentifier"].Value<string>();
-                        string snapshotDateTimeText = jt["snapshotDateTime"].Value<string>();
-
-                        if (!DateTime.TryParse(snapshotDateTimeText, out var snapshotDateTimeValue))
-                        {
-                            snapshotDateTimeValue = DateTime.MinValue;
-                        }
-                        
-                        return new
-                        {
-                            SnapshotIdentifier = snapshotIdentifier, 
-                            SnapshotDateTime = snapshotDateTimeValue,
-                            SnapshotDateTimeText = snapshotDateTimeText
-                        };
-                    })
-                    .OrderByDescending(x => x.SnapshotDateTime)
-                    .First();
-
-                _logger.Info($"Using snapshot identifier '{snapshot.SnapshotIdentifier}' created at '{snapshot.SnapshotDateTime}'.");
-                
-                return snapshot.SnapshotIdentifier;
-            }
-
-            string errorResponseText = await snapshotsResponse.Content.ReadAsStringAsync()
-                .ConfigureAwait(false);
-
-            _logger.Error($"Unable to get snapshot identifier from API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Request for available snapshots returned status '{snapshotsResponse.StatusCode}' with message body: {errorResponseText}");
-
-            return null;
-        }
-        
-        private async Task<long?> GetCurrentSourceChangeVersionAsync(EdFiApiClient sourceApiClient)
-        {
-            // Get current source version information
-            string availableChangeVersionsRelativePath = $"{sourceApiClient.ChangeQueriesApiSegment}/availableChangeVersions";
-            
-            var versionResponse = await sourceApiClient.HttpClient.GetAsync(availableChangeVersionsRelativePath)
-                .ConfigureAwait(false);
-
-            if (!versionResponse.IsSuccessStatusCode)
-            {
-                _logger.Warn($"Unable to get current change version from source API at '{sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath}' (response status: {versionResponse.StatusCode}). Full synchronization will always be performed against this source, and any concurrent changes made against the source may cause change processing to produce unreliable results.");
-                return null;
-            }
-            
-            string versionResponseText = await versionResponse.Content.ReadAsStringAsync()
-                .ConfigureAwait(false);
-
-            _logger.Debug(
-                $"Available change versions request from {sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath} returned {versionResponse.StatusCode}: {versionResponseText}");
-
-            try
-            {
-                long maxChangeVersion = 
-                    // Versions of Ed-Fi API through at least v3.4
-                    (JObject.Parse(versionResponseText)["NewestChangeVersion"]
-                        // Enhancements/fixes applied introduced as part of API Publisher work
-                        ?? JObject.Parse(versionResponseText)["newestChangeVersion"])
-                    .Value<long>();
-
-                return maxChangeVersion;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Unable to read 'newestChangeVersion' property from response.", ex);
-            }
-        }
 
         private IDictionary<string, StreamingPagesItem> InitiateResourceStreaming<TItemActionMessage>(
-            EdFiApiClient sourceApiClient,
-            EdFiApiClient targetApiClient,
+            // EdFiApiClient sourceApiClient,
+            // EdFiApiClient targetApiClient,
             IDictionary<string, string[]> dependenciesByResourcePath,
             // Defines the pipeline of blocks that receives the "Item Action", and transforms to "Error Items"
             Func<CreateBlocksRequest, (ITargetBlock<TItemActionMessage>, ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
@@ -1287,8 +990,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 string resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
 
                 var createBlocksRequest = new CreateBlocksRequest(
-                    sourceApiClient,
-                    targetApiClient,
+                    // sourceApiClient,
+                    // targetApiClient,
                     options,
                     authorizationFailureHandling,
                     errorHandlingBlock,
@@ -1352,11 +1055,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 postAuthorizationRetryByResourceKey.TryGetValue(resourceKey, out var postRetry);
 
                 var skippedResources = 
-                    ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiClient.ConnectionDetails.ExcludeOnly);
+                    ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.ExcludeOnly);
 
                 var message = new StreamResourceMessage
                 {
-                    EdFiApiClient = sourceApiClient,
+                    // EdFiApiClient = sourceApiClient,
                     ResourceUrl = resourceUrl,
                     ShouldSkip = skippedResources.Contains(resourcePath),
                     Dependencies = dependencyPaths.Select(p => streamingPagesByResourceKey[p].CompletionBlock.Completion).ToArray(),

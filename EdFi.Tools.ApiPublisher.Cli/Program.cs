@@ -10,12 +10,16 @@ using Autofac.Core;
 using Autofac.Extensions.DependencyInjection;
 using EdFi.Ods.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
+using EdFi.Tools.ApiPublisher.Core.Dependencies;
+using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Modules;
 using EdFi.Tools.ApiPublisher.Core.NodeJs;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Registration;
+using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Jering.Javascript.NodeJS;
 using log4net;
 using log4net.Config;
@@ -100,14 +104,54 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
                 var resourcesWithUpdatableKeys = publisherSettings.ResourcesWithUpdatableKeys;
 
-                var apiConnections = finalConfiguration.Get<ConnectionConfiguration>().Connections;
+                // Create execution container
+                var executionContainer = container.BeginLifetimeScope(
+                    cb =>
+                    {
+                        // Additional registrations
+                        
+                        // API dependency metadata from TARGET API
+                        cb.RegisterType<IGraphMLDependencyMetadataProvider>()
+                            .As<EdFiOdsApiGraphMLDependencyMetadataProvider>()
+                            .WithParameter(
+                                new ResolvedParameter(
+                                    (pi, ctx) => pi.ParameterType == typeof(IEdFiApiClientProvider),
+                                    (pi, ctx) => ctx.Resolve<ITargetEdFiApiClientProvider>()));
+                        
+                        // Available ChangeVersions for Source API
+                        cb.RegisterType<EdFiOdsApiSourceCurrentChangeVersionProvider>()
+                            .As<ISourceCurrentChangeVersionProvider>()
+                            .SingleInstance();
+                        
+                        // Version metadata for a Source API
+                        cb.RegisterType<SourceEdFiOdsApiVersionMetadataProvider>()
+                            .As<ISourceEdFiOdsApiVersionMetadataProvider>()
+                            .SingleInstance();
+
+                        // Version metadata for a Target API
+                        cb.RegisterType<TargetEdFiOdsApiVersionMetadataProvider>()
+                            .As<ITargetEdFiOdsApiVersionMetadataProvider>()
+                            .SingleInstance();
+
+                        // Snapshot Isolation applicator for Source API
+                        cb.RegisterType<EdFiOdsApiSourceIsolationApplicator>()
+                            .As<ISourceIsolationApplicator>()
+                            .SingleInstance();
+                        
+                        // Determine data source capabilities for Source API
+                        cb.RegisterType<EdFiOdsApiDataSourceCapabilities>()
+                            .As<IDataSourceCapabilities>()
+                            .SingleInstance();
+                        
+                        // General purpose version checker
+                        cb.RegisterType<EdFiVersionsChecker>().As<IEdFiVersionsChecker>();
+                            
+                        // Register source and target EdFiApiClients
+                        cb.RegisterModule(new EdFiApiClientsModule(finalConfiguration));
+                    });
                 
-                // Initialize source/target API clients
-                var sourceApiConnectionDetails = apiConnections.Source;
-                var targetApiConnectionDetails = apiConnections.Target;
-                
-                EdFiApiClient CreateSourceApiClient() => new ("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
-                EdFiApiClient CreateTargetApiClient() => new ("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                // EdFiApiClient CreateSourceApiClient() => new ("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                // EdFiApiClient CreateTargetApiClient() => new ("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
 
                 Func<string> moduleFactory = null;
 
@@ -115,19 +159,23 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 {
                     moduleFactory = () => File.ReadAllText(options.RemediationsScriptFile);
                 }
-                
+
+                var configurationSection = finalConfiguration.GetSection("configurationStore");
+
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
                     resourcesWithUpdatableKeys,
-                    sourceApiConnectionDetails,
-                    targetApiConnectionDetails,
-                    CreateSourceApiClient,
-                    CreateTargetApiClient,
+                    // sourceApiConnectionDetails,
+                    // targetApiConnectionDetails,
+                    // CreateSourceApiClient,
+                    // CreateTargetApiClient,
                     moduleFactory,
                     options,
-                    finalConfiguration.GetSection("configurationStore"));
+                    configurationSection);
 
-                var changeProcessor = serviceProvider.GetRequiredService<IChangeProcessor>();
+                // var changeProcessor = serviceProvider.GetRequiredService<IChangeProcessor>();
+                
+                var changeProcessor = executionContainer.Resolve<IChangeProcessor>();
 
                 Logger.Info($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
