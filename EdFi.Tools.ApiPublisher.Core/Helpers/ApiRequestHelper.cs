@@ -5,7 +5,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
 {
     public static class ApiRequestHelper
     {
-        public static string GetChangeWindowQueryStringParameters(ChangeWindow changeWindow)
+        public static string GetChangeWindowQueryStringParameters(ChangeWindow? changeWindow)
         {
             string changeWindowParms = changeWindow == null
                 ? String.Empty

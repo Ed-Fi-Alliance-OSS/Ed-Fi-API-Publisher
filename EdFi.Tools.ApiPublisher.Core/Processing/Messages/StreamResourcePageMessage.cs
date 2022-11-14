@@ -26,12 +26,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // -------------------------------------------------
         // Source Ed-Fi ODS API processing context (shared)
         // -------------------------------------------------
-        public EdFiApiClient EdFiApiClient { get; set; }
+        // public EdFiApiClient EdFiApiClient { get; set; }
 
         // ----------------------------
         // Global processing context
         // ----------------------------
-        public ChangeWindow ChangeWindow { get; set; }
+        public ChangeWindow? ChangeWindow { get; set; }
         public CancellationTokenSource CancellationSource { get; set; }
 
         public Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> CreateItemActionMessage { get; set; }

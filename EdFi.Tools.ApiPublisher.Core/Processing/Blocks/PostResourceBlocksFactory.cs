@@ -33,10 +33,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     {
         private readonly ILog _logger = LogManager.GetLogger(typeof(PostResourceBlocksFactory));
         private readonly INodeJSService _nodeJsService;
+        private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
+        private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
 
-        public PostResourceBlocksFactory(INodeJSService nodeJsService)
+        public PostResourceBlocksFactory(
+            INodeJSService nodeJsService,
+            ISourceEdFiApiClientProvider sourceEdFiApiClientProvider,
+            ITargetEdFiApiClientProvider targetEdFiApiClientProvider)
         {
             _nodeJsService = nodeJsService;
+            _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
+            _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
         }
         
         public ValueTuple<ITargetBlock<PostItemMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(CreateBlocksRequest createBlocksRequest)
@@ -44,8 +51,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             var knownUnremediatedRequests = new HashSet<(string resourceUrl, HttpStatusCode statusCode)>(); 
 
             var options = createBlocksRequest.Options;
-            var targetEdFiApiClient = createBlocksRequest.TargetApiClient;
-            var sourceEdFiApiClient = createBlocksRequest.SourceApiClient;
+            var targetEdFiApiClient = _targetEdFiApiClientProvider.GetApiClient();
+            var sourceEdFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
             
             var javaScriptModuleFactory = createBlocksRequest.JavaScriptModuleFactory;
                 

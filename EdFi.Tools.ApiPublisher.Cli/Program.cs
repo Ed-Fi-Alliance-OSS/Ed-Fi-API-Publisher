@@ -13,11 +13,14 @@ using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
+using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Modules;
 using EdFi.Tools.ApiPublisher.Core.NodeJs;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
+using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Registration;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Jering.Javascript.NodeJS;
@@ -144,10 +147,38 @@ namespace EdFi.Tools.ApiPublisher.Cli
                             .SingleInstance();
                         
                         // General purpose version checker
-                        cb.RegisterType<EdFiVersionsChecker>().As<IEdFiVersionsChecker>();
+                        cb.RegisterType<EdFiVersionsChecker>()
+                            .As<IEdFiVersionsChecker>()
+                            .SingleInstance();
                             
                         // Register source and target EdFiApiClients
                         cb.RegisterModule(new EdFiApiClientsModule(finalConfiguration));
+                        
+                        // Register resource page message producer using a limit/offset paging strategy
+                        cb.RegisterType<EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer>()
+                            .As<IStreamResourcePageMessageProducer>()
+                            .SingleInstance();
+
+                        cb.RegisterType<EdFiOdsApiStreamResourcePageMessageHandler>()
+                            .As<IStreamResourcePageMessageHandler>()
+                            .SingleInstance();
+
+                        cb.RegisterType<EdFiOdsApiTargetItemActionMessageProducer>()
+                            .As<IItemActionMessageProducer>()
+                            .SingleInstance();
+                        
+                        // Register Data Source Total Count provider for Source API
+                        cb.RegisterType<EdFiOdsApiDataSourceTotalCountProvider>()
+                            .As<IEdFiDataSourceTotalCountProvider>()
+                            .SingleInstance();
+                        
+                        // Block factories
+                        cb.RegisterType<PublishErrorsBlocksFactory>().SingleInstance();
+                        cb.RegisterType<PublishErrorsBlocksFactory>().SingleInstance();
+                        cb.RegisterType<DeleteResourceBlocksFactory>().SingleInstance();
+                        cb.RegisterType<ChangeResourceKeyBlocksFactory>().SingleInstance();
+                        cb.RegisterType<StreamResourceBlockFactory>().SingleInstance();
+                        cb.RegisterType<StreamResourcePagesBlockFactory>().SingleInstance();
                     });
                 
                 // EdFiApiClient CreateSourceApiClient() => new ("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);

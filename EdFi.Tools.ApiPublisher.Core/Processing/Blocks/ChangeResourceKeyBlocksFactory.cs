@@ -17,26 +17,40 @@ using Polly.Contrib.WaitAndRetry;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-    public static class ChangeResourceKey
+    /// <summary>
+    /// Builds a pipeline that processes key changes against a target Ed-Fi ODS API.
+    /// </summary>
+    /// <remarks>Receives a <see cref="GetItemForKeyChangeMessage" />, transforms to a <see cref="ChangeKeyMessage" /> before
+    /// producing <see cref="ErrorItemMessage" /> instances as output. </remarks>
+    public class ChangeResourceKeyBlocksFactory
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(ChangeResourceKey));
+        private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
+        
+        private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeResourceKeyBlocksFactory));
 
-        public static ValueTuple<ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
+        public ChangeResourceKeyBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider)
+        {
+            _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
+        }
+        
+        public ValueTuple<ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
-            var getItemForKeyChangeBlock = CreateGetItemForKeyChangeBlock(
-                createBlocksRequest.TargetApiClient,
-                createBlocksRequest.Options,
-                createBlocksRequest.ErrorHandlingBlock);
+            TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> getItemForKeyChangeBlock
+                = CreateGetItemForKeyChangeBlock(
+                    _targetEdFiApiClientProvider.GetApiClient(),
+                    createBlocksRequest.Options,
+                    createBlocksRequest.ErrorHandlingBlock);
 
-            var changeKeyResourceBlock = CreateChangeKeyBlock(createBlocksRequest.TargetApiClient, createBlocksRequest.Options);
+            TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> changeKeyResourceBlock 
+                = CreateChangeKeyBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options);
 
             getItemForKeyChangeBlock.LinkTo(changeKeyResourceBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             return (getItemForKeyChangeBlock, changeKeyResourceBlock);
         }
 
-        private static TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> CreateGetItemForKeyChangeBlock(
+        private TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> CreateGetItemForKeyChangeBlock(
             EdFiApiClient targetApiClient, 
             Options options, 
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
@@ -239,7 +253,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             }
         }
         
-        private static TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> CreateChangeKeyBlock(
+        private TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> CreateChangeKeyBlock(
             EdFiApiClient targetApiClient, Options options)
         {
             var changeKey = new TransformManyBlock<ChangeKeyMessage, ErrorItemMessage>(
@@ -356,7 +370,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             }
         }
 
-        public static GetItemForKeyChangeMessage CreateItemActionMessage(StreamResourcePageMessage<GetItemForKeyChangeMessage> msg, JObject j)
+        public GetItemForKeyChangeMessage CreateItemActionMessage(StreamResourcePageMessage<GetItemForKeyChangeMessage> msg, JObject j)
         {
             // Detect cancellation and quit returning messages
             if (msg.CancellationSource.IsCancellationRequested)

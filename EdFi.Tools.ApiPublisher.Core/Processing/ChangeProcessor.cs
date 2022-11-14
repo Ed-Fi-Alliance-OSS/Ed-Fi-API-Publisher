@@ -24,11 +24,6 @@ using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-    public static class Conventions
-    {
-        public const string RetryKeySuffix = "#Retry";
-    }
-    
     public class ChangeProcessor : IChangeProcessor
     {
         private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeProcessor));
@@ -43,18 +38,28 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly IEdFiDataSinkDetails _edFiDataSinkDetails;
         private readonly ISourceIsolationApplicator _sourceIsolationApplicator;
         private readonly IDataSourceCapabilities _dataSourceCapabilities;
+        private readonly PublishErrorsBlocksFactory _publishErrorsBlocksFactory;
+        private readonly DeleteResourceBlocksFactory _deleteResourceBlocksFactory;
+        private readonly ChangeResourceKeyBlocksFactory _changeResourceKeyBlocksFactory;
+        private readonly StreamResourceBlockFactory _streamResourceBlockFactory;
+        private readonly StreamResourcePagesBlockFactory _streamResourcePagesBlockFactory;
 
         public ChangeProcessor(
             IResourceDependencyProvider resourceDependencyProvider,
             IChangeVersionProcessedWriter changeVersionProcessedWriter,
             IErrorPublisher errorPublisher,
-            IPostResourceBlocksFactory postResourceBlocksFactory,
             IEdFiVersionsChecker edFiVersionsChecker,
             ISourceCurrentChangeVersionProvider sourceCurrentChangeVersionProvider,
             IEdFiDataSourceDetails edFiDataSourceDetails,
             IEdFiDataSinkDetails edFiDataSinkDetails,
             ISourceIsolationApplicator sourceIsolationApplicator,
-            IDataSourceCapabilities dataSourceCapabilities)
+            IDataSourceCapabilities dataSourceCapabilities,
+            PublishErrorsBlocksFactory publishErrorsBlocksFactory,
+            IPostResourceBlocksFactory postResourceBlocksFactory,
+            DeleteResourceBlocksFactory deleteResourceBlocksFactory,
+            ChangeResourceKeyBlocksFactory changeResourceKeyBlocksFactory,
+            StreamResourceBlockFactory streamResourceBlockFactory,
+            StreamResourcePagesBlockFactory streamResourcePagesBlockFactory)
         {
             _resourceDependencyProvider = resourceDependencyProvider;
             _changeVersionProcessedWriter = changeVersionProcessedWriter;
@@ -66,6 +71,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _edFiDataSinkDetails = edFiDataSinkDetails;
             _sourceIsolationApplicator = sourceIsolationApplicator;
             _dataSourceCapabilities = dataSourceCapabilities;
+            _publishErrorsBlocksFactory = publishErrorsBlocksFactory;
+            _deleteResourceBlocksFactory = deleteResourceBlocksFactory;
+            _changeResourceKeyBlocksFactory = changeResourceKeyBlocksFactory;
+            _streamResourceBlockFactory = streamResourceBlockFactory;
+            _streamResourcePagesBlockFactory = streamResourcePagesBlockFactory;
         }
         
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
@@ -127,8 +137,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
                 
                 // Create the global error processing block
-                var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) =
-                    PublishErrors.GetBlocks(options, _errorPublisher);
+                var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) = _publishErrorsBlocksFactory.CreateBlocks(options);
                 
                 // Process all the key changes first
                 var keyChangesTaskStatuses = await ProcessKeyChangesToCompletionAsync(
@@ -675,8 +684,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         // sourceApiClient,
                         // targetApiClient,
                         deleteDependenciesByResourcePath,
-                        DeleteResource.CreateBlocks, 
-                        DeleteResource.CreateItemActionMessage,
+                        _deleteResourceBlocksFactory.CreateBlocks, 
+                        _deleteResourceBlocksFactory.CreateItemActionMessage,
                         options,
                         authorizationFailureHandling,
                         changeWindow,
@@ -756,8 +765,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                     var streamingPagesOfKeyChangesByResourcePath = InitiateResourceStreaming(
                         keyChangeDependenciesByResourcePath,
-                        ChangeResourceKey.CreateBlocks, 
-                        ChangeResourceKey.CreateItemActionMessage,
+                        _changeResourceKeyBlocksFactory.CreateBlocks, 
+                        _changeResourceKeyBlocksFactory.CreateItemActionMessage,
                         options,
                         authorizationFailureHandling,
                         changeWindow,
@@ -1018,11 +1027,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 // Create a new StreamResource block for the resource
                 TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TItemActionMessage>> streamResourceBlock 
-                    = StreamResource.CreateBlock(createItemActionMessage, errorHandlingBlock, options, cancellationToken);
+                    = _streamResourceBlockFactory.CreateBlock(createItemActionMessage, errorHandlingBlock, options, cancellationToken);
                 
                 // Create a new StreamResourcePages block
                 TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> streamResourcePagesBlock 
-                    = StreamResourcePages.CreateBlock<TItemActionMessage>(options, errorHandlingBlock);
+                    = _streamResourcePagesBlockFactory.CreateBlock<TItemActionMessage>(options, errorHandlingBlock);
 
                 // Link together the general pipeline
                 streamResourceBlock.LinkTo(streamResourcePagesBlock, linkOptions);

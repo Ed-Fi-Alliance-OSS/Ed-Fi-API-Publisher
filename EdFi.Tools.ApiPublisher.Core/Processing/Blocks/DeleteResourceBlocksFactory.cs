@@ -17,26 +17,40 @@ using Polly.Contrib.WaitAndRetry;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-    public static class DeleteResource
+    /// <summary>
+    /// Builds a pipeline that processes deletes against a target Ed-Fi ODS API.
+    /// </summary>
+    /// <remarks>Receives a <see cref="GetItemForDeletionMessage" />, transforms to a <see cref="DeleteItemMessage" /> before
+    /// producing <see cref="ErrorItemMessage" /> instances as output.</remarks>
+    public class DeleteResourceBlocksFactory
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(DeleteResource));
-        
-        public static ValueTuple<ITargetBlock<GetItemForDeletionMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
+        private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
+
+        private readonly ILog _logger = LogManager.GetLogger(typeof(DeleteResourceBlocksFactory));
+
+        public DeleteResourceBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider)
+        {
+            _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
+        }
+
+        public ValueTuple<ITargetBlock<GetItemForDeletionMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
-            TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> getItemForDeletionBlock = CreateGetItemForDeletionBlock(
-                createBlocksRequest.TargetApiClient,
-                createBlocksRequest.Options,
-                createBlocksRequest.ErrorHandlingBlock);
+            TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> getItemForDeletionBlock =
+                CreateGetItemForDeletionBlock(
+                    _targetEdFiApiClientProvider.GetApiClient(),
+                    createBlocksRequest.Options,
+                    createBlocksRequest.ErrorHandlingBlock);
 
-            TransformManyBlock<DeleteItemMessage, ErrorItemMessage> deleteResourceBlock = CreateDeleteResourceBlock(createBlocksRequest.TargetApiClient, createBlocksRequest.Options);
+            TransformManyBlock<DeleteItemMessage, ErrorItemMessage> deleteResourceBlock 
+                = CreateDeleteResourceBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options);
 
             getItemForDeletionBlock.LinkTo(deleteResourceBlock, new DataflowLinkOptions {PropagateCompletion = true});
             
             return (getItemForDeletionBlock, deleteResourceBlock);
         }
 
-        private static TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> CreateGetItemForDeletionBlock(
+        private TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> CreateGetItemForDeletionBlock(
             EdFiApiClient targetApiClient, 
             Options options, 
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
@@ -193,7 +207,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             }
         }
         
-        private static TransformManyBlock<DeleteItemMessage, ErrorItemMessage> CreateDeleteResourceBlock(
+        private TransformManyBlock<DeleteItemMessage, ErrorItemMessage> CreateDeleteResourceBlock(
             EdFiApiClient targetApiClient, Options options)
         {
             var deleteResourceBlock = new TransformManyBlock<DeleteItemMessage, ErrorItemMessage>(
@@ -291,7 +305,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             return deleteResourceBlock;
         }
 
-        public static GetItemForDeletionMessage CreateItemActionMessage(StreamResourcePageMessage<GetItemForDeletionMessage> msg, JObject j)
+        public GetItemForDeletionMessage CreateItemActionMessage(StreamResourcePageMessage<GetItemForDeletionMessage> msg, JObject j)
         {
             // Detect cancellation and quit returning messages
             if (msg.CancellationSource.IsCancellationRequested)

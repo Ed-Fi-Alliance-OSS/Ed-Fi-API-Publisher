@@ -6,22 +6,28 @@ using log4net;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-    public static class PublishErrors
+    public class PublishErrorsBlocksFactory
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(PublishErrors));
+        private readonly IErrorPublisher _errorPublisher;
         
-        public static ValueTuple<ITargetBlock<ErrorItemMessage>, ActionBlock<ErrorItemMessage[]>> GetBlocks(
-            Options options,
-            IErrorPublisher errorPublisher)
+        private readonly ILog _logger = LogManager.GetLogger(typeof(PublishErrorsBlocksFactory));
+
+        public PublishErrorsBlocksFactory(IErrorPublisher errorPublisher)
+        {
+            _errorPublisher = errorPublisher;
+        }
+        
+        public ValueTuple<ITargetBlock<ErrorItemMessage>, ActionBlock<ErrorItemMessage[]>> CreateBlocks(Options options)
         {
             var publishErrorsIngestionBlock = new BatchBlock<ErrorItemMessage>(options.ErrorPublishingBatchSize);
-            var publishErrorsCompletionBlock = CreatePublishErrorsBlock(errorPublisher);
+            var publishErrorsCompletionBlock = CreatePublishErrorsBlock(_errorPublisher);
+            
             publishErrorsIngestionBlock.LinkTo(publishErrorsCompletionBlock, new DataflowLinkOptions {PropagateCompletion = true});
 
             return (publishErrorsIngestionBlock, publishErrorsCompletionBlock);
         }
         
-        private static ActionBlock<ErrorItemMessage[]> CreatePublishErrorsBlock(IErrorPublisher errorPublisher)
+        private ActionBlock<ErrorItemMessage[]> CreatePublishErrorsBlock(IErrorPublisher errorPublisher)
         {
             return new ActionBlock<ErrorItemMessage[]>(async errors =>
             {

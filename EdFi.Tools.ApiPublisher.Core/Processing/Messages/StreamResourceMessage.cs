@@ -29,8 +29,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // ----------------------------
         // Global processing context
         // ----------------------------
-        public CancellationTokenSource CancellationSource { get; set; }
-        public SemaphoreSlim ProcessingSemaphore { get; set; }
-        public ChangeWindow ChangeWindow { get; set; }
+        public CancellationTokenSource? CancellationSource { get; set; }
+        public SemaphoreSlim? ProcessingSemaphore { get; set; }
+        public ChangeWindow? ChangeWindow { get; set; }
     }
 }
