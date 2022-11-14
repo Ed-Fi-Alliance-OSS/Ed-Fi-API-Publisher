@@ -224,7 +224,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             var hierarchy = LogManager.GetRepository(Assembly.GetExecutingAssembly());
             XmlConfigurator.Configure(hierarchy, ms);
 
-            var _logger = LogManager.GetLogger(typeof(KeyChangesTests));
+            var _logger = LogManager.GetLogger(typeof(TestHelpers));
             _logger.Debug("Test logging initialized.");
 
             return hierarchy;

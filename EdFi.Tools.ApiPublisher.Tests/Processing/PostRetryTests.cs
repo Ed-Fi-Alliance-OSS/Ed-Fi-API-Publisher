@@ -6,10 +6,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using Bogus;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
+using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
+using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
+using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using EdFi.Tools.ApiPublisher.Tests.Models;
@@ -162,6 +167,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     ignoreSslErrors: true,
                     httpClientHandler: new HttpClientHandlerFakeBridge(fakeTargetRequestHandler));
 
+            var sourceEdFiApiClientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(SourceApiClientFactory));
+            var targetEdFiApiClientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory));
+
             var authorizationFailureHandling = TestHelpers.Configuration.GetAuthorizationFailureHandling();
 
             // Only include descriptors if our test subject resource is a descriptor (trying to avoid any dependencies to keep things simpler)
@@ -173,28 +181,41 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                 authorizationFailureHandling,
                 Array.Empty<string>(),
-                // sourceApiConnectionDetails,
-                // targetApiConnectionDetails,
-                // SourceApiClientFactory,
-                // TargetApiClientFactory,
-                null,
+                null as Func<string>,
                 options,
-                configurationStoreSection,
-                new EdFiApiClientProvider(new Lazy<EdFiApiClient>(SourceApiClientFactory)),
-                new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)));
+                configurationStoreSection);
 
             // Initialize logging
             var loggerRepository = await TestHelpers.InitializeLogging();
 
             // Create dependencies
-            var resourceDependencyProvider = new ResourceDependencyProvider();
+            var resourceDependencyMetadataProvider = new EdFiOdsApiGraphMLDependencyMetadataProvider(targetEdFiApiClientProvider);
+            var resourceDependencyProvider = new ResourceDependencyProvider(resourceDependencyMetadataProvider);
             var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
             var errorPublisher = A.Fake<IErrorPublisher>();
             var nodeJsService = A.Fake<INodeJSService>();
 
-            var postResourceBlocksFactory = new PostResourceBlocksFactory(nodeJsService); 
+            var sourceEdFiVersionMetadataProvider = new SourceEdFiOdsApiVersionMetadataProvider(sourceEdFiApiClientProvider);
+            var targetEdFiVersionMetadataProvider = new TargetEdFiOdsApiVersionMetadataProvider(targetEdFiApiClientProvider);
 
-            var changeProcessor = new ChangeProcessor(resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher, postResourceBlocksFactory);
+            var edFiVersionsChecker = new EdFiVersionsChecker(
+                sourceEdFiVersionMetadataProvider,
+                targetEdFiVersionMetadataProvider);
+
+            var sourceCurrentChangeVersionProvider = new EdFiOdsApiSourceCurrentChangeVersionProvider(sourceEdFiApiClientProvider);
+            var sourceIsolationApplicator = new EdFiOdsApiSourceIsolationApplicator(sourceEdFiApiClientProvider);
+            var dataSourceCapabilities = new EdFiOdsApiDataSourceCapabilities(sourceEdFiApiClientProvider);
+            
+            var changeProcessor = new ChangeProcessor(
+                resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher, edFiVersionsChecker, sourceCurrentChangeVersionProvider, 
+                sourceApiConnectionDetails, targetApiConnectionDetails, sourceIsolationApplicator, dataSourceCapabilities,
+                new PublishErrorsBlocksFactory(errorPublisher),
+                new PostResourceBlocksFactory(nodeJsService, sourceEdFiApiClientProvider, targetEdFiApiClientProvider),
+                new DeleteResourceBlocksFactory(targetEdFiApiClientProvider),
+                new ChangeResourceKeyBlocksFactory(targetEdFiApiClientProvider),
+                new StreamResourceBlockFactory(new EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer(new EdFiOdsApiDataSourceTotalCountProvider(sourceEdFiApiClientProvider))),
+                new StreamResourcePagesBlockFactory(new EdFiOdsApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider, new EdFiOdsApiTargetItemActionMessageProducer())));
+            
             await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, CancellationToken.None);
 
             // Console.WriteLine(loggerRepository.LoggedContent());
