@@ -92,6 +92,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     foreach (var enhancer in enhancers)
                     {
                         _logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
+                        enhancer.Enhance(initialConfiguration, configBuilder);
                     }
                 }
                 
