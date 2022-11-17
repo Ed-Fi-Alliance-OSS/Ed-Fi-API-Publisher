@@ -5,7 +5,6 @@ using Microsoft.Extensions.Configuration;
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
     public class ConfigurationBuilderFactory 
-        //: IConfigurationBuilderFactory
     {
         /// <summary>
         /// Creates a configuration builder incorporating settings files, environment variables and command-line arguments.
@@ -20,7 +19,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 .AddEnvironmentVariables("EdFi:ApiPublisher:")
                 .AddCommandLine(commandLineArgs, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    // API connections configuration
+                    // Source API connection configuration
                     ["--sourceName"] = "Connections:Source:Name",
                     ["--sourceUrl"] = "Connections:Source:Url",
                     ["--sourceKey"] = "Connections:Source:Key",
@@ -28,6 +27,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--sourceScope"] = "Connections:Source:Scope",
                     ["--sourceSchoolYear"] = "Connections:Source:SchoolYear",
                     ["--lastChangeVersionProcessed"] = "Connections:Source:LastChangeVersionProcessed",
+                    
+                    // Target API connection configuration
                     ["--targetName"] = "Connections:Target:Name",
                     ["--targetUrl"] = "Connections:Target:Url",
                     ["--targetKey"] = "Connections:Target:Key",

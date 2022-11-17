@@ -21,7 +21,8 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
 
     private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiVersionsChecker));
     
-    public EdFiVersionsChecker(ISourceEdFiOdsApiVersionMetadataProvider sourceEdFiOdsApiVersionMetadataProvider,
+    public EdFiVersionsChecker(
+        ISourceEdFiOdsApiVersionMetadataProvider sourceEdFiOdsApiVersionMetadataProvider,
         ITargetEdFiOdsApiVersionMetadataProvider targetEdFiOdsApiVersionMetadataProvider)
     {
         _sourceEdFiOdsApiVersionMetadataProvider = sourceEdFiOdsApiVersionMetadataProvider;

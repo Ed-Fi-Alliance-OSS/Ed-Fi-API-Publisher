@@ -34,6 +34,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public ChangeWindow? ChangeWindow { get; set; }
         public CancellationTokenSource CancellationSource { get; set; }
 
+        // TODO: GKM - Need to eliminate use of JObject in signature of this factory method -- needs proper abstractions
         public Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> CreateItemActionMessage { get; set; }
     }
 }

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Amazon.SimpleSystemsManagement.Model.Internal.MarshallTransformations;
 using Autofac;
 using Autofac.Core;
 using Autofac.Extensions.DependencyInjection;
@@ -34,14 +35,14 @@ namespace EdFi.Tools.ApiPublisher.Cli
 {
     internal class Program
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Program));
+        private static readonly ILog _logger = LogManager.GetLogger(typeof(Program));
 
         private static async Task<int> Main(string[] args)
         {
             InitializeLogging();
 
-            Logger.Info(
-                "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoffrey@mcelhanon.com, Edufied LLC) in conjunction with Student1.");
+            _logger.Info(
+                "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoff@edufied.com, Edufied LLC) in conjunction with Student1.");
 
             var cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = cancellationTokenSource.Token;
@@ -61,35 +62,36 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 // Initialize the container
                 var containerBuilder = new ContainerBuilder();
 
-                InitializeNodeJsForRemediations(containerBuilder, initialConfiguration);
+                // Prepare NodeJS (if remediations file supplied)
+                var remediationsModule = new NodeJsRemediationsModule(initialConfiguration);
+                containerBuilder.RegisterModule(remediationsModule);
 
-                IContainer container;
+                IContainer rootContainer;
 
                 try
                 {
                     var configurationStoreSection = initialConfiguration.GetSection("configurationStore");
-                    container = InitializeContainer(containerBuilder, configurationStoreSection);
+                    rootContainer = InitializeRootContainer(containerBuilder, configurationStoreSection);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"Configuration failed: {ex.Message}");
+                    _logger.Error($"Configuration failed: {ex.Message}");
 
                     return -1;
                 }
 
-                var serviceProvider = new AutofacServiceProvider(container);
+                var serviceProvider = new AutofacServiceProvider(rootContainer);
 
-                // After container has been initialized, now enhance the configuration builder
+                // After root container has been initialized, resolve configuration builder enhancers and enhance the configuration details
                 if (connections.Source.NeedsResolution() || connections.Target.NeedsResolution())
                 {
-                    Logger.Debug($"API connection details are incomplete from initial configuration. Beginning configuration enhancement processing...");
+                    _logger.Debug($"API connection details are incomplete from initial configuration. Beginning configuration enhancement processing...");
                     
                     var enhancers = serviceProvider.GetServices<IConfigurationBuilderEnhancer>();
 
                     foreach (var enhancer in enhancers)
                     {
-                        Logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
-                        enhancer.Enhance(configBuilder);
+                        _logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
                     }
                 }
                 
@@ -97,93 +99,101 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var finalConfiguration = configBuilder.Build();
                 
                 // Prepare final runtime configuration
+
                 // API Publisher Settings
                 var publisherSettings = finalConfiguration.Get<ApiPublisherSettings>();
                 
+                // Validate the finalized options
                 var options = publisherSettings.Options;
-                Logger.Debug($"Validating configuration options...");
+                _logger.Debug($"Validating configuration options...");
                 ValidateOptions(options);
                 
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
                 var resourcesWithUpdatableKeys = publisherSettings.ResourcesWithUpdatableKeys;
 
-                // Create execution container
-                var executionContainer = container.BeginLifetimeScope(
-                    cb =>
+                // Create child container for execution
+                var executionContainer = rootContainer.BeginLifetimeScope(
+                    builder =>
                     {
-                        // Additional registrations
-                        
-                        // API dependency metadata from TARGET API
-                        cb.RegisterType<IGraphMLDependencyMetadataProvider>()
-                            .As<EdFiOdsApiGraphMLDependencyMetadataProvider>()
-                            .WithParameter(
-                                new ResolvedParameter(
-                                    (pi, ctx) => pi.ParameterType == typeof(IEdFiApiClientProvider),
-                                    (pi, ctx) => ctx.Resolve<ITargetEdFiApiClientProvider>()));
-                        
+                        // ------------------------------------------------------------------------------------
+                        //  Ed-Fi API as SOURCE
+                        // ------------------------------------------------------------------------------------
+                        // Register source and target EdFiApiClients
+                        builder.RegisterModule(new EdFiOdsApiAsDataSourceModule(finalConfiguration));
+
                         // Available ChangeVersions for Source API
-                        cb.RegisterType<EdFiOdsApiSourceCurrentChangeVersionProvider>()
+                        builder.RegisterType<EdFiOdsApiSourceCurrentChangeVersionProvider>()
                             .As<ISourceCurrentChangeVersionProvider>()
                             .SingleInstance();
                         
                         // Version metadata for a Source API
-                        cb.RegisterType<SourceEdFiOdsApiVersionMetadataProvider>()
+                        builder.RegisterType<SourceEdFiOdsApiVersionMetadataProvider>()
                             .As<ISourceEdFiOdsApiVersionMetadataProvider>()
                             .SingleInstance();
 
-                        // Version metadata for a Target API
-                        cb.RegisterType<TargetEdFiOdsApiVersionMetadataProvider>()
-                            .As<ITargetEdFiOdsApiVersionMetadataProvider>()
-                            .SingleInstance();
-
                         // Snapshot Isolation applicator for Source API
-                        cb.RegisterType<EdFiOdsApiSourceIsolationApplicator>()
+                        builder.RegisterType<EdFiOdsApiSourceIsolationApplicator>()
                             .As<ISourceIsolationApplicator>()
                             .SingleInstance();
                         
                         // Determine data source capabilities for Source API
-                        cb.RegisterType<EdFiOdsApiDataSourceCapabilities>()
+                        builder.RegisterType<EdFiOdsApiDataSourceCapabilities>()
                             .As<IDataSourceCapabilities>()
                             .SingleInstance();
-                        
-                        // General purpose version checker
-                        cb.RegisterType<EdFiVersionsChecker>()
-                            .As<IEdFiVersionsChecker>()
-                            .SingleInstance();
-                            
-                        // Register source and target EdFiApiClients
-                        cb.RegisterModule(new EdFiApiClientsModule(finalConfiguration));
-                        
+
                         // Register resource page message producer using a limit/offset paging strategy
-                        cb.RegisterType<EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer>()
+                        builder.RegisterType<EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer>()
                             .As<IStreamResourcePageMessageProducer>()
                             .SingleInstance();
 
-                        cb.RegisterType<EdFiOdsApiStreamResourcePageMessageHandler>()
+                        // Register handler to perform page-based requests against a Source API
+                        builder.RegisterType<EdFiOdsApiStreamResourcePageMessageHandler>()
                             .As<IStreamResourcePageMessageHandler>()
                             .SingleInstance();
 
-                        cb.RegisterType<EdFiOdsApiTargetItemActionMessageProducer>()
+                        // Register Data Source Total Count provider for Source API
+                        builder.RegisterType<EdFiOdsApiDataSourceTotalCountProvider>()
+                            .As<IEdFiDataSourceTotalCountProvider>()
+                            .SingleInstance();
+                        // ------------------------------------------------------------------------------------
+
+                        // ------------------------------------------------------------------------------------
+                        //  Ed-Fi API as TARGET
+                        // ------------------------------------------------------------------------------------
+                        // Version metadata for a Target API
+                        builder.RegisterType<TargetEdFiOdsApiVersionMetadataProvider>()
+                            .As<ITargetEdFiOdsApiVersionMetadataProvider>()
+                            .SingleInstance();
+
+                        // API dependency metadata from Ed-Fi ODS API (using Target API)
+                        builder.RegisterType<IGraphMLDependencyMetadataProvider>()
+                            .As<EdFiOdsApiGraphMLDependencyMetadataProvider>()
+                            .WithParameter(
+                                // Configure to use with Target API
+                                new ResolvedParameter(
+                                    (pi, ctx) => pi.ParameterType == typeof(IEdFiApiClientProvider),
+                                    (pi, ctx) => ctx.Resolve<ITargetEdFiApiClientProvider>()));
+
+                        // Register source and target EdFiApiClients
+                        builder.RegisterModule(new EdFiOdsApiAsDataSinkModule(finalConfiguration));
+                        // ------------------------------------------------------------------------------------
+
+                        // TODO: This abstraction needs work. It parses JSON to an array, and produces individual action items using a factory method passed along on the page-level message
+                        builder.RegisterType<EdFiOdsApiTargetItemActionMessageProducer>()
                             .As<IItemActionMessageProducer>()
                             .SingleInstance();
                         
-                        // Register Data Source Total Count provider for Source API
-                        cb.RegisterType<EdFiOdsApiDataSourceTotalCountProvider>()
-                            .As<IEdFiDataSourceTotalCountProvider>()
-                            .SingleInstance();
-                        
                         // Block factories
-                        cb.RegisterType<PublishErrorsBlocksFactory>().SingleInstance();
-                        cb.RegisterType<PublishErrorsBlocksFactory>().SingleInstance();
-                        cb.RegisterType<DeleteResourceBlocksFactory>().SingleInstance();
-                        cb.RegisterType<ChangeResourceKeyBlocksFactory>().SingleInstance();
-                        cb.RegisterType<StreamResourceBlockFactory>().SingleInstance();
-                        cb.RegisterType<StreamResourcePagesBlockFactory>().SingleInstance();
+                        builder.RegisterType<StreamResourceBlockFactory>().SingleInstance();
+                        builder.RegisterType<StreamResourcePagesBlockFactory>().SingleInstance();
+
+                        builder.RegisterType<ChangeResourceKeyBlocksFactory>().SingleInstance();
+                        builder.RegisterType<PostResourceBlocksFactory>().SingleInstance();
+                        builder.RegisterType<DeleteResourceBlocksFactory>().SingleInstance();
+
+                        builder.RegisterType<PublishErrorsBlocksFactory>().SingleInstance();
                     });
                 
-                // EdFiApiClient CreateSourceApiClient() => new ("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
-                // EdFiApiClient CreateTargetApiClient() => new ("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
-
                 Func<string> moduleFactory = null;
 
                 if (!string.IsNullOrWhiteSpace(options.RemediationsScriptFile))
@@ -196,54 +206,24 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
                     resourcesWithUpdatableKeys,
-                    // sourceApiConnectionDetails,
-                    // targetApiConnectionDetails,
-                    // CreateSourceApiClient,
-                    // CreateTargetApiClient,
                     moduleFactory,
                     options,
                     configurationSection);
 
-                // var changeProcessor = serviceProvider.GetRequiredService<IChangeProcessor>();
-                
                 var changeProcessor = executionContainer.Resolve<IChangeProcessor>();
 
-                Logger.Info($"Processing started.");
+                _logger.Info($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
-                Logger.Info($"Processing complete.");
+                _logger.Info($"Processing complete.");
 
                 return 0;
             }
             catch (Exception ex)
             {
-                Logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
+                _logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
                 
                 return -1;
             }
-        }
-
-        private static void InitializeNodeJsForRemediations(ContainerBuilder containerBuilder, IConfigurationRoot initialConfiguration)
-        {
-            string remediationsScriptFile = initialConfiguration.GetValue<string>("Options:RemediationsScriptFile");
-
-            var services = new ServiceCollection();
-
-            if (!string.IsNullOrEmpty(remediationsScriptFile))
-            {
-                // Add support for NodeJS
-                services.AddNodeJS();
-
-                // Allow for multiple node processes to support processing
-                services.Configure<OutOfProcessNodeJSServiceOptions>(options => { options.Concurrency = Concurrency.MultiProcess; });
-            }
-            else
-            {
-                // Provide an instance of an implementations that throws exceptions if called
-                services.AddSingleton<INodeJSService>(new NullNodeJsService());
-            }
-
-            // Populate the container with the service collection
-            containerBuilder.Populate(services);
         }
 
         private static void ValidateOptions(Options options)
@@ -329,7 +309,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             // If source and target connections are fully defined, we're done
             if (connections.Source.IsFullyDefined() && connections.Target.IsFullyDefined())
             {
-                Logger.Debug($"Source and target API connections are fully defined. No named connections are being used.");
+                _logger.Debug($"Source and target API connections are fully defined. No named connections are being used.");
                 return;
             }
 
@@ -345,7 +325,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             }
         }
 
-        private static IContainer InitializeContainer(
+        private static IContainer InitializeRootContainer(
             ContainerBuilder containerBuilder,
             IConfigurationSection configurationStoreSection)
         {
@@ -371,7 +351,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
             string configurationSourceName = configurationStoreSection.GetValue<string>("provider");
             
-            Logger.Debug($"Configuration store provider is '{configurationSourceName}'...");
+            _logger.Debug($"Configuration store provider is '{configurationSourceName}'...");
             
             var moduleType = FindApiConnectionConfigurationModuleType();
 
@@ -388,7 +368,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 throw new Exception($"Unable to create the installer module '{moduleType.Name}' for connection configuration source '{configurationSourceName}'.");
             }
             
-            Logger.Debug($"Registering configuration store provider module '{moduleType.FullName}'...");
+            _logger.Debug($"Registering configuration store provider module '{moduleType.FullName}'...");
             
             containerBuilder.RegisterModule(module);
 
@@ -399,7 +379,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             
                 foreach (FileInfo fileInfo in directoryInfo.GetFiles("EdFi*.dll"))
                 {
-                    Logger.Debug($"Ensuring that assembly '{fileInfo.Name}' is loaded...");
+                    _logger.Debug($"Ensuring that assembly '{fileInfo.Name}' is loaded...");
                     Assembly.LoadFrom(fileInfo.FullName);
                 }
             }

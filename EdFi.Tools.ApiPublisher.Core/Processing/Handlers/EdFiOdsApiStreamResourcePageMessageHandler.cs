@@ -29,7 +29,9 @@ public class EdFiOdsApiStreamResourcePageMessageHandler : IStreamResourcePageMes
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
     private readonly IItemActionMessageProducer _itemActionMessageProducer;
 
-    public EdFiOdsApiStreamResourcePageMessageHandler(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider, IItemActionMessageProducer itemActionMessageProducer)
+    public EdFiOdsApiStreamResourcePageMessageHandler(
+        ISourceEdFiApiClientProvider sourceEdFiApiClientProvider,
+        IItemActionMessageProducer itemActionMessageProducer)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
         _itemActionMessageProducer = itemActionMessageProducer;

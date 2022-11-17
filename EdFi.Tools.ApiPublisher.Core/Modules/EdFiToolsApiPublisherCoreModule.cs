@@ -2,6 +2,7 @@ using Autofac;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Versioning;
 
 namespace EdFi.Tools.ApiPublisher.Core.Modules
 {
@@ -19,6 +20,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
 
             builder.RegisterType<Log4NetErrorPublisher>()
                 .As<IErrorPublisher>()
+                .SingleInstance();
+            
+            // General purpose version checker
+            builder.RegisterType<EdFiVersionsChecker>()
+                .As<IEdFiVersionsChecker>()
                 .SingleInstance();
         }
     }

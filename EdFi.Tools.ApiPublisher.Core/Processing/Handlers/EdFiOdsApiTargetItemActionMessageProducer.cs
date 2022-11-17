@@ -23,6 +23,7 @@ public class EdFiOdsApiTargetItemActionMessageProducer : IItemActionMessageProdu
         // Iterate through the returned items
         foreach (var item in items.OfType<JObject>())
         {
+            // TODO: GKM - Should this be using an injected item rather than a factory method passed along through messages?
             var actionMessage = pageMessage.CreateItemActionMessage(pageMessage, item);
 
             // Stop processing individual items if cancellation has been requested

@@ -18,7 +18,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public ApiConnectionDetails Target { get; set; }
     }
 
-    public interface INamedSourceOrSink
+    public interface INamedDataSourceOrSink
     {
         string Name { get; set; }
         
@@ -29,7 +29,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         // TODO: Should this property really be here?
     }
 
-    public interface IEdFiDataSourceDetails : INamedSourceOrSink
+    public interface IEdFiDataSourceDetails : INamedDataSourceOrSink
     {
         public bool? IgnoreIsolation { get; set; }
 
@@ -44,7 +44,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public string ExcludeOnly { get; set; }
     }
     
-    public interface IEdFiDataSinkDetails : INamedSourceOrSink { }
+    public interface IEdFiDataSinkDetails : INamedDataSourceOrSink { }
     
     public class ApiConnectionDetails : IEdFiDataSourceDetails, IEdFiDataSinkDetails
     {
