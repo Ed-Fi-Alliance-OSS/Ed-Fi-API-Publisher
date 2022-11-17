@@ -5,19 +5,17 @@
 
 using System;
 using Autofac;
-using Autofac.Core;
-using Autofac.Core.Registration;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Cli;
+namespace EdFi.Tools.ApiPublisher.Core.Modules;
 
-public class EdFiApiClientsModule : Module
+public class EdFiOdsApiAsDataSinkModule : Module
 {
     private readonly IConfigurationRoot _finalConfiguration;
 
-    public EdFiApiClientsModule(IConfigurationRoot finalConfiguration)
+    public EdFiOdsApiAsDataSinkModule(IConfigurationRoot finalConfiguration)
     {
         _finalConfiguration = finalConfiguration;
     }
@@ -28,19 +26,10 @@ public class EdFiApiClientsModule : Module
         var options = _finalConfiguration.Get<ApiPublisherSettings>().Options;
         
         // Initialize source/target API clients
-        var sourceApiConnectionDetails = apiConnections.Source;
         var targetApiConnectionDetails = apiConnections.Target;
 
-        builder.RegisterInstance(sourceApiConnectionDetails).As<IEdFiDataSourceDetails>();
         builder.RegisterInstance(targetApiConnectionDetails).As<IEdFiDataSinkDetails>();
         
-        var sourceEdFiApiClient = new Lazy<EdFiApiClient>(
-            () => new EdFiApiClient(
-                "Source",
-                sourceApiConnectionDetails,
-                options.BearerTokenRefreshMinutes,
-                options.IgnoreSSLErrors));
-
         var targetEdFiApiClient = new Lazy<EdFiApiClient>(
             () => new EdFiApiClient(
                 "Target",
@@ -48,7 +37,6 @@ public class EdFiApiClientsModule : Module
                 options.BearerTokenRefreshMinutes,
                 options.IgnoreSSLErrors));
 
-        builder.RegisterInstance(new EdFiApiClientProvider(sourceEdFiApiClient)).As<ISourceEdFiApiClientProvider>();
         builder.RegisterInstance(new EdFiApiClientProvider(targetEdFiApiClient)).As<ITargetEdFiApiClientProvider>();
     }
 }
