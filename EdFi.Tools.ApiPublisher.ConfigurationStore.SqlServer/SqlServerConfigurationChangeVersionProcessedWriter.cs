@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
 {
     public class SqlServerConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {

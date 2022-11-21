@@ -1,4 +1,4 @@
-namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
 {
     public class SqlServerConfigurationStore
     {

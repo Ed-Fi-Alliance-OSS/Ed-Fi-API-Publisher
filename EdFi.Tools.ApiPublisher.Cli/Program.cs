@@ -43,7 +43,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     // typeof(EdFi.Tools.ApiPublisher.Connections.SqlLite.Plugin),
                     typeof(ConfigurationStore.Aws.Plugin),
                     typeof(EdFi.Tools.ApiPublisher.Configuration.PostgreSql.Plugin),
-                    typeof(EdFi.Tools.ApiPublisher.Configuration.SqlServer.Plugin),
+                    typeof(ConfigurationStore.SqlServer.Plugin),
                     typeof(EdFi.Tools.ApiPublisher.Configuration.Plaintext.Plugin),
                 };
                 

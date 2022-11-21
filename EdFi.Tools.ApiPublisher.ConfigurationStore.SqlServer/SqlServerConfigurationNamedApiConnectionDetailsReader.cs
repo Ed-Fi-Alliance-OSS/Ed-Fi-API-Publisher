@@ -2,7 +2,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
 {
     public class SqlServerConfigurationNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {

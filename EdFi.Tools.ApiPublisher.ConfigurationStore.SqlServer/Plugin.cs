@@ -1,10 +1,10 @@
 using Autofac;
-using EdFi.Tools.ApiPublisher.Configuration.SqlServer.Modules;
+using EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer.Modules;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Plugin;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer;
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer;
 
 public class Plugin : IPlugin
 {

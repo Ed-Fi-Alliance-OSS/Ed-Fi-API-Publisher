@@ -1,4 +1,4 @@
-using EdFi.Tools.ApiPublisher.Configuration.SqlServer;
+using EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer;
 
 // ReSharper disable once CheckNamespace
 namespace Microsoft.Extensions.Configuration
