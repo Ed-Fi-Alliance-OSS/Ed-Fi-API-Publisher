@@ -16,16 +16,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Versioning;
 
 public class EdFiVersionsChecker : IEdFiVersionsChecker
 {
-    private readonly ISourceEdFiOdsApiVersionMetadataProvider _sourceEdFiOdsApiVersionMetadataProvider;
+    private readonly ISourceEdFiApiVersionMetadataProvider _sourceEdFiApiVersionMetadataProvider;
     private readonly ITargetEdFiOdsApiVersionMetadataProvider _targetEdFiOdsApiVersionMetadataProvider;
 
     private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiVersionsChecker));
     
     public EdFiVersionsChecker(
-        ISourceEdFiOdsApiVersionMetadataProvider sourceEdFiOdsApiVersionMetadataProvider,
+        ISourceEdFiApiVersionMetadataProvider sourceEdFiApiVersionMetadataProvider,
         ITargetEdFiOdsApiVersionMetadataProvider targetEdFiOdsApiVersionMetadataProvider)
     {
-        _sourceEdFiOdsApiVersionMetadataProvider = sourceEdFiOdsApiVersionMetadataProvider;
+        _sourceEdFiApiVersionMetadataProvider = sourceEdFiApiVersionMetadataProvider;
         _targetEdFiOdsApiVersionMetadataProvider = targetEdFiOdsApiVersionMetadataProvider;
     }
     
@@ -33,7 +33,7 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
     {
         _logger.Debug($"Loading source and target API version information...");
 
-        var sourceVersionTask = _sourceEdFiOdsApiVersionMetadataProvider.GetVersionMetadata();
+        var sourceVersionTask = _sourceEdFiApiVersionMetadataProvider.GetVersionMetadata();
         var targetVersionTask = _targetEdFiOdsApiVersionMetadataProvider.GetVersionMetadata();
 
         await Task.WhenAll(sourceVersionTask, targetVersionTask).ConfigureAwait(false);

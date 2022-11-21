@@ -5,8 +5,15 @@
 
 using Autofac;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
-using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Handling;
-using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Initiators;
+using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
+using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing;
+using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.Capabilities;
+using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.Counting;
+using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.Isolation;
+using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.MessageHandlers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.MessageProducers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.Versioning;
+using EdFi.Tools.ApiPublisher.Connections.Api.Target.Processing.Initiators;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -51,38 +58,38 @@ public class EdFiApiAsSourceModule : Module
             .SingleInstance();
         
         // Available ChangeVersions for Source API
-        builder.RegisterType<EdFiOdsApiSourceCurrentChangeVersionProvider>()
+        builder.RegisterType<EdFiApiSourceCurrentChangeVersionProvider>()
             .As<ISourceCurrentChangeVersionProvider>()
             .SingleInstance();
 
         // Version metadata for a Source API
-        builder.RegisterType<SourceEdFiOdsApiVersionMetadataProvider>()
-            .As<ISourceEdFiOdsApiVersionMetadataProvider>()
+        builder.RegisterType<SourceEdFiApiVersionMetadataProvider>()
+            .As<ISourceEdFiApiVersionMetadataProvider>()
             .SingleInstance();
 
         // Snapshot Isolation applicator for Source API
-        builder.RegisterType<EdFiOdsApiSourceIsolationApplicator>()
+        builder.RegisterType<EdFiApiSourceIsolationApplicator>()
             .As<ISourceIsolationApplicator>()
             .SingleInstance();
 
         // Determine data source capabilities for Source API
-        builder.RegisterType<EdFiApiDataSourceCapabilities>()
-            .As<IDataSourceCapabilities>()
+        builder.RegisterType<EdFiApiSourceCapabilities>()
+            .As<ISourceCapabilities>()
             .SingleInstance();
 
         // Register resource page message producer using a limit/offset paging strategy
-        builder.RegisterType<EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer>()
+        builder.RegisterType<EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer>()
             .As<IStreamResourcePageMessageProducer>()
             .SingleInstance();
         
         // Register handler to perform page-based requests against a Source API
-        builder.RegisterType<ApiStreamResourcePageMessageHandler>()
+        builder.RegisterType<EdFiApiStreamResourcePageMessageHandler>()
             .As<IStreamResourcePageMessageHandler>()
             .SingleInstance();
 
         // Register Data Source Total Count provider for Source API
-        builder.RegisterType<EdFiOdsApiDataSourceTotalCountProvider>()
-            .As<IEdFiDataSourceTotalCountProvider>()
+        builder.RegisterType<EdFiApiSourceTotalCountProvider>()
+            .As<ISourceTotalCountProvider>()
             .SingleInstance();
         
         // Register the processing stage initiators

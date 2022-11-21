@@ -6,6 +6,9 @@
 using Autofac;
 using Autofac.Core;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
+using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
+using EdFi.Tools.ApiPublisher.Connections.Api.Target.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
@@ -49,12 +52,12 @@ public class EdFiApiAsTargetModule : Module
             .SingleInstance();
         
         // Version metadata for a Target API
-        builder.RegisterType<TargetEdFiOdsApiVersionMetadataProvider>()
+        builder.RegisterType<TargetEdFiApiVersionMetadataProvider>()
             .As<ITargetEdFiOdsApiVersionMetadataProvider>()
             .SingleInstance();
 
         // API dependency metadata from Ed-Fi ODS API (using Target API)
-        builder.RegisterType<EdFiOdsApiGraphMLDependencyMetadataProvider>()
+        builder.RegisterType<EdFiApiGraphMLDependencyMetadataProvider>()
             .As<IGraphMLDependencyMetadataProvider>()
             .WithParameter(
                 // Configure to use with Target API
@@ -63,16 +66,16 @@ public class EdFiApiAsTargetModule : Module
                     (pi, ctx) => ctx.Resolve<ITargetEdFiApiClientProvider>()));
         
         // Target Data Processing
-        builder.RegisterType<ChangeResourceKeyBlocksFactory>()
-            .As<IProcessDataPipelineFactory<GetItemForKeyChangeMessage>>()
+        builder.RegisterType<ChangeResourceKeyProcessingBlocksFactory>()
+            .As<IProcessingBlocksFactory<GetItemForKeyChangeMessage>>()
             .SingleInstance();
                         
-        builder.RegisterType<PostResourceBlocksFactory>()
-            .As<IProcessDataPipelineFactory<PostItemMessage>>()
+        builder.RegisterType<PostResourceProcessingBlocksFactory>()
+            .As<IProcessingBlocksFactory<PostItemMessage>>()
             .SingleInstance();
                         
-        builder.RegisterType<DeleteResourceBlocksFactory>()
-            .As<IProcessDataPipelineFactory<GetItemForDeletionMessage>>()
+        builder.RegisterType<DeleteResourceProcessingBlocksFactory>()
+            .As<IProcessingBlocksFactory<GetItemForDeletionMessage>>()
             .SingleInstance();
     }
 }

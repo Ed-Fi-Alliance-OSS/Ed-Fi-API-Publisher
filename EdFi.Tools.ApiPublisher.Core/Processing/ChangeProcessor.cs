@@ -44,7 +44,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly ISourceConnectionDetails _sourceConnectionDetails;
         private readonly ITargetConnectionDetails _targetConnectionDetails;
         private readonly ISourceIsolationApplicator _sourceIsolationApplicator;
-        private readonly IDataSourceCapabilities _dataSourceCapabilities;
+        private readonly ISourceCapabilities _sourceCapabilities;
         private readonly PublishErrorsBlocksFactory _publishErrorsBlocksFactory;
         private readonly IIndex<PublishingStage, IPublishingStageInitiator> _publishingStageInitiatorByStage;
 
@@ -57,7 +57,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             ISourceConnectionDetails sourceConnectionDetails,
             ITargetConnectionDetails targetConnectionDetails,
             ISourceIsolationApplicator sourceIsolationApplicator,
-            IDataSourceCapabilities dataSourceCapabilities,
+            ISourceCapabilities sourceCapabilities,
             PublishErrorsBlocksFactory publishErrorsBlocksFactory,
             IIndex<PublishingStage, IPublishingStageInitiator> publishingStageInitiatorByStage)
         {
@@ -69,7 +69,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _sourceConnectionDetails = sourceConnectionDetails;
             _targetConnectionDetails = targetConnectionDetails;
             _sourceIsolationApplicator = sourceIsolationApplicator;
-            _dataSourceCapabilities = dataSourceCapabilities;
+            _sourceCapabilities = sourceCapabilities;
             _publishErrorsBlocksFactory = publishErrorsBlocksFactory;
             _publishingStageInitiatorByStage = publishingStageInitiatorByStage;
         }
@@ -651,7 +651,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             {
                 // Probe for deletes support
                 string probeResourceKey = deleteDependenciesByResourcePath.First().Key;
-                var supportsDeletes = await _dataSourceCapabilities.SupportsDeletesAsync(probeResourceKey);
+                var supportsDeletes = await _sourceCapabilities.SupportsDeletesAsync(probeResourceKey);
 
                 if (supportsDeletes)
                 {
@@ -730,7 +730,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     return Array.Empty<TaskStatus>();
                 }
 
-                var supportsKeyChanges = await _dataSourceCapabilities.SupportsKeyChangesAsync(probeResourceKey);
+                var supportsKeyChanges = await _sourceCapabilities.SupportsKeyChangesAsync(probeResourceKey);
                 
                 if (supportsKeyChanges)
                 {
