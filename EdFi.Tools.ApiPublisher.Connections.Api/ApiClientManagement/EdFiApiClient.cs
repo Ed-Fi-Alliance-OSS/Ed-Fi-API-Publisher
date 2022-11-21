@@ -1,9 +1,5 @@
-using System;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Web;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
@@ -11,7 +7,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using log4net;
 using Newtonsoft.Json.Linq;
 
-namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
+namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
     public class EdFiApiClient : IDisposable
     {
@@ -30,11 +26,13 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             ApiConnectionDetails apiConnectionDetails,
             int bearerTokenRefreshMinutes,
             bool ignoreSslErrors,
-            HttpClientHandler httpClientHandler = null)
+            HttpClientHandler? httpClientHandler = null)
         {
+            ConnectionDetails = apiConnectionDetails ?? throw new ArgumentNullException(nameof(apiConnectionDetails));
             _name = name;
-            ConnectionDetails = apiConnectionDetails;
 
+            string apiUrl = apiConnectionDetails.Url ?? throw new Exception("URL for API connection '{name}' was not assigned.");
+            
             _dataManagementApiSegment
                 = new Lazy<string>(
                 () => ConnectionDetails.SchoolYear == null
@@ -57,13 +55,13 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 
             _httpClient = new HttpClient(httpClientHandler)
             {
-                BaseAddress = new Uri(apiConnectionDetails.Url.EnsureSuffixApplied("/"))
+                BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
             };
 
             // Create a separate HttpClient for token refreshes to avoid possible "Snapshot-Identifier" header presence
             _tokenRefreshHttpClient = new HttpClient(httpClientHandler)
             {
-                BaseAddress = new Uri(apiConnectionDetails.Url.EnsureSuffixApplied("/"))
+                BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
             };
 
             // Get initial bearer token for Ed-Fi ODS API
@@ -78,7 +76,7 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 
         public HttpClient HttpClient => _httpClient;
 
-        private async Task<string> GetBearerTokenAsync(HttpClient httpClient, string key, string secret, string scope)
+        private async Task<string> GetBearerTokenAsync(HttpClient httpClient, string key, string secret, string? scope)
         {
             if (_logger.IsDebugEnabled)
                 _logger.Debug($"Getting bearer token for {_name} API client with key {key.Substring(0, 3)}...");
@@ -121,10 +119,10 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             }
 
             var authResponseObject = JObject.Parse(authResponseContent);
-            
+
             if (!string.IsNullOrEmpty(scope))
             {
-                if (scope != authResponseObject["scope"].Value<string>())
+                if (scope != authResponseObject["scope"]?.Value<string>())
                 {
                     throw new Exception($"Authentication was successful for {_name.ToLower()} API client but the requested scope of '{scope}' was not honored by the host. Remove the 'scope' parameter from the connection information for this API endpoint to proceed with an unscoped access token.");
                 }
@@ -146,7 +144,7 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             return Convert.ToBase64String(plainTextBytes);
         }
         
-        private void RefreshBearerToken(object state)
+        private void RefreshBearerToken(object? state)
         {
             try
             {

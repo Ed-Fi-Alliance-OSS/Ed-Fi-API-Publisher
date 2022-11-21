@@ -17,7 +17,9 @@ namespace EdFi.Tools.ApiPublisher.Configuration.Plaintext
             
             var connections = config.Get<PlainTextNamedConnectionConfiguration>();
             
-            return connections.Connections.FirstOrDefault(x => x.Name.Equals(apiConnectionName, StringComparison.OrdinalIgnoreCase))
+            return connections.Connections
+                    .Where(details => details.Name != null)
+                    .FirstOrDefault(details => details.Name!.Equals(apiConnectionName, StringComparison.OrdinalIgnoreCase))
                 ?? new ApiConnectionDetails { Name = apiConnectionName };
         }
     }

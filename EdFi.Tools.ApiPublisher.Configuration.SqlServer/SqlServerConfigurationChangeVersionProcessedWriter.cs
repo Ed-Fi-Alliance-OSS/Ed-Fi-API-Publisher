@@ -4,7 +4,6 @@ using System.Data.SqlClient;
 using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using log4net;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -13,9 +12,6 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
 {
     public class SqlServerConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
-        private readonly ILog _logger =
-            LogManager.GetLogger(typeof(SqlServerConfigurationChangeVersionProcessedWriter));
-
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
             string targetConnectionName,
@@ -29,7 +25,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.SqlServer
 
             try
             {
-                using (var conn = new SqlConnection(sqlServerConfiguration.ConnectionString))
+                using (var conn = new SqlConnection(sqlServerConfiguration?.ConnectionString))
                 {
                     await conn.OpenAsync().ConfigureAwait(false);
 

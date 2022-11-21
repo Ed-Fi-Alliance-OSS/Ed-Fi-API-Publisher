@@ -1,9 +1,7 @@
 using System;
-using System.Data;
 using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using log4net;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -13,9 +11,6 @@ namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
 {
     public class PostgreSqlConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
-        private readonly ILog _logger =
-            LogManager.GetLogger(typeof(PostgreSqlConfigurationChangeVersionProcessedWriter));
-
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
             string targetConnectionName,
@@ -25,7 +20,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
             var postgresConfiguration = configurationStoreSection.Get<PostgresConfigurationStore>().PostgreSql;
 
             // Make sure Postgres configuration has encryption key provided
-            if (string.IsNullOrWhiteSpace(postgresConfiguration.EncryptionPassword)) 
+            if (string.IsNullOrWhiteSpace(postgresConfiguration?.EncryptionPassword)) 
             {
                 throw new Exception("The PostgreSQL Configuration Store encryption key for storing API keys and secrets was not provided.");
             }
@@ -40,7 +35,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
                 
                 var currentParameter = new JObject();
 
-                if (configurationValues.TryGetValue("lastChangeVersionsProcessed", out string changeVersionsJson))
+                if (configurationValues.TryGetValue("lastChangeVersionsProcessed", out string? changeVersionsJson))
                 {
                     currentParameter = JObject.Parse(string.IsNullOrEmpty(changeVersionsJson) ? "{}" : changeVersionsJson);
                 }

@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using System;
+using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using log4net;
 
 namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement;

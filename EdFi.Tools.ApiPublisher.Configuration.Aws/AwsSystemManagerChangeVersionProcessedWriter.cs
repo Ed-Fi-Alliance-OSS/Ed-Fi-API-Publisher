@@ -64,7 +64,7 @@ namespace EdFi.Tools.ApiPublisher.Configuration.Aws
                 Name = parameterName,
             };
 
-            GetParameterResponse getResponse = null;
+            GetParameterResponse getResponse;
 
             try
             {

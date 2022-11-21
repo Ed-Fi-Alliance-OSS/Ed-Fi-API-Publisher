@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Autofac.Features.Indexed;
+using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Handling;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Initiators;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;

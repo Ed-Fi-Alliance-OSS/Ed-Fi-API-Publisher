@@ -1,4 +1,3 @@
-using System;
 using Autofac;
 using EdFi.Tools.ApiPublisher.Configuration.SqlServer.Modules;
 using EdFi.Tools.ApiPublisher.Core.Configuration;

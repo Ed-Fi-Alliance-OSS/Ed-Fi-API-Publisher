@@ -8,8 +8,8 @@ namespace Microsoft.Extensions.Configuration
         public static IConfigurationBuilder AddConfigurationStoreForPostgreSql(
             this IConfigurationBuilder builder,
             string configurationKeyPath,
-            string connectionString,
-            string encryptionPassword)
+            string? connectionString,
+            string? encryptionPassword)
         {
             builder.Sources.Add(new PostgreSqlConfigurationSource(configurationKeyPath, connectionString, encryptionPassword));
 

@@ -5,36 +5,18 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Amazon.SimpleSystemsManagement.Model.Internal.MarshallTransformations;
 using Autofac;
-using Autofac.Core;
 using Autofac.Extensions.DependencyInjection;
-using EdFi.Ods.Api.Helpers;
-using EdFi.Tools.ApiPublisher.Connections.Api.Modules;
-using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Handling;
-using EdFi.Tools.ApiPublisher.Connections.SqlLite;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
-using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
-using EdFi.Tools.ApiPublisher.Core.Counting;
-using EdFi.Tools.ApiPublisher.Core.Dependencies;
-using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Modules;
-using EdFi.Tools.ApiPublisher.Core.NodeJs;
 using EdFi.Tools.ApiPublisher.Core.Plugin;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
-using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Core.Registration;
-using EdFi.Tools.ApiPublisher.Core.Versioning;
-using Jering.Javascript.NodeJS;
 using log4net;
 using log4net.Config;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Module = Autofac.Module;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {

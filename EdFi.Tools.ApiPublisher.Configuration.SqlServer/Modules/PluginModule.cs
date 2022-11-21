@@ -1,5 +1,4 @@
 using Autofac;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Management;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 

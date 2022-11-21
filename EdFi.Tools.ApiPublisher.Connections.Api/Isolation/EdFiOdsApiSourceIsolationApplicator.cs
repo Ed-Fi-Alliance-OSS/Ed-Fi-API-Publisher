@@ -7,6 +7,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using log4net;

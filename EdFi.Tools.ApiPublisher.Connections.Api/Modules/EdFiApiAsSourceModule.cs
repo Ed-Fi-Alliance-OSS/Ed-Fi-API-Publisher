@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using Autofac;
+using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Handling;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Initiators;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
