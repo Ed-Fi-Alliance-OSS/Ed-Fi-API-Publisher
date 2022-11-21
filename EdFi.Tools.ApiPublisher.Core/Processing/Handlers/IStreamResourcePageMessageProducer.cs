@@ -10,16 +10,15 @@ using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 
 public interface IStreamResourcePageMessageProducer
 {
-    Task<IEnumerable<StreamResourcePageMessage<TItemActionMessage>>> ProduceMessagesAsync<TItemActionMessage>(
-        StreamResourceMessage message, 
+    Task<IEnumerable<StreamResourcePageMessage<TProcessDataMessage>>> ProduceMessagesAsync<TProcessDataMessage>(
+        StreamResourceMessage message,
         Options options,
-        Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
-        ITargetBlock<ErrorItemMessage> errorHandlingBlock, 
+        ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+        Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
         CancellationToken cancellationToken);
 }

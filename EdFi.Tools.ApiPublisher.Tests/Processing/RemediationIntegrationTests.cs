@@ -6,6 +6,9 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Autofac.Features.Indexed;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Handling;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Initiators;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -256,17 +259,48 @@ public class RemediationIntegrationTests
 
             var sourceCurrentChangeVersionProvider = new EdFiOdsApiSourceCurrentChangeVersionProvider(sourceEdFiApiClientProvider);
             var sourceIsolationApplicator = new EdFiOdsApiSourceIsolationApplicator(sourceEdFiApiClientProvider);
-            var dataSourceCapabilities = new EdFiOdsApiDataSourceCapabilities(sourceEdFiApiClientProvider);
-            
-            _changeProcessor = new ChangeProcessor(
-                resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher, edFiVersionsChecker, sourceCurrentChangeVersionProvider, 
-                sourceApiConnectionDetails, targetApiConnectionDetails, sourceIsolationApplicator, dataSourceCapabilities,
-                new PublishErrorsBlocksFactory(errorPublisher),
-                new PostResourceBlocksFactory(nodeJsService, sourceEdFiApiClientProvider, targetEdFiApiClientProvider),
-                new DeleteResourceBlocksFactory(targetEdFiApiClientProvider),
-                new ChangeResourceKeyBlocksFactory(targetEdFiApiClientProvider),
-                new StreamResourceBlockFactory(new EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer(new EdFiOdsApiDataSourceTotalCountProvider(sourceEdFiApiClientProvider))),
-                new StreamResourcePagesBlockFactory(new EdFiOdsApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider, new EdFiOdsApiTargetItemActionMessageProducer())));
+                var dataSourceCapabilities = new EdFiApiDataSourceCapabilities(sourceEdFiApiClientProvider);
+                var publishErrorsBlocksFactory = new PublishErrorsBlocksFactory(errorPublisher);
+
+                var streamingResourceProcessor = new StreamingResourceProcessor(
+                    new StreamResourceBlockFactory(
+                        new EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer(
+                            new EdFiOdsApiDataSourceTotalCountProvider(sourceEdFiApiClientProvider))),
+                    new StreamResourcePagesBlockFactory(new ApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider)),
+                    sourceApiConnectionDetails);
+                    
+                var stageInitiators = A.Fake<IIndex<PublishingStage, IPublishingStageInitiator>>();
+
+                A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
+                    .Returns(
+                        new ChangeKeysPublishingStageInitiator(
+                            streamingResourceProcessor,
+                            new ChangeResourceKeyBlocksFactory(targetEdFiApiClientProvider)));
+
+                A.CallTo(() => stageInitiators[PublishingStage.Upserts])
+                    .Returns(
+                        new UpsertPublishingStageInitiator(
+                            streamingResourceProcessor,
+                            new PostResourceBlocksFactory(nodeJsService, sourceEdFiApiClientProvider, targetEdFiApiClientProvider)));
+
+                A.CallTo(() => stageInitiators[PublishingStage.Deletes])
+                    .Returns(
+                        new DeletePublishingStageInitiator(
+                            streamingResourceProcessor,
+                            new DeleteResourceBlocksFactory(targetEdFiApiClientProvider)));
+
+                _changeProcessor = new ChangeProcessor(
+                    resourceDependencyProvider,
+                    changeVersionProcessedWriter,
+                    errorPublisher,
+                    edFiVersionsChecker,
+                    sourceCurrentChangeVersionProvider,
+                    sourceApiConnectionDetails,
+                    targetApiConnectionDetails,
+                    sourceIsolationApplicator,
+                    dataSourceCapabilities,
+                    publishErrorsBlocksFactory,
+                    stageInitiators);
         }
 
         protected override async Task ActAsync()
@@ -566,17 +600,48 @@ public class RemediationIntegrationTests
 
             var sourceCurrentChangeVersionProvider = new EdFiOdsApiSourceCurrentChangeVersionProvider(sourceEdFiApiClientProvider);
             var sourceIsolationApplicator = new EdFiOdsApiSourceIsolationApplicator(sourceEdFiApiClientProvider);
-            var dataSourceCapabilities = new EdFiOdsApiDataSourceCapabilities(sourceEdFiApiClientProvider);
-            
-            _changeProcessor = new ChangeProcessor(
-                resourceDependencyProvider, changeVersionProcessedWriter, errorPublisher, edFiVersionsChecker, sourceCurrentChangeVersionProvider, 
-                sourceApiConnectionDetails, targetApiConnectionDetails, sourceIsolationApplicator, dataSourceCapabilities,
-                new PublishErrorsBlocksFactory(errorPublisher),
-                new PostResourceBlocksFactory(nodeJsService, sourceEdFiApiClientProvider, targetEdFiApiClientProvider),
-                new DeleteResourceBlocksFactory(targetEdFiApiClientProvider),
-                new ChangeResourceKeyBlocksFactory(targetEdFiApiClientProvider),
-                new StreamResourceBlockFactory(new EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer(new EdFiOdsApiDataSourceTotalCountProvider(sourceEdFiApiClientProvider))),
-                new StreamResourcePagesBlockFactory(new EdFiOdsApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider, new EdFiOdsApiTargetItemActionMessageProducer())));
+                var dataSourceCapabilities = new EdFiApiDataSourceCapabilities(sourceEdFiApiClientProvider);
+                var publishErrorsBlocksFactory = new PublishErrorsBlocksFactory(errorPublisher);
+
+                var streamingResourceProcessor = new StreamingResourceProcessor(
+                    new StreamResourceBlockFactory(
+                        new EdFiOdsApiLimitOffsetPagingStreamResourcePageMessageProducer(
+                            new EdFiOdsApiDataSourceTotalCountProvider(sourceEdFiApiClientProvider))),
+                    new StreamResourcePagesBlockFactory(new ApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider)),
+                    sourceApiConnectionDetails);
+                    
+                var stageInitiators = A.Fake<IIndex<PublishingStage, IPublishingStageInitiator>>();
+
+                A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
+                    .Returns(
+                        new ChangeKeysPublishingStageInitiator(
+                            streamingResourceProcessor,
+                            new ChangeResourceKeyBlocksFactory(targetEdFiApiClientProvider)));
+
+                A.CallTo(() => stageInitiators[PublishingStage.Upserts])
+                    .Returns(
+                        new UpsertPublishingStageInitiator(
+                            streamingResourceProcessor,
+                            new PostResourceBlocksFactory(nodeJsService, sourceEdFiApiClientProvider, targetEdFiApiClientProvider)));
+
+                A.CallTo(() => stageInitiators[PublishingStage.Deletes])
+                    .Returns(
+                        new DeletePublishingStageInitiator(
+                            streamingResourceProcessor,
+                            new DeleteResourceBlocksFactory(targetEdFiApiClientProvider)));
+
+                _changeProcessor = new ChangeProcessor(
+                    resourceDependencyProvider,
+                    changeVersionProcessedWriter,
+                    errorPublisher,
+                    edFiVersionsChecker,
+                    sourceCurrentChangeVersionProvider,
+                    sourceApiConnectionDetails,
+                    targetApiConnectionDetails,
+                    sourceIsolationApplicator,
+                    dataSourceCapabilities,
+                    publishErrorsBlocksFactory,
+                    stageInitiators);
         }
 
         protected override async Task ActAsync()

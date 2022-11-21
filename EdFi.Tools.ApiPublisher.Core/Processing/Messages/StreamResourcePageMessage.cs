@@ -1,11 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 {
-    public class StreamResourcePageMessage<TItemActionMessage>
+    /// <summary>
+    /// Represents details needed for obtaining a page of JSON data from the source connection.
+    /// </summary>
+    public class StreamResourcePageMessage<TProcessDataMessage>
     {
         // ----------------------------
         // Resource-specific context
@@ -35,6 +39,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public CancellationTokenSource CancellationSource { get; set; }
 
         // TODO: GKM - Need to eliminate use of JObject in signature of this factory method -- needs proper abstractions
-        public Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> CreateItemActionMessage { get; set; }
+        public Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> CreateProcessDataMessages { get; set; }
     }
 }

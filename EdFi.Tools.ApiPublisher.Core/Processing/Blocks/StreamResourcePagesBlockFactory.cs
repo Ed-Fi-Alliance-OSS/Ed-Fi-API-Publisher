@@ -29,12 +29,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             _streamResourcePageMessageHandler = streamResourcePageMessageHandler;
         }
         
-        public TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> CreateBlock<TItemActionMessage>(
+        public TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> CreateBlock<TProcessDataMessage>(
             Options options, 
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
             var streamResourcePagesBlock =
-                new TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage>(
+                new TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage>(
                     async msg =>
                     {
                         try

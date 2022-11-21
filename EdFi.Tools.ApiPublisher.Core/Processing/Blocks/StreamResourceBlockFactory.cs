@@ -28,30 +28,29 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             _streamResourcePageMessageProducer = streamResourcePageMessageProducer;
         }
 
-        public TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TItemActionMessage>>
-            CreateBlock<TItemActionMessage>(
-            Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
+        public TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>> CreateBlock<TProcessDataMessage>(
+            Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             Options options,
             CancellationToken cancellationToken)
         {
-            return new TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TItemActionMessage>>(
+            return new TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>>(
                 async msg =>
                 {
                     if (msg.CancellationSource.IsCancellationRequested)
                     {
                         _logger.Debug($"{msg.ResourceUrl}: Cancellation requested.");
 
-                        return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+                        return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
                     }
 
                     try
                     {
-                        var messages = await DoStreamResource(
+                        var messages = await ProducePageMessagesAsync(
                                 msg,
-                                createItemActionMessage,
                                 errorHandlingBlock,
                                 options,
+                                createProcessDataMessages,
                                 cancellationToken)
                             .ConfigureAwait(false);
 
@@ -59,7 +58,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         {
                             _logger.Debug($"{msg.ResourceUrl}: Cancellation requested.");
 
-                            return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+                            return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
                         }
 
                         return messages;
@@ -73,11 +72,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 });
         }
 
-        private async Task<IEnumerable<StreamResourcePageMessage<TItemActionMessage>>> DoStreamResource<TItemActionMessage>(
+        private async Task<IEnumerable<StreamResourcePageMessage<TProcessDataMessage>>> ProducePageMessagesAsync<TProcessDataMessage>(
             StreamResourceMessage message,
-            Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             Options options,
+            Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
             CancellationToken cancellationToken)
         {
             // ==============================================================
@@ -125,15 +124,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 return await _streamResourcePageMessageProducer.ProduceMessagesAsync(
                     message,
                     options,
-                    createItemActionMessage,
                     errorHandlingBlock,
+                    createProcessDataMessages,
                     cancellationToken);
             }
             catch (Exception ex)
             {
                 _logger.Error($"{message.ResourceUrl}: {ex}");
 
-                return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+                return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
             }
         }
     }

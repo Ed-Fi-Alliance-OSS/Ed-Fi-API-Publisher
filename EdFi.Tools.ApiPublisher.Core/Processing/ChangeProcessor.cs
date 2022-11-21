@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using Autofac.Features.Indexed;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -24,25 +25,28 @@ using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-    public class ChangeProcessor : IChangeProcessor
+    public enum PublishingStage
+    {
+        KeyChanges,
+        Upserts,
+        Deletes
+    }
+    
+    public class ChangeProcessor
     {
         private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeProcessor));
 
         private readonly IResourceDependencyProvider _resourceDependencyProvider;
         private readonly IChangeVersionProcessedWriter _changeVersionProcessedWriter;
         private readonly IErrorPublisher _errorPublisher;
-        private readonly IPostResourceBlocksFactory _postResourceBlocksFactory;
         private readonly IEdFiVersionsChecker _edFiVersionsChecker;
         private readonly ISourceCurrentChangeVersionProvider _sourceCurrentChangeVersionProvider;
-        private readonly IEdFiDataSourceDetails _edFiDataSourceDetails;
-        private readonly IEdFiDataSinkDetails _edFiDataSinkDetails;
+        private readonly ISourceConnectionDetails _sourceConnectionDetails;
+        private readonly ITargetConnectionDetails _targetConnectionDetails;
         private readonly ISourceIsolationApplicator _sourceIsolationApplicator;
         private readonly IDataSourceCapabilities _dataSourceCapabilities;
         private readonly PublishErrorsBlocksFactory _publishErrorsBlocksFactory;
-        private readonly DeleteResourceBlocksFactory _deleteResourceBlocksFactory;
-        private readonly ChangeResourceKeyBlocksFactory _changeResourceKeyBlocksFactory;
-        private readonly StreamResourceBlockFactory _streamResourceBlockFactory;
-        private readonly StreamResourcePagesBlockFactory _streamResourcePagesBlockFactory;
+        private readonly IIndex<PublishingStage, IPublishingStageInitiator> _publishingStageInitiatorByStage;
 
         public ChangeProcessor(
             IResourceDependencyProvider resourceDependencyProvider,
@@ -50,32 +54,24 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             IErrorPublisher errorPublisher,
             IEdFiVersionsChecker edFiVersionsChecker,
             ISourceCurrentChangeVersionProvider sourceCurrentChangeVersionProvider,
-            IEdFiDataSourceDetails edFiDataSourceDetails,
-            IEdFiDataSinkDetails edFiDataSinkDetails,
+            ISourceConnectionDetails sourceConnectionDetails,
+            ITargetConnectionDetails targetConnectionDetails,
             ISourceIsolationApplicator sourceIsolationApplicator,
             IDataSourceCapabilities dataSourceCapabilities,
             PublishErrorsBlocksFactory publishErrorsBlocksFactory,
-            IPostResourceBlocksFactory postResourceBlocksFactory,
-            DeleteResourceBlocksFactory deleteResourceBlocksFactory,
-            ChangeResourceKeyBlocksFactory changeResourceKeyBlocksFactory,
-            StreamResourceBlockFactory streamResourceBlockFactory,
-            StreamResourcePagesBlockFactory streamResourcePagesBlockFactory)
+            IIndex<PublishingStage, IPublishingStageInitiator> publishingStageInitiatorByStage)
         {
             _resourceDependencyProvider = resourceDependencyProvider;
             _changeVersionProcessedWriter = changeVersionProcessedWriter;
             _errorPublisher = errorPublisher;
-            _postResourceBlocksFactory = postResourceBlocksFactory;
             _edFiVersionsChecker = edFiVersionsChecker;
             _sourceCurrentChangeVersionProvider = sourceCurrentChangeVersionProvider;
-            _edFiDataSourceDetails = edFiDataSourceDetails;
-            _edFiDataSinkDetails = edFiDataSinkDetails;
+            _sourceConnectionDetails = sourceConnectionDetails;
+            _targetConnectionDetails = targetConnectionDetails;
             _sourceIsolationApplicator = sourceIsolationApplicator;
             _dataSourceCapabilities = dataSourceCapabilities;
             _publishErrorsBlocksFactory = publishErrorsBlocksFactory;
-            _deleteResourceBlocksFactory = deleteResourceBlocksFactory;
-            _changeResourceKeyBlocksFactory = changeResourceKeyBlocksFactory;
-            _streamResourceBlockFactory = streamResourceBlockFactory;
-            _streamResourcePagesBlockFactory = streamResourcePagesBlockFactory;
+            _publishingStageInitiatorByStage = publishingStageInitiatorByStage;
         }
         
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
@@ -84,12 +80,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             processStopwatch.Start();
             
             var authorizationFailureHandling= configuration.AuthorizationFailureHandling;
-
-            // var sourceApiConnectionDetails = configuration.SourceApiConnectionDetails;
-            // var targetApiConnectionDetails = configuration.TargetApiConnectionDetails;
-            // var sourceApiClient = configuration.SourceApiClient;
-            // var targetApiClient = configuration.TargetApiClient;
-
             var options = configuration.Options;
             var javascriptModuleFactory = configuration.JavascriptModuleFactory;
 
@@ -101,7 +91,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 await _edFiVersionsChecker.CheckApiVersionsAsync(configuration).ConfigureAwait(false);
 
                 // Look for and apply snapshots if flag was not provided
-                if (_edFiDataSourceDetails.IgnoreIsolation != true)
+                if (!(_sourceConnectionDetails.IgnoreIsolation ?? false))
                 {
                     // Determine if source API provides a snapshot, and apply the HTTP header to the client 
                     await _sourceIsolationApplicator.ApplySourceSnapshotIdentifierAsync(configuration.SourceApiVersion)
@@ -112,20 +102,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 ChangeWindow? changeWindow = null;
 
                 // Only named (managed) connections can use a Change Window for processing.
-                if (!string.IsNullOrWhiteSpace(_edFiDataSourceDetails.Name) 
-                    && !string.IsNullOrWhiteSpace(_edFiDataSinkDetails.Name))
+                if (!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Name) 
+                    && !string.IsNullOrWhiteSpace(_targetConnectionDetails.Name))
                 {
-                    changeWindow = await EstablishChangeWindow().ConfigureAwait(false);
+                    changeWindow = await EstablishChangeWindowAsync().ConfigureAwait(false);
                 }
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
                 {
-                    _logger.Info($"Last change version processed of '{GetLastChangeVersionProcessed()}' for target '{_edFiDataSinkDetails.Name}' indicates that all available changes have already been published.");
+                    _logger.Info($"Last change version processed of '{GetLastChangeVersionProcessed()}' for target '{_targetConnectionDetails.Name}' indicates that all available changes have already been published.");
                     return;
                 }
 
-                var postDependencyKeysByResourceKey = await PrepareResourceDependenciesAsync(
+                var dependencyKeysByResourceKey = await PrepareResourceDependenciesAsync(
                         options,
                         authorizationFailureHandling)
                     .ConfigureAwait(false);
@@ -136,16 +126,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     return;
                 }
                 
-                // Create the global error processing block
+                // Create the shared error processing block
                 var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) = _publishErrorsBlocksFactory.CreateBlocks(options);
-                
+
                 // Process all the key changes first
                 var keyChangesTaskStatuses = await ProcessKeyChangesToCompletionAsync(
                     changeWindow,
-                    postDependencyKeysByResourceKey,
+                    dependencyKeysByResourceKey,
                     configuration.ResourcesWithUpdatableKeys,
-                    // sourceApiClient, 
-                    // targetApiClient, 
                     options,
                     authorizationFailureHandling,
                     publishErrorsIngestionBlock,
@@ -154,9 +142,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 
                 // Process all the "Upserts"
                 var postTaskStatuses = ProcessUpsertsToCompletion(
-                    // sourceApiClient, 
-                    // targetApiClient, 
-                    postDependencyKeysByResourceKey, 
+                    dependencyKeysByResourceKey, 
                     options,
                     authorizationFailureHandling,
                     changeWindow, 
@@ -167,9 +153,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // Process all the deletions
                 var deleteTaskStatuses = await ProcessDeletesToCompletionAsync(
                     changeWindow, 
-                    postDependencyKeysByResourceKey, 
-                    // sourceApiClient, 
-                    // targetApiClient, 
+                    dependencyKeysByResourceKey, 
                     options,
                     authorizationFailureHandling,
                     publishErrorsIngestionBlock,
@@ -203,8 +187,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             ChangeProcessorConfiguration configuration, 
             ChangeWindow changeWindow)
         {
-            var sourceDetails = _edFiDataSourceDetails;
-            var sinkDetails = _edFiDataSinkDetails;
+            var sourceDetails = _sourceConnectionDetails;
+            var sinkDetails = _targetConnectionDetails;
             
             var configurationStoreSection = configuration.ConfigurationStoreSection;
             
@@ -265,13 +249,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             AdjustDependenciesForConfiguredAuthorizationConcerns();
 
             // Filter resources down to just those requested, if an explicit inclusion list provided
-            if (!string.IsNullOrWhiteSpace(_edFiDataSourceDetails.Include) || !string.IsNullOrWhiteSpace(_edFiDataSourceDetails.IncludeOnly))
+            if (!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Include) || !string.IsNullOrWhiteSpace(_sourceConnectionDetails.IncludeOnly))
             {
                 _logger.Info("Applying resource inclusions...");
-                _logger.Debug($"Filtering processing to the following configured inclusion of source API resources:{Environment.NewLine}    Included (with dependencies):    {_edFiDataSourceDetails.Include}{Environment.NewLine}    Included (without dependencies): {_edFiDataSourceDetails.IncludeOnly}");
+                _logger.Debug($"Filtering processing to the following configured inclusion of source API resources:{Environment.NewLine}    Included (with dependencies):    {_sourceConnectionDetails.Include}{Environment.NewLine}    Included (without dependencies): {_sourceConnectionDetails.IncludeOnly}");
 
-                var includeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.Include);
-                var includeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.IncludeOnly);
+                var includeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.Include);
+                var includeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.IncludeOnly);
                 
                 // Evaluate whether any of the included resources have a "retry" dependency
                 var retryDependenciesForIncludeResourcePaths = includeResourcePaths
@@ -305,13 +289,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // }
             }
             
-            if (!string.IsNullOrWhiteSpace(_edFiDataSourceDetails.Exclude) || !string.IsNullOrWhiteSpace(_edFiDataSourceDetails.ExcludeOnly))
+            if (!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Exclude) || !string.IsNullOrWhiteSpace(_sourceConnectionDetails.ExcludeOnly))
             {
                 _logger.Info("Applying resource exclusions...");
-                _logger.Debug($"Filtering processing to the following configured exclusion of source API resources:{Environment.NewLine}    Excluded (along with dependents): {_edFiDataSourceDetails.Exclude}{Environment.NewLine}    Excluded (dependents unaffected): {_edFiDataSourceDetails.ExcludeOnly}");
+                _logger.Debug($"Filtering processing to the following configured exclusion of source API resources:{Environment.NewLine}    Excluded (along with dependents): {_sourceConnectionDetails.Exclude}{Environment.NewLine}    Excluded (dependents unaffected): {_sourceConnectionDetails.ExcludeOnly}");
 
-                var excludeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.Exclude);
-                var excludeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.ExcludeOnly);
+                var excludeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.Exclude);
+                var excludeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.ExcludeOnly);
                 
                 // Evaluate whether any of the included resources have a "retry" dependency
                 var retryDependenciesForExcludeResourcePaths = excludeResourcePaths
@@ -562,7 +546,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private async Task<ChangeWindow?> EstablishChangeWindow()
+        private async Task<ChangeWindow?> EstablishChangeWindowAsync()
         {
             // Get the current change version of the source database (or snapshot database)
             long? currentSourceChangeVersion =
@@ -586,20 +570,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private long GetLastChangeVersionProcessed()
         {
             // If an explicit value was provided, use that first
-            if (_edFiDataSourceDetails.LastChangeVersionProcessed.HasValue)
+            if (_sourceConnectionDetails.LastChangeVersionProcessed.HasValue)
             {
-                return _edFiDataSourceDetails.LastChangeVersionProcessed.Value;
+                return _sourceConnectionDetails.LastChangeVersionProcessed.Value;
             }
             
             // Fall back to using the pre-configured change version
-            return _edFiDataSourceDetails
+            return _sourceConnectionDetails
                 .LastChangeVersionProcessedByTargetName
-                .GetValueOrDefault(_edFiDataSinkDetails.Name);
+                .GetValueOrDefault(_targetConnectionDetails.Name);
         }
 
         private TaskStatus[] ProcessUpsertsToCompletion(
-            // EdFiApiClient sourceApiClient,
-            // EdFiApiClient targetApiClient,
             IDictionary<string, string[]> postDependenciesByResourcePath,
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
@@ -612,20 +594,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 options.MaxDegreeOfParallelismForResourceProcessing,
                 options.MaxDegreeOfParallelismForResourceProcessing);
 
-            // Start processing resources in dependency order
-            var streamingPagesOfPostsByResourcePath = InitiateResourceStreaming(
-                // sourceApiClient,
-                // targetApiClient,
-                postDependenciesByResourcePath,
-                _postResourceBlocksFactory.CreateBlocks, 
-                PostResourceBlocksFactory.CreateItemActionMessage,
-                options,
-                authorizationFailureHandling,
+            var initiator = _publishingStageInitiatorByStage[PublishingStage.Upserts];
+
+            var processingContext = new ProcessingContext(
                 changeWindow,
+                postDependenciesByResourcePath,
                 errorPublishingBlock,
                 processingSemaphore,
+                options,
+                authorizationFailureHandling,
+                Array.Empty<string>(),
                 javascriptModuleFactory,
-                cancellationToken);
+                null);
+            
+            // Start processing resources in dependency order
+            var streamingPagesOfPostsByResourcePath = initiator.Start(processingContext, cancellationToken);
 
             // Wait for all upsert publishing to finish
             var postTaskStatuses = WaitForResourceStreamingToComplete(
@@ -640,8 +623,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private async Task<TaskStatus[]> ProcessDeletesToCompletionAsync(
             ChangeWindow changeWindow,
             IDictionary<string, string[]> postDependenciesByResourcePath,
-            // EdFiApiClient sourceApiClient,
-            // EdFiApiClient targetApiClient,
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
@@ -680,20 +661,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         options.MaxDegreeOfParallelismForResourceProcessing,
                         options.MaxDegreeOfParallelismForResourceProcessing);
 
-                    var streamingPagesOfDeletesByResourcePath = InitiateResourceStreaming(
-                        // sourceApiClient,
-                        // targetApiClient,
-                        deleteDependenciesByResourcePath,
-                        _deleteResourceBlocksFactory.CreateBlocks, 
-                        _deleteResourceBlocksFactory.CreateItemActionMessage,
-                        options,
-                        authorizationFailureHandling,
+                    var processingContext = new ProcessingContext(
                         changeWindow,
+                        deleteDependenciesByResourcePath,
                         errorPublishingBlock,
                         processingSemaphore,
+                        options,
+                        authorizationFailureHandling,
+                        Array.Empty<string>(),
                         null,
-                        cancellationToken,
                         EdFiApiConstants.DeletesPathSuffix);
+
+                    var initiator = _publishingStageInitiatorByStage[PublishingStage.Deletes];
+
+                    var streamingPagesOfDeletesByResourcePath = initiator.Start(processingContext, cancellationToken);
 
                     // Wait for everything to finish
                     deleteTaskStatuses = WaitForResourceStreamingToComplete(
@@ -712,11 +693,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         }
 
         private async Task<TaskStatus[]> ProcessKeyChangesToCompletionAsync(
-            ChangeWindow changeWindow,
-            IDictionary<string, string[]> postDependenciesByResourcePath,
+            ChangeWindow? changeWindow,
+            IDictionary<string, string[]> dependencyKeysByResourceKey,
             string[] resourcesWithUpdatableKeys,
-            // EdFiApiClient sourceApiClient,
-            // EdFiApiClient targetApiClient,
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
@@ -734,17 +713,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 _logger.Info($"Change window starting value indicates all values are being published, and so there is no need to perform key change processing.");
                 return Array.Empty<TaskStatus>();
             }
-            
+
             TaskStatus[] keyChangeTaskStatuses = Array.Empty<TaskStatus>();
-            
+
             if (resourcesWithUpdatableKeys.Any())
             {
-                var keyChangeDependenciesByResourcePath = GetKeyChangeDependencies(postDependenciesByResourcePath, resourcesWithUpdatableKeys);
+                var keyChangeDependenciesByResourcePath = GetKeyChangeDependencies(dependencyKeysByResourceKey, resourcesWithUpdatableKeys);
 
                 // Probe for key changes support (using first by name sorted alphabetically for deterministic behavior)
-                string probeResourceKey = keyChangeDependenciesByResourcePath.Keys
-                    .OrderBy(x => x)
-                    .FirstOrDefault();
+                string? probeResourceKey = keyChangeDependenciesByResourcePath.Keys.MinBy(x => x);
 
                 if (probeResourceKey == null)
                 {
@@ -763,18 +740,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         options.MaxDegreeOfParallelismForResourceProcessing,
                         options.MaxDegreeOfParallelismForResourceProcessing);
 
-                    var streamingPagesOfKeyChangesByResourcePath = InitiateResourceStreaming(
-                        keyChangeDependenciesByResourcePath,
-                        _changeResourceKeyBlocksFactory.CreateBlocks, 
-                        _changeResourceKeyBlocksFactory.CreateItemActionMessage,
-                        options,
-                        authorizationFailureHandling,
+                    var processingContext = new ProcessingContext(
                         changeWindow,
+                        keyChangeDependenciesByResourcePath,
                         errorPublishingBlock,
                         processingSemaphore,
+                        options,
+                        authorizationFailureHandling,
+                        resourcesWithUpdatableKeys,
                         null,
-                        cancellationToken,
-                        EdFiApiConstants.KeyChangesPathSuffix);
+                        EdFiApiConstants.KeyChangesPathSuffix
+                    );
+
+                    var initiator = _publishingStageInitiatorByStage[PublishingStage.KeyChanges];
+
+                    var streamingPagesOfKeyChangesByResourcePath = initiator.Start(processingContext, cancellationToken);
 
                     // Wait for everything to finish
                     keyChangeTaskStatuses = WaitForResourceStreamingToComplete(
@@ -965,139 +945,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             return deleteDependenciesByResourcePath;
         }
 
-        private IDictionary<string, StreamingPagesItem> InitiateResourceStreaming<TItemActionMessage>(
-            // EdFiApiClient sourceApiClient,
-            // EdFiApiClient targetApiClient,
-            IDictionary<string, string[]> dependenciesByResourcePath,
-            // Defines the pipeline of blocks that receives the "Item Action", and transforms to "Error Items"
-            Func<CreateBlocksRequest, (ITargetBlock<TItemActionMessage>, ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
-            // Factory function signature for creating an ItemAction message, but assumes JSON parsing (uses the wrong abstraction)
-            Func<StreamResourcePageMessage<TItemActionMessage>, JObject, TItemActionMessage> createItemActionMessage,
-            Options options,
-            AuthorizationFailureHandling[] authorizationFailureHandling,
-            ChangeWindow changeWindow,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
-            SemaphoreSlim processingSemaphore,
-            Func<string>? javascriptModuleFactory,
-            CancellationToken cancellationToken,
-            string? resourceUrlPathSuffix = null)
-        {
-            _logger.Info($"Initiating resource streaming.");
-
-            var linkOptions = new DataflowLinkOptions {PropagateCompletion = true};
-
-            var streamingPagesByResourceKey = new Dictionary<string, StreamingPagesItem>(StringComparer.OrdinalIgnoreCase);
-
-            var streamingResourceBlockByResourceKey = new Dictionary<string, ITargetBlock<StreamResourceMessage>>(StringComparer.OrdinalIgnoreCase);
-            
-            var postAuthorizationRetryByResourceKey = new Dictionary<string, Action<object>>(StringComparer.OrdinalIgnoreCase);
-
-            // Set up streaming resource blocks for all resources
-            foreach (var kvp in dependenciesByResourcePath)
-            {
-                string resourceKey = kvp.Key;
-                string resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
-
-                var createBlocksRequest = new CreateBlocksRequest(
-                    // sourceApiClient,
-                    // targetApiClient,
-                    options,
-                    authorizationFailureHandling,
-                    errorHandlingBlock,
-                    javascriptModuleFactory);
-                
-                // This creates the actual processing sub-pipeline ingesting TItemActionMessage through to ErrorItemMessages
-                var (processingInputBlock, processingOutputBlock) = createProcessingBlocks(createBlocksRequest);
-
-                // Is this an authorization retry "resource"? 
-                if (resourceKey.EndsWith(Conventions.RetryKeySuffix))
-                {
-                    // Save an action delegate for processing the item, keyed by the resource path
-                    postAuthorizationRetryByResourceKey.Add(
-                        resourcePath, 
-                        msg => processingInputBlock.Post((TItemActionMessage) msg));
-                }
-
-                streamingPagesByResourceKey.Add(
-                    resourceKey,
-                    new StreamingPagesItem
-                    {
-                        CompletionBlock = processingOutputBlock
-                    });
-
-                // Create a new StreamResource block for the resource
-                TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TItemActionMessage>> streamResourceBlock 
-                    = _streamResourceBlockFactory.CreateBlock(createItemActionMessage, errorHandlingBlock, options, cancellationToken);
-                
-                // Create a new StreamResourcePages block
-                TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> streamResourcePagesBlock 
-                    = _streamResourcePagesBlockFactory.CreateBlock<TItemActionMessage>(options, errorHandlingBlock);
-
-                // Link together the general pipeline
-                streamResourceBlock.LinkTo(streamResourcePagesBlock, linkOptions);
-                streamResourcePagesBlock.LinkTo(processingInputBlock, linkOptions);
-                processingOutputBlock.LinkTo(errorHandlingBlock, new DataflowLinkOptions { Append = true });
-
-                streamingResourceBlockByResourceKey.Add(resourceKey, streamResourceBlock);
-            }
-            
-            var cancellationSource = new CancellationTokenSource();
-
-            // Initiate streaming of all resources, with dependencies
-            foreach (var kvp in dependenciesByResourcePath)
-            {
-                var resourceKey = kvp.Key;
-                var resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
-                var dependencyPaths = kvp.Value.ToArray();
-
-                string resourceUrl = $"{resourcePath}{resourceUrlPathSuffix}";
-
-                if (cancellationSource.IsCancellationRequested)
-                {
-                    _logger.Debug($"{resourceUrl}: Cancellation requested -- resource will not be streamed.");
-                    break;
-                }
-
-                // Record the dependencies for status reporting
-                streamingPagesByResourceKey[resourceKey].DependencyPaths = dependencyPaths;
-
-                postAuthorizationRetryByResourceKey.TryGetValue(resourceKey, out var postRetry);
-
-                var skippedResources = 
-                    ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_edFiDataSourceDetails.ExcludeOnly);
-
-                var message = new StreamResourceMessage
-                {
-                    // EdFiApiClient = sourceApiClient,
-                    ResourceUrl = resourceUrl,
-                    ShouldSkip = skippedResources.Contains(resourcePath),
-                    Dependencies = dependencyPaths.Select(p => streamingPagesByResourceKey[p].CompletionBlock.Completion).ToArray(),
-                    DependencyPaths = dependencyPaths.ToArray(),
-                    PageSize = options.StreamingPageSize,
-                    ChangeWindow = changeWindow, 
-                    CancellationSource = cancellationSource,
-                    PostAuthorizationFailureRetry = postRetry,
-                    ProcessingSemaphore = processingSemaphore,
-                };
-
-                if (postRetry != null)
-                {
-                    _logger.Debug($"{message.ResourceUrl}: Authorization retry processing is supported.");
-                }
-
-                var streamingBlock = streamingResourceBlockByResourceKey[resourceKey];
-
-                if (_logger.IsDebugEnabled)
-                {
-                    _logger.Debug($"{message.ResourceUrl}: Sending message to initiate streaming.");
-                }
-
-                streamingBlock.Post(message);
-                streamingBlock.Complete();
-            }
-
-            return streamingPagesByResourceKey;
-        }
 
         private TaskStatus[] WaitForResourceStreamingToComplete(
             string activityDescription,
@@ -1253,6 +1100,24 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             return completedStreamingPagesByResourcePath
                 .Select(kvp => kvp.Value.CompletionBlock.Completion.Status)
                 .ToArray();
+        }
+    }
+
+    public record ProcessingContext(
+        ChangeWindow ChangeWindow,
+        IDictionary<string, string[]> DependencyKeysByResourceKey,
+        ITargetBlock<ErrorItemMessage> PublishErrorsIngestionBlock,
+        SemaphoreSlim Semaphore,
+        Options Options,
+        AuthorizationFailureHandling[] AuthorizationFailureHandling,
+        string[] ResourcesWithUpdatableKeys,
+        Func<string>? JavaScriptModuleFactory,
+        string? ResourceUrlPathSuffix)
+    {
+        public override string ToString()
+        {
+            return
+                $"{{ ChangeWindow = {ChangeWindow}, DependencyKeysByResourceKey = {DependencyKeysByResourceKey}, PublishErrorsIngestionBlock = {PublishErrorsIngestionBlock}, Semaphore = {Semaphore}, ResourceUrlPathSuffix = {ResourceUrlPathSuffix}, Options = {Options}, AuthorizationFailureHandling = {AuthorizationFailureHandling}, ResourcesWithUpdatableKeys = {ResourcesWithUpdatableKeys} }}";
         }
     }
 }

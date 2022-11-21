@@ -11,7 +11,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         /// </summary>
         /// <param name="commandLineArgs"></param>
         /// <returns></returns>
-        public IConfigurationBuilder CreateConfigurationBuilder(string[] commandLineArgs)
+        public IConfigurationBuilder Create(string[] commandLineArgs)
         {
             var configBuilder = new ConfigurationBuilder()
                 .AddJsonFile("apiPublisherSettings.json")
@@ -19,8 +19,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 .AddEnvironmentVariables("EdFi:ApiPublisher:")
                 .AddCommandLine(commandLineArgs, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    // Source API connection configuration
+                    // Source connection configuration
                     ["--sourceName"] = "Connections:Source:Name",
+                    ["--sourceType"] = "Connections:Source:Type", // api | sqlite
+
+                    // Source API connection configuration
                     ["--sourceUrl"] = "Connections:Source:Url",
                     ["--sourceKey"] = "Connections:Source:Key",
                     ["--sourceSecret"] = "Connections:Source:Secret",
@@ -28,14 +31,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--sourceSchoolYear"] = "Connections:Source:SchoolYear",
                     ["--lastChangeVersionProcessed"] = "Connections:Source:LastChangeVersionProcessed",
                     
-                    // Target API connection configuration
+                    // Target connection configuration
                     ["--targetName"] = "Connections:Target:Name",
+                    ["--targetType"] = "Connections:Target:Type", // api | sqlite
+
+                    // Target API connection configuration
                     ["--targetUrl"] = "Connections:Target:Url",
                     ["--targetKey"] = "Connections:Target:Key",
                     ["--targetSecret"] = "Connections:Target:Secret",
                     ["--targetScope"] = "Connections:Target:Scope",
                     ["--targetSchoolYear"] = "Connections:Target:SchoolYear",
-                    
+
+                    // Target SqlLite connection configuration
+                    ["--targetUrl"] = "Connections:Target:Url",
+
                     // Publisher Options
                     ["--bearerTokenRefreshMinutes"] = "Options:BearerTokenRefreshMinutes",
                     ["--retryStartingDelayMilliseconds"] = "Options:RetryStartingDelayMilliseconds",

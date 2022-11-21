@@ -13,8 +13,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 
 public interface IStreamResourcePageMessageHandler
 {
-    Task<IEnumerable<TItemActionMessage>> HandleStreamResourcePageAsync<TItemActionMessage>(
-        StreamResourcePageMessage<TItemActionMessage> message,
+    Task<IEnumerable<TProcessDataMessage>> HandleStreamResourcePageAsync<TProcessDataMessage>(
+        StreamResourcePageMessage<TProcessDataMessage> message,
         Options options,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock);
 }

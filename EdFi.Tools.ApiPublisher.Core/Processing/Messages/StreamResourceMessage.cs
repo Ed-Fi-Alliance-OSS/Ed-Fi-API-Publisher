@@ -16,7 +16,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public bool ShouldSkip { get; set; }
 
         // Source Ed-Fi ODS API processing context (resource-specific) 
-        public Action<object> PostAuthorizationFailureRetry { get; set; }
+        public Action<object>? PostAuthorizationFailureRetry { get; set; }
 
         // -------------------------------------------------
         // Source Ed-Fi ODS API processing context (shared)

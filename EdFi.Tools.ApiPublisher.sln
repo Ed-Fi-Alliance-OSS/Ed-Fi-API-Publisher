@@ -12,6 +12,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Con
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Tests", "EdFi.Tools.ApiPublisher.Tests\EdFi.Tools.ApiPublisher.Tests.csproj", "{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Connections.SqlLite", "EdFi.Tools.ApiPublisher.Connections.SqlLite\EdFi.Tools.ApiPublisher.Connections.SqlLite.csproj", "{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Connections.Api", "EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj", "{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.Plaintext", "EdFi.Tools.ApiPublisher.Configuration.Plaintext\EdFi.Tools.ApiPublisher.Configuration.Plaintext.csproj", "{624C34FE-DA4D-41F0-B791-738D91422ACB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +48,17 @@ Global
 		{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}.Release|Any CPU.Build.0 = Release|Any CPU
+		{624C34FE-DA4D-41F0-B791-738D91422ACB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{624C34FE-DA4D-41F0-B791-738D91422ACB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{624C34FE-DA4D-41F0-B791-738D91422ACB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{624C34FE-DA4D-41F0-B791-738D91422ACB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
