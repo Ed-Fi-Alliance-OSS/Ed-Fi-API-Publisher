@@ -6,9 +6,9 @@
 using Autofac;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Connections.SqlLite;
+namespace EdFi.Tools.ApiPublisher.Connections.SqlLite.Modules;
 
-public class SqliteConnectionsModule : Autofac.Module
+public class PluginModule : Autofac.Module
 {
     protected override void Load(ContainerBuilder builder)
     {

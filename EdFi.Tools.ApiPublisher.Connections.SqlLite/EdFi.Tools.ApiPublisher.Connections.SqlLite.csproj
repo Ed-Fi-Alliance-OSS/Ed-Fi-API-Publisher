@@ -14,8 +14,4 @@
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Modules" />
-  </ItemGroup>
-
 </Project>
