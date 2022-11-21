@@ -5,4 +5,4 @@
 
 namespace EdFi.Tools.ApiPublisher.Core.Versioning;
 
-public interface ITargetEdFiOdsApiVersionMetadataProvider : IEdFiOdsApiVersionMetadataProvider { }
+public interface ITargetEdFiApiVersionMetadataProvider : IEdFiApiVersionMetadataProvider { }

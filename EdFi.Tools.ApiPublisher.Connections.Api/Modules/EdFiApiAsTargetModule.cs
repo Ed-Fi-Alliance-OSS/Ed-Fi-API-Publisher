@@ -54,7 +54,7 @@ public class EdFiApiAsTargetModule : Module
         
         // Version metadata for a Target API
         builder.RegisterType<TargetEdFiApiVersionMetadataProvider>()
-            .As<ITargetEdFiOdsApiVersionMetadataProvider>()
+            .As<ITargetEdFiApiVersionMetadataProvider>()
             .SingleInstance();
 
         // API dependency metadata from Ed-Fi ODS API (using Target API)

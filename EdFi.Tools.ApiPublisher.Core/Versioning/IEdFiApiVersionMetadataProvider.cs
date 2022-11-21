@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Versioning;
 
-public interface IEdFiOdsApiVersionMetadataProvider
+public interface IEdFiApiVersionMetadataProvider
 {
     Task<JObject> GetVersionMetadata();
 }
