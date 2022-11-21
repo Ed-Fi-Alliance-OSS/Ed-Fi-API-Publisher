@@ -1,10 +1,10 @@
 ﻿using Autofac;
-using EdFi.Tools.ApiPublisher.Configuration.Plaintext.Modules;
+using EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext.Modules;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Plugin;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.Plaintext;
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext;
 
 public class Plugin : IPlugin
 {

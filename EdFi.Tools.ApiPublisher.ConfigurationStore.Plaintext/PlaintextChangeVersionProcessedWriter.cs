@@ -2,7 +2,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using log4net;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.Plaintext
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext
 {
     public class PlaintextChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {

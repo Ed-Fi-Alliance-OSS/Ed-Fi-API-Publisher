@@ -16,7 +16,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Con
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Connections.Api", "EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj", "{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.Plaintext", "EdFi.Tools.ApiPublisher.Configuration.Plaintext\EdFi.Tools.ApiPublisher.Configuration.Plaintext.csproj", "{624C34FE-DA4D-41F0-B791-738D91422ACB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext", "EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext\EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext.csproj", "{624C34FE-DA4D-41F0-B791-738D91422ACB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

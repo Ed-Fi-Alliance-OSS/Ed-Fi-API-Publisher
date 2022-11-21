@@ -2,7 +2,7 @@ using Autofac;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.Plaintext.Modules
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext.Modules
 {
     public class PluginModule : Module
     {
