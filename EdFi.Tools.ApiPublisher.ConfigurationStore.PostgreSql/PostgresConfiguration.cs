@@ -1,4 +1,4 @@
-namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
     public class PostgresConfigurationStore
     {

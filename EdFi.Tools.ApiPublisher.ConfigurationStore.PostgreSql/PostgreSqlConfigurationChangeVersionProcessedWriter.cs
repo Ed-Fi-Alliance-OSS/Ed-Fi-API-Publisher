@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Npgsql;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
     public class PostgreSqlConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {

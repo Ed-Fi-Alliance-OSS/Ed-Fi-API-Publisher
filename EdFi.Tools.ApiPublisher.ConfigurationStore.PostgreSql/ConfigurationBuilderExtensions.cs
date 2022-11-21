@@ -1,4 +1,4 @@
-using EdFi.Tools.ApiPublisher.Configuration.PostgreSql;
+using EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql;
 
 // ReSharper disable once CheckNamespace
 namespace Microsoft.Extensions.Configuration

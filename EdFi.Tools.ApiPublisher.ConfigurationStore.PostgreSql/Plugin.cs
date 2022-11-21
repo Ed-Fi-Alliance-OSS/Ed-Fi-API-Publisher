@@ -1,10 +1,10 @@
 using Autofac;
-using EdFi.Tools.ApiPublisher.Configuration.PostgreSql.Modules;
+using EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql.Modules;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Plugin;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql;
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql;
 
 public class Plugin : IPlugin
 {

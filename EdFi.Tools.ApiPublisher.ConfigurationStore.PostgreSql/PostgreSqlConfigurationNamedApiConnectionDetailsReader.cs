@@ -3,7 +3,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
     public class PostgreSqlConfigurationNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {

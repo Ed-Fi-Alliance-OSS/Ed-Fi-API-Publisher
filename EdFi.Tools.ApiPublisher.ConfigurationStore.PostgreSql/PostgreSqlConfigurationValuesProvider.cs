@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using Npgsql;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
     public class PostgreSqlConfigurationValuesProvider
     {

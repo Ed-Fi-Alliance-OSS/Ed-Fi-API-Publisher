@@ -45,7 +45,7 @@
     <ItemGroup>
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.Aws\EdFi.Tools.ApiPublisher.ConfigurationStore.Aws.csproj" />
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Configuration.Plaintext\EdFi.Tools.ApiPublisher.Configuration.Plaintext.csproj" />
-      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Configuration.PostgreSql\EdFi.Tools.ApiPublisher.Configuration.PostgreSql.csproj" />
+      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql\EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql.csproj" />
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer\EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer.csproj" />
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj" />
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.SqlLite\EdFi.Tools.ApiPublisher.Connections.SqlLite.csproj" />

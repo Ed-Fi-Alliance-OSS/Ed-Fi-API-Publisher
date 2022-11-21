@@ -8,7 +8,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Con
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer", "EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer\EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer.csproj", "{08CA1DB7-B451-4E83-91B6-2E22B4BE7B31}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.PostgreSql", "EdFi.Tools.ApiPublisher.Configuration.PostgreSql\EdFi.Tools.ApiPublisher.Configuration.PostgreSql.csproj", "{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql", "EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql\EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql.csproj", "{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Tests", "EdFi.Tools.ApiPublisher.Tests\EdFi.Tools.ApiPublisher.Tests.csproj", "{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}"
 EndProject
