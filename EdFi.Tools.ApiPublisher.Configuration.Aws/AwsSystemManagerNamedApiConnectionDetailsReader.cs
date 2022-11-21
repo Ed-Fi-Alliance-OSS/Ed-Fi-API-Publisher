@@ -1,5 +1,5 @@
-﻿using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Management;
+﻿using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Configuration.Aws

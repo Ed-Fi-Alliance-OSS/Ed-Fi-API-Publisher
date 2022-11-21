@@ -6,6 +6,7 @@
 using Autofac;
 using Autofac.Core;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Target.Processing.Blocks;

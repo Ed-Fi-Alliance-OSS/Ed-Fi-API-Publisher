@@ -1,7 +1,6 @@
-using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Core.Management
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration
 {
     public interface INamedApiConnectionDetailsReader
     {

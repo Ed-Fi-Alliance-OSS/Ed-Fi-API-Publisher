@@ -1,6 +1,6 @@
 using System;
+using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Management;
 using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Configuration.PostgreSql

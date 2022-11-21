@@ -5,6 +5,7 @@
 
 using Autofac;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing;
 using EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.Capabilities;
