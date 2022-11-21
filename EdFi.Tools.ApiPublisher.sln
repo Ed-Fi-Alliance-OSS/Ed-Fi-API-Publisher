@@ -4,7 +4,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Cli
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Core", "EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj", "{482A7531-642C-460C-B682-EB1CE4F01F54}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.Aws", "EdFi.Tools.ApiPublisher.Configuration.Aws\EdFi.Tools.ApiPublisher.Configuration.Aws.csproj", "{609536D2-C903-45CC-BAF2-63039791593C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.ConfigurationStore.Aws", "EdFi.Tools.ApiPublisher.ConfigurationStore.Aws\EdFi.Tools.ApiPublisher.ConfigurationStore.Aws.csproj", "{609536D2-C903-45CC-BAF2-63039791593C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.SqlServer", "EdFi.Tools.ApiPublisher.Configuration.SqlServer\EdFi.Tools.ApiPublisher.Configuration.SqlServer.csproj", "{08CA1DB7-B451-4E83-91B6-2E22B4BE7B31}"
 EndProject

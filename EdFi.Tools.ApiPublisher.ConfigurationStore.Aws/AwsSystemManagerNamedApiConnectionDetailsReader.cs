@@ -2,7 +2,7 @@
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.Aws
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
 {
     public class AwsSystemManagerNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {

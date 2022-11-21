@@ -9,7 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.Aws
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
 {
     public class AwsSystemManagerChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {

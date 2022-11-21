@@ -1,10 +1,10 @@
 using Autofac;
-using EdFi.Tools.ApiPublisher.Configuration.Aws.Modules;
+using EdFi.Tools.ApiPublisher.ConfigurationStore.Aws.Modules;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Plugin;
 using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Configuration.Aws;
+namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws;
 
 public class Plugin : IPlugin
 {
