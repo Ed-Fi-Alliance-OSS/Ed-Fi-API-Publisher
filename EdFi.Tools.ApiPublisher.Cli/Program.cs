@@ -39,12 +39,15 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 // TODO: Implement plugin architecture to find all plug-ins, supplying the initial configuration as input
                 var pluginTypes = new[]
                 {
-                    typeof(EdFi.Tools.ApiPublisher.Connections.Api.Plugin),
-                    // typeof(EdFi.Tools.ApiPublisher.Connections.SqlLite.Plugin),
+                    // Connection plugins
+                    typeof(Connections.Api.Plugin),
+                    // typeof(Connections.SqlLite.Plugin),
+                    
+                    // Configuration store plugins
                     typeof(ConfigurationStore.Aws.Plugin),
                     typeof(ConfigurationStore.PostgreSql.Plugin),
                     typeof(ConfigurationStore.SqlServer.Plugin),
-                    typeof(EdFi.Tools.ApiPublisher.Configuration.Plaintext.Plugin),
+                    typeof(ConfigurationStore.Plaintext.Plugin),
                 };
                 
                 var plugins = pluginTypes.Select(Activator.CreateInstance).Cast<IPlugin>().ToArray();
