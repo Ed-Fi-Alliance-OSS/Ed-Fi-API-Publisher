@@ -5,7 +5,6 @@
 
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
@@ -17,7 +16,7 @@ using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.MessageHandlers;
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
 
 public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessageHandler
 {

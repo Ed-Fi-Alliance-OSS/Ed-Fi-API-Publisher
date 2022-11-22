@@ -6,7 +6,6 @@
 using System.Net;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
@@ -17,7 +16,7 @@ using log4net;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.Counting;
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
 
 public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
 {

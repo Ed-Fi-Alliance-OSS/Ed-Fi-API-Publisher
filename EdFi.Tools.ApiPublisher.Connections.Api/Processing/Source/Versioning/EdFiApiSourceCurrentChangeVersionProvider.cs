@@ -4,12 +4,11 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using log4net;
 using Newtonsoft.Json.Linq;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.Versioning;
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Versioning;
 
 public class EdFiApiSourceCurrentChangeVersionProvider : ISourceCurrentChangeVersionProvider
 {

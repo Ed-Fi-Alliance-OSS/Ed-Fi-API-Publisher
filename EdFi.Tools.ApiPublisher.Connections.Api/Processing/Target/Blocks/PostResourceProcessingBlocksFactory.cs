@@ -17,7 +17,7 @@ using Polly;
 using Polly.Contrib.WaitAndRetry;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Target.Processing.Blocks
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 {
     public class PostResourceProcessingBlocksFactory : IProcessingBlocksFactory<PostItemMessage>
     {

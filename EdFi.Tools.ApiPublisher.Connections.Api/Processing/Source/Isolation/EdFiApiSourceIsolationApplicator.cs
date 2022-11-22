@@ -5,14 +5,13 @@
 
 using System.Net;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
 using log4net;
 using Newtonsoft.Json.Linq;
 using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.Isolation;
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Isolation;
 
 public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 {

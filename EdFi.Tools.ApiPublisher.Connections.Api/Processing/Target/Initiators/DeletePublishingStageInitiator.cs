@@ -6,7 +6,7 @@
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Target.Processing.Initiators;
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
 
 public class DeletePublishingStageInitiator : IPublishingStageInitiator
 {

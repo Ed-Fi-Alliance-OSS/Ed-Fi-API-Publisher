@@ -10,7 +10,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Source.Processing.MessageProducers;
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
 
 public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStreamResourcePageMessageProducer
 {

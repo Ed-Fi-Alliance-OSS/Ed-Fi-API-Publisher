@@ -9,7 +9,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
-using EdFi.Tools.ApiPublisher.Connections.Api.Target.Processing.Blocks;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
