@@ -40,6 +40,18 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
 
         var sourceVersionObject = sourceVersionTask.Result;
         var targetVersionObject = targetVersionTask.Result;
+
+        if (sourceVersionObject == null)
+        {
+            _logger.Warn("Source connection does not support Ed-Fi version metadata. Version compatibility check for publishing operation cannot be performed.");
+            return;
+        }
+        
+        if (targetVersionObject == null)
+        {
+            _logger.Warn("Target connection does not support Ed-Fi version metadata. Version compatibility check for publishing operation cannot be performed.");
+            return;
+        }
         
         string sourceApiVersionText = sourceVersionObject.Value<string>("version");
         string targetApiVersionText = targetVersionObject.Value<string>("version");

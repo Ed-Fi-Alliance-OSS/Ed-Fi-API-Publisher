@@ -52,8 +52,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
         Func<CreateBlocksRequest, (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
         Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
         ProcessingContext processingContext,
-        CancellationToken cancellationToken
-        )
+        CancellationToken cancellationToken)
     {
         _logger.Info($"Initiating resource streaming.");
 

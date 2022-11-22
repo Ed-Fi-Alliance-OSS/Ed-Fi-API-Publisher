@@ -30,6 +30,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
             builder.RegisterType<PublishErrorsBlocksFactory>(); //.SingleInstance();
 
             builder.RegisterType<ChangeProcessor>();
+
+            // Register fallback implementations
+            builder.RegisterType<FallbackGraphMLDependencyMetadataProvider>()
+                .As<IGraphMLDependencyMetadataProvider>();
+
+            builder.RegisterType<FallbackTargetEdFiApiVersionMetadataProvider>().As<ITargetEdFiApiVersionMetadataProvider>();
+            builder.RegisterType<FallbackSourceEdFiApiVersionMetadataProvider>().As<ISourceEdFiApiVersionMetadataProvider>();
         }
     }
 }

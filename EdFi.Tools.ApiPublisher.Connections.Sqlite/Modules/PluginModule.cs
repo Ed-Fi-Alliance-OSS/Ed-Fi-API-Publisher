@@ -4,15 +4,19 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using Autofac;
+using EdFi.Tools.ApiPublisher.Connections.Sqlite.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Connections.SqlLite.Modules;
+namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Modules;
 
-public class PluginModule : Autofac.Module
+public class PluginModule : Module
 {
     protected override void Load(ContainerBuilder builder)
     {
         // Register the connection configuration details
-        builder.RegisterType<SqliteConnectionDetails>().Named<INamedConnectionDetails>("sqlite");
+        builder.RegisterType<SqliteConnectionDetails>()
+            .Named<INamedConnectionDetails>(Plugin.SqliteConnectionType);
     }
 }

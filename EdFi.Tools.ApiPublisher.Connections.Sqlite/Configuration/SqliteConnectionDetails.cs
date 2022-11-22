@@ -5,15 +5,15 @@
 
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 
-namespace EdFi.Tools.ApiPublisher.Connections.SqlLite.Configuration;
+namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Configuration;
 
 public class SqliteConnectionDetails : ITargetConnectionDetails
 {
     public string? Name { get; set; }
 
-    public string? FileName { get; set; }
+    public string? File { get; set; }
     
-    public bool IsFullyDefined() => !string.IsNullOrEmpty(FileName);
+    public bool IsFullyDefined() => !string.IsNullOrEmpty(File);
 
     /// <summary>
     /// Indicates that the Sqlite connection information does not need additional resolution.

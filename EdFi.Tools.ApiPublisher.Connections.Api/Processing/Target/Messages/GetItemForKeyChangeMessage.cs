@@ -1,7 +1,6 @@
-using System.Threading;
 using Newtonsoft.Json.Linq;
 
-namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
+namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
 {
     public class GetItemForKeyChangeMessage
     {

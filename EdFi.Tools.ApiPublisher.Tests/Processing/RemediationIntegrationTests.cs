@@ -282,7 +282,7 @@ public class RemediationIntegrationTests
 
                 A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
                     .Returns(
-                        new ChangeKeysPublishingStageInitiator(
+                        new KeyChangePublishingStageInitiator(
                             streamingResourceProcessor,
                             new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider)));
 
@@ -623,7 +623,7 @@ public class RemediationIntegrationTests
 
                 A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
                     .Returns(
-                        new ChangeKeysPublishingStageInitiator(
+                        new KeyChangePublishingStageInitiator(
                             streamingResourceProcessor,
                             new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider)));
 

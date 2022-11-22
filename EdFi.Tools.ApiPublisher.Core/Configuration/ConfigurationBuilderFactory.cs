@@ -57,6 +57,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--includeDescriptors"] = "Options:IncludeDescriptors",
                     ["--errorPublishingBatchSize"] = "Options:ErrorPublishingBatchSize",
                     ["--ignoreSslErrors"] = "Options:IgnoreSslErrors",
+                    ["--useSourceDependencyMetadata"] = "Options:UseSourceDependencyMetadata",
                     ["--whatIf"] = "Options:WhatIf",
                     
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")

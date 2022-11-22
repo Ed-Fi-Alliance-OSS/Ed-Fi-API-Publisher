@@ -151,7 +151,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
                     .Returns(
-                        new ChangeKeysPublishingStageInitiator(
+                        new KeyChangePublishingStageInitiator(
                             streamingResourceProcessor,
                             new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider)));
 
@@ -335,7 +335,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
                     .Returns(
-                        new ChangeKeysPublishingStageInitiator(
+                        new KeyChangePublishingStageInitiator(
                             streamingResourceProcessor,
                             new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider)));
 
@@ -522,7 +522,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
                     .Returns(
-                        new ChangeKeysPublishingStageInitiator(
+                        new KeyChangePublishingStageInitiator(
                             streamingResourceProcessor,
                             new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider)));
 

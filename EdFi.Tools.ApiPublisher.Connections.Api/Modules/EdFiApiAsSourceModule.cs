@@ -4,8 +4,10 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using Autofac;
+using Autofac.Core;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
+using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
@@ -18,6 +20,7 @@ using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
+using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
@@ -92,9 +95,16 @@ public class EdFiApiAsSourceModule : Module
             .As<ISourceTotalCountProvider>()
             .SingleInstance();
         
-        // Register the processing stage initiators
-        builder.RegisterType<ChangeKeysPublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.KeyChanges);
-        builder.RegisterType<UpsertPublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.Upserts);
-        builder.RegisterType<DeletePublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.Deletes);
+        // API dependency metadata from Ed-Fi ODS API (using Source API)
+        if (options.UseSourceDependencyMetadata)
+        {
+            builder.RegisterType<EdFiApiGraphMLDependencyMetadataProvider>()
+                .As<IGraphMLDependencyMetadataProvider>()
+                .WithParameter(
+                    // Configure to use with Target API
+                    new ResolvedParameter(
+                        (pi, ctx) => pi.ParameterType == typeof(IEdFiApiClientProvider),
+                        (pi, ctx) => ctx.Resolve<ISourceEdFiApiClientProvider>()));
+        }
     }
 }

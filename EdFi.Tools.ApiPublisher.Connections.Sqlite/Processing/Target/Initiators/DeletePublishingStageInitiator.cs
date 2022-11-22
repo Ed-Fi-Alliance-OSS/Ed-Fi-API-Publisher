@@ -1,22 +1,16 @@
-// SPDX-License-Identifier: Apache-2.0
-// Licensed to the Ed-Fi Alliance under one or more agreements.
-// The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
-// See the LICENSE and NOTICES files in the project root for more information.
-
-using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
+using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
+namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Initiators;
 
 public class DeletePublishingStageInitiator : IPublishingStageInitiator
 {
-    private readonly IProcessingBlocksFactory<GetItemForDeletionMessage> _processingBlocksFactory;
+    private readonly IProcessingBlocksFactory<DeletesJsonMessage> _processingBlocksFactory;
     private readonly IStreamingResourceProcessor _streamingResourceProcessor;
 
     public DeletePublishingStageInitiator(
         IStreamingResourceProcessor streamingResourceProcessor,
-        IProcessingBlocksFactory<GetItemForDeletionMessage> processingBlocksFactory)
+        IProcessingBlocksFactory<DeletesJsonMessage> processingBlocksFactory)
     {
         _streamingResourceProcessor = streamingResourceProcessor;
         _processingBlocksFactory = processingBlocksFactory;

@@ -10,12 +10,11 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Microsoft.Extensions.Configuration;
 
@@ -58,25 +57,33 @@ public class EdFiApiAsTargetModule : Module
             .SingleInstance();
 
         // API dependency metadata from Ed-Fi ODS API (using Target API)
-        builder.RegisterType<EdFiApiGraphMLDependencyMetadataProvider>()
-            .As<IGraphMLDependencyMetadataProvider>()
-            .WithParameter(
-                // Configure to use with Target API
-                new ResolvedParameter(
-                    (pi, ctx) => pi.ParameterType == typeof(IEdFiApiClientProvider),
-                    (pi, ctx) => ctx.Resolve<ITargetEdFiApiClientProvider>()));
-        
+        if (!options.UseSourceDependencyMetadata)
+        {
+            builder.RegisterType<EdFiApiGraphMLDependencyMetadataProvider>()
+                .As<IGraphMLDependencyMetadataProvider>()
+                .WithParameter(
+                    // Configure to use with Target API
+                    new ResolvedParameter(
+                        (pi, ctx) => pi.ParameterType == typeof(IEdFiApiClientProvider),
+                        (pi, ctx) => ctx.Resolve<ITargetEdFiApiClientProvider>()));
+        }
+
         // Target Data Processing
         builder.RegisterType<ChangeResourceKeyProcessingBlocksFactory>()
             .As<IProcessingBlocksFactory<GetItemForKeyChangeMessage>>()
             .SingleInstance();
-                        
+
         builder.RegisterType<PostResourceProcessingBlocksFactory>()
             .As<IProcessingBlocksFactory<PostItemMessage>>()
             .SingleInstance();
-                        
+
         builder.RegisterType<DeleteResourceProcessingBlocksFactory>()
             .As<IProcessingBlocksFactory<GetItemForDeletionMessage>>()
             .SingleInstance();
+        
+        // Register the processing stage initiators
+        builder.RegisterType<KeyChangePublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.KeyChanges);
+        builder.RegisterType<UpsertPublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.Upserts);
+        builder.RegisterType<DeletePublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.Deletes);
     }
 }

@@ -1,26 +1,27 @@
-using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
+using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
+namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Initiators;
 
-public class UpsertPublishingStageInitiator : IPublishingStageInitiator
+public class KeyChangePublishingStageInitiator : IPublishingStageInitiator
 {
+    private readonly IProcessingBlocksFactory<KeyChangesJsonMessage> _processingBlocksFactory;
     private readonly IStreamingResourceProcessor _streamingResourceProcessor;
-    private readonly IProcessingBlocksFactory<PostItemMessage> _processingBlocksFactory;
 
-    public UpsertPublishingStageInitiator(IStreamingResourceProcessor streamingResourceProcessor, IProcessingBlocksFactory<PostItemMessage> processingBlocksFactory)
+    public KeyChangePublishingStageInitiator(
+        IStreamingResourceProcessor streamingResourceProcessor,
+        IProcessingBlocksFactory<KeyChangesJsonMessage> processingBlocksFactory)
     {
         _streamingResourceProcessor = streamingResourceProcessor;
         _processingBlocksFactory = processingBlocksFactory;
     }
-    
+
     public IDictionary<string, StreamingPagesItem> Start(ProcessingContext processingContext, CancellationToken cancellationToken)
     {
         return _streamingResourceProcessor.Start(
             _processingBlocksFactory.CreateProcessingBlocks,
             _processingBlocksFactory.CreateProcessDataMessages,
-            processingContext, 
+            processingContext,
             cancellationToken);
     }
 }

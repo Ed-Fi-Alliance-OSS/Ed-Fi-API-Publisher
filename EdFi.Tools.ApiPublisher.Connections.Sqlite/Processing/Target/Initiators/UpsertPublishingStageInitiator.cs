@@ -1,16 +1,16 @@
+using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 
-namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
+namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Initiators;
 
-public class ChangeKeysPublishingStageInitiator : IPublishingStageInitiator
+public class UpsertPublishingStageInitiator : IPublishingStageInitiator
 {
-    private readonly IProcessingBlocksFactory<GetItemForKeyChangeMessage> _processingBlocksFactory;
+    private readonly IProcessingBlocksFactory<UpsertsJsonMessage> _processingBlocksFactory;
     private readonly IStreamingResourceProcessor _streamingResourceProcessor;
 
-    public ChangeKeysPublishingStageInitiator(
+    public UpsertPublishingStageInitiator(
         IStreamingResourceProcessor streamingResourceProcessor,
-        IProcessingBlocksFactory<GetItemForKeyChangeMessage> processingBlocksFactory)
+        IProcessingBlocksFactory<UpsertsJsonMessage> processingBlocksFactory)
     {
         _streamingResourceProcessor = streamingResourceProcessor;
         _processingBlocksFactory = processingBlocksFactory;

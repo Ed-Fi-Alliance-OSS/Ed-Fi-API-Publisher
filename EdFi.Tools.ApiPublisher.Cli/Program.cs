@@ -41,7 +41,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 {
                     // Connection plugins
                     typeof(Connections.Api.Plugin),
-                    // typeof(Connections.SqlLite.Plugin),
+                    typeof(Connections.Sqlite.Plugin),
                     
                     // Configuration store plugins
                     typeof(ConfigurationStore.Aws.Plugin),
@@ -142,6 +142,8 @@ namespace EdFi.Tools.ApiPublisher.Cli
                             .RegisterAssemblyTypes(typeof(CoreModule).Assembly)
                             .UsingDefaultImplementationConvention();
 
+                        builder.RegisterInstance(options);
+                        
                         // Allow plugins to perform initial registrations
                         foreach (IPlugin plugin in plugins)
                         {
