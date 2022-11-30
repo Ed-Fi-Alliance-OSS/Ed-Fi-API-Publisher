@@ -21,6 +21,6 @@ jobs:
         with:
           artifact: csharp-tests
           name: C# Unit Test Results
-          path: "*.trx"
+          path: "TestResults/*.trx"
           reporter: dotnet-trx
           fail-on-error: false
