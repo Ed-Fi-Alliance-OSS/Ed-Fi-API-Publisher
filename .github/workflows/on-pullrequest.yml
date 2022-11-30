@@ -6,6 +6,8 @@
 name: On Pull Request
 
 on:
+  push:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
     paths:
@@ -51,15 +53,29 @@ jobs:
     - name: Dependency Review ("Dependabot on PR")
       uses: actions/dependency-review-action@a9c83d3af6b9031e20feba03b904645bb23d1dab # v1.0.2
 
+  code-ql:
+    # CodeQL needs a completely fresh build
+    name: Run CodeQL
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@9211491ffb35dd6a6657ca4f45d43dfe6e97c829 # v2.0.0
+      with:
+        dotnet-version: 6.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore
+    
     - name: Initialize CodeQL
       if: success()
       uses: github/codeql-action/init@1fae5bf71b0ecdc7d0a2ef0d0c28409d99693966 # v2.9.2
       with:
         languages: csharp
 
-    # Must build the software after initialization of CodeQL; something about
-    # CodeQL initialization causes the resulting build to fail unit tests.
-    # Therefore rebuilding here, even though also built above.
     - name: Build
       run: dotnet build --no-restore
 
