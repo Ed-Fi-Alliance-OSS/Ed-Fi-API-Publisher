@@ -1,8 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Licensed to the Ed-Fi Alliance under one or more agreements.
-// The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
-// See the LICENSE and NOTICES files in the project root for more information.
-
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -34,8 +29,8 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
         Options options,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock)
     {
-        long offset = message.Offset;
-        int limit = message.Limit;
+        long offset = message.Offset ?? throw new NullReferenceException("Offset is expected on resource page messages for the Ed-Fi ODS API.");
+        int limit = message.Limit ?? throw new NullReferenceException("Limit is expected on resource page messages for the Ed-Fi ODS API.");
 
         var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
 
@@ -122,6 +117,8 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     // Publish the failure
                     errorHandlingBlock.Post(error);
 
+                    _logger.Error($"{message.ResourceUrl}: GET page items failed with response status '{apiResponse.StatusCode}'.");
+
                     break;
                 }
 
@@ -147,7 +144,8 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         Id = null,
                         Body = null,
                         ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = responseContent
+                        ResponseContent = responseContent,
+                        Exception = ex,
                     };
 
                     // Publish the failure
@@ -156,7 +154,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     _logger.Error(
                         $"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}");
 
-                    throw new Exception("JSON parsing of source page data failed.", ex);
+                    break;
                 }
 
                 // Perform limit/offset final page check (for need for possible continuation)
@@ -183,6 +181,17 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
         {
             _logger.Error($"{message.ResourceUrl}: {ex}");
 
+            // An error occurred while parsing the JSON
+            var error = new ErrorItemMessage
+            {
+                Method = HttpMethod.Get.ToString(),
+                ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
+                Exception = ex,
+            };
+
+            // Publish the failure
+            errorHandlingBlock.Post(error);
+            
             return Array.Empty<TProcessDataMessage>();
         }
     }

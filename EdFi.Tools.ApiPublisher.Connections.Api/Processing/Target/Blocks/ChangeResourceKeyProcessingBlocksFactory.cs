@@ -86,7 +86,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 if (result.Exception != null)
                                 {
-                                    _logger.Error($"{message.ResourceUrl} (source id: {sourceId}): GET by key on resource failed with an exception. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay){Environment.NewLine}{result.Exception}");
+                                    _logger.Warn($"{message.ResourceUrl} (source id: {sourceId}): GET by key on resource failed with an exception. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay){Environment.NewLine}{result.Exception}");
                                 }
                                 else
                                 {
@@ -277,7 +277,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             if (result.Exception != null)
                             {
-                                _logger.Error($"{msg.ResourceUrl} (source id: {sourceId}): Key change attempt #{attempt} threw an exception: {result.Exception}");
+                                _logger.Warn($"{msg.ResourceUrl} (source id: {sourceId}): Key change attempt #{attempt} threw an exception: {result.Exception}");
                             }
                             else
                             {

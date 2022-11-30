@@ -1,6 +1,8 @@
 using Autofac;
-using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
+using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
+using EdFi.Tools.ApiPublisher.Core.Isolation;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
@@ -24,6 +26,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
                 .As<IEdFiVersionsChecker>()
                 .SingleInstance();
             
+            // Register decorators for collecting publishing operation metadata
+            builder.RegisterType<PublishingOperationMetadataCollector>()
+                .As<IPublishingOperationMetadataCollector>()
+                .SingleInstance();
+            
+            builder.RegisterDecorator<CurrentChangeVersionCollector, ISourceCurrentChangeVersionProvider>();
+            builder.RegisterDecorator<ResourceItemCountCollector, ISourceTotalCountProvider>();
+            
+            builder.RegisterDecorator<SourceEdFiVersionMetadataCollector, ISourceEdFiApiVersionMetadataProvider>();
+            builder.RegisterDecorator<TargetEdFiVersionMetadataCollector, ITargetEdFiApiVersionMetadataProvider>();
+            
             // Block factories
             builder.RegisterType<StreamResourceBlockFactory>(); //.SingleInstance();
             builder.RegisterType<StreamResourcePagesBlockFactory>(); //.SingleInstance();
@@ -37,6 +50,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
 
             builder.RegisterType<FallbackTargetEdFiApiVersionMetadataProvider>().As<ITargetEdFiApiVersionMetadataProvider>();
             builder.RegisterType<FallbackSourceEdFiApiVersionMetadataProvider>().As<ISourceEdFiApiVersionMetadataProvider>();
+
+            builder.RegisterType<FallbackSourceIsolationApplicator>().As<ISourceIsolationApplicator>().SingleInstance();
         }
     }
 }

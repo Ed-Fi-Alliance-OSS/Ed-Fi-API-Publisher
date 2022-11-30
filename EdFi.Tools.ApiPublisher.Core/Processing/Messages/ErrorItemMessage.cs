@@ -25,5 +25,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public HttpStatusCode? ResponseStatus { get; set; }
         
         public string ResponseContent { get; set; }
+        
+        public Exception? Exception { get; set; }
     }
 }

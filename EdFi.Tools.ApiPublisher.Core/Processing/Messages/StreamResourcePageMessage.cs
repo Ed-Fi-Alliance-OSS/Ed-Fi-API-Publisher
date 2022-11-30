@@ -23,8 +23,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // -------------------------------
         // Paging-strategy specific context
         // --------------------------------
-        public long Offset { get; set; }
-        public int Limit { get; set; }
+        public long? Offset { get; set; }
+        public int? Limit { get; set; }
+        public string? PartitionFrom { get; set; }
+        public string? PartitionUntil { get; set; }
         public bool IsFinalPage { get; set; }
         
         // -------------------------------------------------

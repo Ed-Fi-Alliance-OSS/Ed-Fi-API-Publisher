@@ -18,7 +18,7 @@ public class Plugin : IPlugin
 
     public void PerformConfigurationRegistrations(ContainerBuilder containerBuilder, IConfigurationRoot initialConfigurationRoot)
     {
-        containerBuilder.RegisterModule(new EdFiApiModule());
+        containerBuilder.RegisterModule(new PluginModule());
     }
 
     public void PerformFinalRegistrations(ContainerBuilder containerBuilder, IConfigurationRoot finalConfigurationRoot)

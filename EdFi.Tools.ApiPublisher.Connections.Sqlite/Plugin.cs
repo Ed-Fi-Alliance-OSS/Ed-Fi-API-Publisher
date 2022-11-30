@@ -1,8 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Licensed to the Ed-Fi Alliance under one or more agreements.
-// The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
-// See the LICENSE and NOTICES files in the project root for more information.
-
 using Autofac;
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Modules;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -19,6 +14,7 @@ public class Plugin : IPlugin
     {
         configBuilder.AddCommandLine(args, new Dictionary<string, string>
         {
+            ["--sourceFile"] = "Connections:Source:File",
             ["--targetFile"] = "Connections:Target:File"
         });
     }
@@ -31,12 +27,12 @@ public class Plugin : IPlugin
     public void PerformFinalRegistrations(ContainerBuilder containerBuilder, IConfigurationRoot finalConfigurationRoot)
     {
         // TODO: When support is added for Sqlite database as source  
-        // string sourceConnectionType = ConfigurationHelper.GetSourceConnectionType(finalConfigurationRoot);
-        //
-        // if (sourceConnectionType == ApiConnectionType)
-        // {
-        //     containerBuilder.RegisterModule(new EdFiApiAsSourceModule(finalConfigurationRoot));
-        // }
+        string sourceConnectionType = ConfigurationHelper.GetSourceConnectionType(finalConfigurationRoot);
+        
+        if (sourceConnectionType == SqliteConnectionType)
+        {
+            containerBuilder.RegisterModule(new SqliteAsSourceModule(finalConfigurationRoot));
+        }
 
         string targetConnectionType = ConfigurationHelper.GetTargetConnectionType(finalConfigurationRoot);
 

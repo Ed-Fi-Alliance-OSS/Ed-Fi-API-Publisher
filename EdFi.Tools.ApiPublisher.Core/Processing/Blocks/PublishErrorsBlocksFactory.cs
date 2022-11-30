@@ -38,7 +38,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error($"Unable to publish errors due to an unexpected exception: {ex}");
+                    _logger.Error($"Unable to publish errors due to an unhandled exception: {ex}");
+
+                    throw;
                 }
             });
         }

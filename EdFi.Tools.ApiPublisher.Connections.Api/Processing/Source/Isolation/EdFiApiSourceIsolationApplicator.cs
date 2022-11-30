@@ -1,8 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Licensed to the Ed-Fi Alliance under one or more agreements.
-// The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
-// See the LICENSE and NOTICES files in the project root for more information.
-
 using System.Net;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
@@ -29,7 +24,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
         var sourceApiClient = _sourceEdFiApiClientProvider.GetApiClient();
         var sourceApiConnectionDetails = sourceApiClient.ConnectionDetails;
 
-        string snapshotIdentifier =
+        string? snapshotIdentifier =
             await GetSourceSnapshotIdentifierAsync(sourceApiClient, sourceApiVersion).ConfigureAwait(false);
 
         // Confirm that a snapshot exists or --ignoreIsolation=true has been provided
@@ -40,14 +35,12 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 
             throw new Exception(message);
         }
-        else
-        {
-            // Configure source HTTP client to add the snapshot identifier header to every request against the source API
-            sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Snapshot-Identifier", snapshotIdentifier);
-        }
+
+        // Configure source HTTP client to add the snapshot identifier header to every request against the source API
+        sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Snapshot-Identifier", snapshotIdentifier);
     }
 
-    private async Task<string> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)
+    private async Task<string?> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)
     {
         string snapshotsRelativePath;
 

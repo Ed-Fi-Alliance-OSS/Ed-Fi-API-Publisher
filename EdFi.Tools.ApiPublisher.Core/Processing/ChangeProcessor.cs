@@ -13,6 +13,7 @@ using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Finalization;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
@@ -47,6 +48,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly ISourceCapabilities _sourceCapabilities;
         private readonly PublishErrorsBlocksFactory _publishErrorsBlocksFactory;
         private readonly IIndex<PublishingStage, IPublishingStageInitiator> _publishingStageInitiatorByStage;
+        private readonly IFinalizationActivity[] _finalizationActivities;
 
         public ChangeProcessor(
             IResourceDependencyProvider resourceDependencyProvider,
@@ -59,7 +61,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             ISourceIsolationApplicator sourceIsolationApplicator,
             ISourceCapabilities sourceCapabilities,
             PublishErrorsBlocksFactory publishErrorsBlocksFactory,
-            IIndex<PublishingStage, IPublishingStageInitiator> publishingStageInitiatorByStage)
+            IIndex<PublishingStage, IPublishingStageInitiator> publishingStageInitiatorByStage,
+            IFinalizationActivity[] finalizationActivities)
         {
             _resourceDependencyProvider = resourceDependencyProvider;
             _changeVersionProcessedWriter = changeVersionProcessedWriter;
@@ -72,6 +75,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _sourceCapabilities = sourceCapabilities;
             _publishErrorsBlocksFactory = publishErrorsBlocksFactory;
             _publishingStageInitiatorByStage = publishingStageInitiatorByStage;
+            _finalizationActivities = finalizationActivities;
         }
         
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
@@ -168,6 +172,19 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 publishErrorsCompletionBlock.Completion.Wait();
 
                 EnsureProcessingWasSuccessful(keyChangesTaskStatuses, postTaskStatuses, deleteTaskStatuses);
+
+                // Perform processing finalization activities
+                var finalizationTasks = _finalizationActivities.Select(f => f.Execute()).ToArray();
+
+                try
+                {
+                    await Task.WhenAll(finalizationTasks);
+                }
+                catch (Exception)
+                {
+                    _logger.Error("A finalization task failed. The last processed ChangeVersion will not be updated.");
+                    throw;
+                }
 
                 await UpdateChangeVersionAsync(configuration, changeWindow)
                     .ConfigureAwait(false);

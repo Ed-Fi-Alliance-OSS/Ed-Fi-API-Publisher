@@ -1,12 +1,8 @@
-// SPDX-License-Identifier: Apache-2.0
-// Licensed to the Ed-Fi Alliance under one or more agreements.
-// The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
-// See the LICENSE and NOTICES files in the project root for more information.
-
 using Autofac;
 using Autofac.Core;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
+using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
@@ -15,6 +11,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Isolation;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Versioning;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
@@ -78,6 +75,10 @@ public class EdFiApiAsSourceModule : Module
         // Determine data source capabilities for Source API
         builder.RegisterType<EdFiApiSourceCapabilities>()
             .As<ISourceCapabilities>()
+            .SingleInstance();
+
+        builder.RegisterType<ApiSourceResourceItemProvider>()
+            .As<ISourceResourceItemProvider>()
             .SingleInstance();
 
         // Register resource page message producer using a limit/offset paging strategy
