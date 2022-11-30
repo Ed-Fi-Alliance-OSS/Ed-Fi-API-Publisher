@@ -39,7 +39,7 @@ jobs:
       run: dotnet build --no-restore
 
     - name: Run Unit Tests
-      run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=api-publisher.trx" --nologo
+      run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=api-publisher.trx"
 
     - name: Upload Test Results
       uses: actions/upload-artifact@3cea5372237819ed00197afe530f5a7ea3e805c8 # v3.1.0
@@ -61,7 +61,7 @@ jobs:
     # CodeQL initialization causes the resulting build to fail unit tests.
     # Therefore rebuilding here, even though also built above.
     - name: Build
-      run: ./build.ps1 -Command Build -Configuration Debug
+      run: dotnet build --no-restore
 
     - name: Perform CodeQL Analysis
       if: success()
