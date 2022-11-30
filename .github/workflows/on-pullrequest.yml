@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 jobs:
- scan-actions-bidi:
+  scan-actions-bidi:
     name: Scan Actions, scan all files for BIDI Trojan Attacks
     uses: ed-fi-alliance-oss/ed-fi-actions/.github/workflows/repository-scanner.yml@main
     with:
