@@ -969,7 +969,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             SemaphoreSlim processingSemaphore,
             Options options)
         {
-            var completedStreamingPagesByResourcePath = new Dictionary<string, StreamingPagesItem>(StringComparer.OrdinalIgnoreCase);
+            var completedStreamingPagesByResourcePath = new Dictionary<string, TaskStatus>(StringComparer.OrdinalIgnoreCase);
 
             _logger.Info($"Waiting for {streamingPagesByResourcePath.Count} {activityDescription} streaming sources to complete...");
 
@@ -1091,9 +1091,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         _logger.Fatal($"Streaming task failure for {resourcePath}: {blockCompletion.Exception}");
                     }
                     
-                    completedStreamingPagesByResourcePath.Add(resourcePaths[completedIndex],
-                        streamingPagesByResourcePath[resourcePaths[completedIndex]]);
+                    completedStreamingPagesByResourcePath.Add(
+                        resourcePaths[completedIndex],
+                        streamingPagesByResourcePath[resourcePaths[completedIndex]].CompletionBlock.Completion.Status);
 
+                    streamingPagesItem.CompletionBlock = null;
+                    
                     streamingPagesByResourcePath.Remove(resourcePaths[completedIndex]);
 
                     if (_logger.IsDebugEnabled)
@@ -1115,7 +1118,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
 
             return completedStreamingPagesByResourcePath
-                .Select(kvp => kvp.Value.CompletionBlock.Completion.Status)
+                .Select(kvp => kvp.Value)
                 .ToArray();
         }
     }

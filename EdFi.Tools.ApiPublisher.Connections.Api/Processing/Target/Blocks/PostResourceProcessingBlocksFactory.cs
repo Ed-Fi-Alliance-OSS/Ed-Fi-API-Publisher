@@ -390,6 +390,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                 throw;
             }
+            finally
+            {
+                // Drop reference to JObject so it can be GC'd.
+                postItemMessage.Item = null;
+            }
 
             string GetResponseMessageText(HttpResponseMessage response)
             {
