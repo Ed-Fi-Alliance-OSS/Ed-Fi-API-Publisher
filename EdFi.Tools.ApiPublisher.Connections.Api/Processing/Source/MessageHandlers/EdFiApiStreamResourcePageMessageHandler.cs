@@ -1,4 +1,7 @@
+using System.Collections.Concurrent;
+using System.Net.Http.Headers;
 using System.Threading.Tasks.Dataflow;
+using EdFi.Common.Inflection;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
@@ -6,6 +9,7 @@ using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using log4net;
+using Microsoft.Extensions.Primitives;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Polly;
@@ -17,6 +21,9 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 {
     private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiStreamResourcePageMessageHandler));
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
+
+    private readonly ConcurrentDictionary<string, string> _contentTypeByResourceUrl = new ();
+    private static readonly char[] _pathSeparatorChars = new[] { '/' };
 
     public EdFiApiStreamResourcePageMessageHandler(
         ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
@@ -85,6 +92,32 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             }
 
                             // Possible seam for getting a page of data (here, using Ed-Fi ODS API w/ offset/limit paging strategy)
+
+                            string requestUri =
+                                $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}";
+                            
+                            // Build an explicit request with custom content type
+                            if (!string.IsNullOrEmpty(edFiApiClient.ProfileName))
+                            {
+                                var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+
+                                string contentType = _contentTypeByResourceUrl.GetOrAdd(
+                                    message.ResourceUrl,
+                                    resourceUrl =>
+                                    {
+                                        var segment = new StringSegment(message.ResourceUrl);
+                                        var tokenizer = segment.Split(_pathSeparatorChars);
+                                        string resourceCollectionName = tokenizer.Last().Value;
+                                        string resourceName = CompositeTermInflector.MakeSingular(resourceCollectionName);
+
+                                        return
+                                            $"application/vnd.ed-fi.{resourceName}.{edFiApiClient.ProfileName.ToLower()}.readable+json";
+                                    });
+
+                                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(contentType));
+                                return edFiApiClient.HttpClient.SendAsync(request, ct);
+                            }
+
                             return edFiApiClient.HttpClient.GetAsync(
                                 $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}",
                                 ct);

@@ -27,9 +27,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             ApiConnectionDetails apiConnectionDetails,
             int bearerTokenRefreshMinutes,
             bool ignoreSslErrors,
-            HttpClientHandler? httpClientHandler = null)
+            HttpClientHandler? httpClientHandler = null,
+            string? profileName = null) // Temporary argument due to Ed-Fi ODS API's current lack of support for Profile usage enforcement
         {
             ConnectionDetails = apiConnectionDetails ?? throw new ArgumentNullException(nameof(apiConnectionDetails));
+            ProfileName = profileName;
             _name = name;
 
             string apiUrl = apiConnectionDetails.Url ?? throw new Exception("URL for API connection '{name}' was not assigned.");
@@ -56,7 +58,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             _httpClient = new HttpClient(httpClientHandler)
             {
-                BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
+                BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/")),
             };
 
             // Create a separate HttpClient for token refreshes to avoid possible "Snapshot-Identifier" header presence
@@ -194,6 +196,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         }
 
         public ApiConnectionDetails ConnectionDetails { get; }
+
+        // Temporary argument due to Ed-Fi ODS API's current lack of support for Profile usage enforcement
+        public string? ProfileName { get; }
 
         public string DataManagementApiSegment => _dataManagementApiSegment.Value;
         

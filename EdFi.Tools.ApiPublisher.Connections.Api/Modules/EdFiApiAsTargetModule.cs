@@ -33,6 +33,9 @@ public class EdFiApiAsTargetModule : Module
         var targetConnectionConfiguration = connectionsConfiguration.GetSection("Target");
         var targetApiConnectionDetails = targetConnectionConfiguration.Get<ApiConnectionDetails>();
 
+        // Temporary fix for Ed-Fi ODS API's lack of correct support for Profile usage enforcement
+        string? targetProfileName = targetConnectionConfiguration.GetValue<string>("ProfileName");
+
         builder.RegisterInstance(targetApiConnectionDetails).As<ITargetConnectionDetails>();
         
         var targetEdFiApiClient = new Lazy<EdFiApiClient>(
@@ -40,7 +43,9 @@ public class EdFiApiAsTargetModule : Module
                 "Target",
                 targetApiConnectionDetails,
                 options.BearerTokenRefreshMinutes,
-                options.IgnoreSSLErrors));
+                options.IgnoreSSLErrors,
+                null,
+                targetProfileName)); // Temporary fix for Ed-Fi ODS API's lack of correct support for Profile usage enforcement
 
         builder.RegisterInstance(new EdFiApiClientProvider(targetEdFiApiClient))
             .As<ITargetEdFiApiClientProvider>()

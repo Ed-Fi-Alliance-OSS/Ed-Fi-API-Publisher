@@ -43,6 +43,9 @@ public class EdFiApiAsSourceModule : Module
         var connectionsConfiguration = _finalConfiguration.GetSection("Connections");
         var sourceConnectionConfiguration = connectionsConfiguration.GetSection("Source");
         var sourceApiConnectionDetails = sourceConnectionConfiguration.Get<ApiConnectionDetails>();
+        
+        // Temporary fix for Ed-Fi ODS API's lack of correct support for Profile usage enforcement
+        string? sourceProfileName = sourceConnectionConfiguration.GetValue<string>("ProfileName");
 
         builder.RegisterInstance(sourceApiConnectionDetails).As<ISourceConnectionDetails>();
         
@@ -51,7 +54,9 @@ public class EdFiApiAsSourceModule : Module
                 "Source",
                 sourceApiConnectionDetails,
                 options.BearerTokenRefreshMinutes,
-                options.IgnoreSSLErrors));
+                options.IgnoreSSLErrors,
+                null,
+                sourceProfileName));
 
         builder.RegisterInstance(new EdFiApiClientProvider(sourceEdFiApiClient))
             .As<ISourceEdFiApiClientProvider>()

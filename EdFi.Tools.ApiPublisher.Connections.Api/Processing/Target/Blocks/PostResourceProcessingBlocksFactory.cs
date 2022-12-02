@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks.Dataflow;
+using EdFi.Common.Inflection;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
@@ -15,6 +16,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Jering.Javascript.NodeJS;
 using log4net;
+using Microsoft.Extensions.Primitives;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
@@ -30,6 +32,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly ISourceConnectionDetails _sourceConnectionDetails;
         private readonly ISourceCapabilities _sourceCapabilities;
         private readonly ISourceResourceItemProvider _sourceResourceItemProvider;
+
+        private readonly ConcurrentDictionary<string, string> _contentTypeByResourceUrl = new ();
+        private static readonly char[] _pathSeparatorChars = new[] { '/' };
 
         public PostResourceProcessingBlocksFactory(
             INodeJSService nodeJsService,
@@ -88,6 +93,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             return (postResourceBlock, postResourceBlock);
         }
 
+        // NOTE: Consider breaking this out into a separate message handler, similar to EdFiApiStreamResourcePageMessageHandler
         private async Task<IEnumerable<ErrorItemMessage>> HandlePostItemMessage(
             ConcurrentDictionary<string, bool> ignoredResourceByUrl,
             PostItemMessage postItemMessage,
@@ -230,13 +236,38 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 requestBodyJson = postItemMessage.Item.ToString();
                             }
 
+                            var requestUri = $"{targetEdFiApiClient.DataManagementApiSegment}{postItemMessage.ResourceUrl}";
+
+                            if (!string.IsNullOrEmpty(targetEdFiApiClient.ProfileName))
+                            {
+                                var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
+
+                                string contentType = _contentTypeByResourceUrl.GetOrAdd(
+                                    postItemMessage.ResourceUrl,
+                                    resourceUrl =>
+                                    {
+                                        var segment = new StringSegment(resourceUrl);
+                                        var tokenizer = segment.Split(_pathSeparatorChars);
+                                        string resourceCollectionName = tokenizer.Last().Value;
+                                        string resourceName = CompositeTermInflector.MakeSingular(resourceCollectionName);
+
+                                        return
+                                            $"application/vnd.ed-fi.{resourceName}.{targetEdFiApiClient.ProfileName.ToLower()}.writable+json";
+                                    });
+
+                                request.Content = new StringContent(requestBodyJson, Encoding.UTF8, contentType);
+
+                                return await targetEdFiApiClient.HttpClient.SendAsync(request, ct);
+                            }
+
                             var response = await targetEdFiApiClient.HttpClient.PostAsync(
-                                $"{targetEdFiApiClient.DataManagementApiSegment}{postItemMessage.ResourceUrl}",
+                                requestUri,
                                 new StringContent(requestBodyJson, Encoding.UTF8, "application/json"),
                                 ct);
 
-                            var (hasMissingDependency, missingDependencyDetails) = await TryGetMissingDependencyDetailsAsync(response, postItemMessage);
-                            
+                            var (hasMissingDependency, missingDependencyDetails) =
+                                await TryGetMissingDependencyDetailsAsync(response, postItemMessage);
+
                             if (hasMissingDependency)
                             {
                                 if (!_sourceCapabilities.SupportsGetItemById)
@@ -250,8 +281,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 _logger.Info(
                                     $"{postItemMessage.ResourceUrl}: Attempting to retrieve missing '{missingDependencyDetails.ReferencedResourceName}' reference based on 'authorizationFailureHandling' metadata in apiPublisherSettings.json.");
 
-                                var (missingDependencyItemRetrieved, missingItemJson) = await _sourceResourceItemProvider.TryGetResourceItemAsync(missingDependencyDetails.SourceDependencyItemUrl);
-                                    
+                                var (missingDependencyItemRetrieved, missingItemJson) =
+                                    await _sourceResourceItemProvider.TryGetResourceItemAsync(
+                                        missingDependencyDetails.SourceDependencyItemUrl);
+
                                 if (missingDependencyItemRetrieved)
                                 {
                                     var missingItem = JObject.Parse(missingItemJson!);
@@ -267,9 +300,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                     {
                                         ResourceUrl = missingDependencyDetails.DependencyResourceUrl,
                                         Item = missingItem,
-                                        PostAuthorizationFailureRetry = postItemMessage.PostAuthorizationFailureRetry, // TODO: Is this appropriate to copy?
+                                        PostAuthorizationFailureRetry =
+                                            postItemMessage.PostAuthorizationFailureRetry, // TODO: Is this appropriate to copy?
                                     };
-                                    
+
                                     await HandlePostItemMessage(
                                         ignoredResourceByUrl,
                                         postDependencyItemMessage!,
@@ -280,7 +314,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                         missingDependencyByResourcePath);
                                 }
                             }
-                            
+
                             return response;
                         },
                         new Context(),
