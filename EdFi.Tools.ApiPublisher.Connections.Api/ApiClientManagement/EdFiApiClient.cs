@@ -197,7 +197,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         public ApiConnectionDetails ConnectionDetails { get; }
 
-        // Temporary argument due to Ed-Fi ODS API's current lack of support for Profile usage enforcement
+        // Temporary property due to Ed-Fi ODS API's lack of support for Profiles usage enforcement between v.5.1.0 through at least 6.1.
         public string? ProfileName { get; }
 
         public string DataManagementApiSegment => _dataManagementApiSegment.Value;

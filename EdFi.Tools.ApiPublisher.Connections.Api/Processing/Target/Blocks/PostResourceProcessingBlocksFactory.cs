@@ -108,8 +108,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 
-            var idToken = postItemMessage.Item["id"];
-            string id = idToken.Value<string>();
+            string id = postItemMessage.Item.TryGetValue("id", out var idToken)
+                ? idToken.Value<string>()
+                : "(unknown)";
 
             try
             {
@@ -122,6 +123,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 // Remove attributes not usable between API instances
                 postItemMessage.Item.Remove("id");
                 postItemMessage.Item.Remove("_etag");
+                postItemMessage.Item.Remove("_lastModifiedDate");
 
                 // For descriptors, also strip the surrogate id
                 if (postItemMessage.ResourceUrl.EndsWith("Descriptors"))
@@ -236,33 +238,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 requestBodyJson = postItemMessage.Item.ToString();
                             }
 
-                            var requestUri = $"{targetEdFiApiClient.DataManagementApiSegment}{postItemMessage.ResourceUrl}";
-
-                            if (!string.IsNullOrEmpty(targetEdFiApiClient.ProfileName))
-                            {
-                                var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
-
-                                string contentType = _contentTypeByResourceUrl.GetOrAdd(
-                                    postItemMessage.ResourceUrl,
-                                    resourceUrl =>
-                                    {
-                                        var segment = new StringSegment(resourceUrl);
-                                        var tokenizer = segment.Split(_pathSeparatorChars);
-                                        string resourceCollectionName = tokenizer.Last().Value;
-                                        string resourceName = CompositeTermInflector.MakeSingular(resourceCollectionName);
-
-                                        return
-                                            $"application/vnd.ed-fi.{resourceName}.{targetEdFiApiClient.ProfileName.ToLower()}.writable+json";
-                                    });
-
-                                request.Content = new StringContent(requestBodyJson, Encoding.UTF8, contentType);
-
-                                return await targetEdFiApiClient.HttpClient.SendAsync(request, ct);
-                            }
-
-                            var response = await targetEdFiApiClient.HttpClient.PostAsync(
-                                requestUri,
-                                new StringContent(requestBodyJson, Encoding.UTF8, "application/json"),
+                            var response = await SendPostRequestAsync(
+                                targetEdFiApiClient,
+                                postItemMessage.ResourceUrl,
+                                requestBodyJson,
                                 ct);
 
                             var (hasMissingDependency, missingDependencyDetails) =
@@ -288,13 +267,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 if (missingDependencyItemRetrieved)
                                 {
                                     var missingItem = JObject.Parse(missingItemJson!);
-
-                                    // Clean up the JObject for POSTing against the target
-                                    // Remove attributes not usable between API instances
-                                    missingItem.Remove("id");
-                                    missingItem.Remove("_etag");
-
-                                    // string dependencyResourceUrl = dependencyItemUrl.Substring(0, dependencyItemUrl.LastIndexOf('/'));
 
                                     var postDependencyItemMessage = new PostItemMessage
                                     {
@@ -553,6 +525,55 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         }
 
         /// <summary>
+        /// Sends a POST request (using an applied Profile content type if appropriate).
+        /// </summary>
+        /// <param name="targetEdFiApiClient"></param>
+        /// <param name="resourceUrl"></param>
+        /// <param name="requestBodyJson"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        private async Task<HttpResponseMessage> SendPostRequestAsync(
+            EdFiApiClient targetEdFiApiClient,
+            string resourceUrl,
+            string requestBodyJson,
+            CancellationToken ct)
+        {
+            HttpResponseMessage response;
+
+            var requestUri = $"{targetEdFiApiClient.DataManagementApiSegment}{resourceUrl}";
+
+            if (!string.IsNullOrEmpty(targetEdFiApiClient.ProfileName))
+            {
+                var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
+
+                string contentType = _contentTypeByResourceUrl.GetOrAdd(
+                    resourceUrl,
+                    url =>
+                    {
+                        var segment = new StringSegment(url);
+                        var tokenizer = segment.Split(_pathSeparatorChars);
+                        string resourceCollectionName = tokenizer.Last().Value;
+                        string resourceName = CompositeTermInflector.MakeSingular(resourceCollectionName);
+
+                        return $"application/vnd.ed-fi.{resourceName}.{targetEdFiApiClient.ProfileName.ToLower()}.writable+json";
+                    });
+
+                request.Content = new StringContent(requestBodyJson, Encoding.UTF8, contentType);
+
+                response = await targetEdFiApiClient.HttpClient.SendAsync(request, ct);
+            }
+            else
+            {
+                response = await targetEdFiApiClient.HttpClient.PostAsync(
+                    requestUri,
+                    new StringContent(requestBodyJson, Encoding.UTF8, "application/json"),
+                    ct);
+            }
+
+            return response;
+        }
+
+        /// <summary>
         /// Contains details about a missing dependency.
         /// </summary>
         private record MissingDependencyDetails
@@ -686,10 +707,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             $"{resourceUrl} (source id: {sourceId}): Remediating request with POST request to '{remediationRequest.resource}' on target API: {remediationRequestBodyJson}");
                     }
 
-                    var remediationResponse = await targetEdFiApiClient.HttpClient.PostAsync(
-                        $"{targetEdFiApiClient.DataManagementApiSegment}{remediationRequest.resource}",
-                        new StringContent(remediationRequestBodyJson, Encoding.UTF8, "application/json"));
-
+                    var remediationResponse = await SendPostRequestAsync(
+                        targetEdFiApiClient,
+                        remediationRequest.resource,
+                        remediationRequestBodyJson,
+                        CancellationToken.None);
+                    
                     if (remediationResponse.IsSuccessStatusCode)
                     {
                         _logger.Info(

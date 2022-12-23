@@ -149,13 +149,16 @@ namespace EdFi.Tools.ApiPublisher.Tests
             }
         }
 
-        public static IFakeHttpRequestHandler PostResource(this IFakeHttpRequestHandler fakeRequestHandler, string url, params (HttpStatusCode, JObject?)[] responses)
+        public static IFakeHttpRequestHandler PostResource(
+            this IFakeHttpRequestHandler fakeRequestHandler,
+            string url,
+            params (HttpStatusCode, JObject?)[] responses)
         {
             var mocker = A.CallTo(
                     () => fakeRequestHandler.Post(
                         A<string>.Ignored,
                         A<HttpRequestMessage>.That.Matches(
-                            msg => (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)))))
+                            msg => msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url))))
                 .Returns(CreateMessageWithAppropriateBody(responses.First()))
                 .Once();
 

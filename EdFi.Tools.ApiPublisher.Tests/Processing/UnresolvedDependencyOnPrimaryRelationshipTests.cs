@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Autofac.Features.Indexed;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
@@ -21,6 +22,7 @@ using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
+using EdFi.Tools.ApiPublisher.Core.Finalization;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
@@ -193,7 +195,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .Returns(
                         new UpsertPublishingStageInitiator(
                             streamingResourceProcessor,
-                            new PostResourceProcessingBlocksFactory(nodeJsService, sourceEdFiApiClientProvider, targetEdFiApiClientProvider)));
+                            new PostResourceProcessingBlocksFactory(nodeJsService, targetEdFiApiClientProvider, 
+                                sourceApiConnectionDetails, dataSourceCapabilities, 
+                                new ApiSourceResourceItemProvider(sourceEdFiApiClientProvider, options))));
 
                 A.CallTo(() => stageInitiators[PublishingStage.Deletes])
                     .Returns(
@@ -212,7 +216,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     sourceIsolationApplicator,
                     dataSourceCapabilities,
                     publishErrorsBlocksFactory,
-                    stageInitiators);
+                    stageInitiators,
+                    Array.Empty<IFinalizationActivity>());
             }
 
             protected override async Task ActAsync()
@@ -243,9 +248,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             [Test]
             public void Should_attempt_to_post_the_item_obtained_from_the_source_API_for_the_unresolved_reference_to_the_target_API()
             {
+                // Strip off the "id" portion of the route (to obtain path to collection endpoint)
+                string expectedPostPath = _suppliedSourceLinkHref.Substring(0, _suppliedSourceLinkHref.LastIndexOf('/'));
+                    
                 A.CallTo(
                         () => _fakeTargetRequestHandler.Post(
-                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/students", // This resource path is derived from the authorizationFailureHandling
+                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{expectedPostPath}",
                             A<HttpRequestMessage>.That.Matches(HasSuppliedStudentInPostRequestBody, "has supplied source item in POST request body")))
                     .MustHaveHappened();
             }
