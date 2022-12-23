@@ -1,6 +1,7 @@
 using System.Net;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
@@ -53,9 +54,10 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                     _logger.Debug($"{resourceUrl}): Getting item count from source (attempt #{attempt})...");
                 }
 
-                return edFiApiClient.HttpClient.GetAsync(
-                    $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}",
-                    ct);
+                string requestUri =
+                    $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}";
+
+                return RequestHelpers.SendGetRequestAsync(edFiApiClient, resourceUrl, requestUri, ct);
             }, new Context(), cancellationToken);
 
         string responseContent = null;

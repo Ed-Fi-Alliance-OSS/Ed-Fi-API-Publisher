@@ -6,7 +6,9 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Common.Inflection;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
+using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -33,9 +35,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly ISourceCapabilities _sourceCapabilities;
         private readonly ISourceResourceItemProvider _sourceResourceItemProvider;
 
-        private readonly ConcurrentDictionary<string, string> _contentTypeByResourceUrl = new ();
-        private static readonly char[] _pathSeparatorChars = new[] { '/' };
-
         public PostResourceProcessingBlocksFactory(
             INodeJSService nodeJsService,
             ITargetEdFiApiClientProvider targetEdFiApiClientProvider,
@@ -48,6 +47,22 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             _sourceConnectionDetails = sourceConnectionDetails;
             _sourceCapabilities = sourceCapabilities;
             _sourceResourceItemProvider = sourceResourceItemProvider;
+            
+            // Ensure that the API connections are configured correctly with regards to Profiles
+            // If we have no Profile applied to the target... ensure that the source also has no profile specified (to prevent accidental data loss on POST)
+            if (string.IsNullOrEmpty(targetEdFiApiClientProvider.GetApiClient().ConnectionDetails.ProfileName))
+            {
+                // If the source is an API
+                if (sourceConnectionDetails is ApiConnectionDetails sourceApiConnectionDetails)
+                {
+                    // If the source API is not using a Profile, prevent processing by throwing an exception
+                    if (!string.IsNullOrEmpty(sourceApiConnectionDetails.ProfileName))
+                    {
+                        throw new Exception(
+                            "The source API connection has a ProfileName specified, but the target API connection does not. POST requests against a target API without the Profile-based context of the source data can lead to accidental data loss.");
+                    }
+                }
+            }
         }
 
         public (ITargetBlock<PostItemMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
@@ -238,9 +253,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 requestBodyJson = postItemMessage.Item.ToString();
                             }
 
-                            var response = await SendPostRequestAsync(
+                            var response = await RequestHelpers.SendPostRequestAsync(
                                 targetEdFiApiClient,
                                 postItemMessage.ResourceUrl,
+                                $"{targetEdFiApiClient.DataManagementApiSegment}{postItemMessage.ResourceUrl}",
                                 requestBodyJson,
                                 ct);
 
@@ -525,55 +541,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         }
 
         /// <summary>
-        /// Sends a POST request (using an applied Profile content type if appropriate).
-        /// </summary>
-        /// <param name="targetEdFiApiClient"></param>
-        /// <param name="resourceUrl"></param>
-        /// <param name="requestBodyJson"></param>
-        /// <param name="ct"></param>
-        /// <returns></returns>
-        private async Task<HttpResponseMessage> SendPostRequestAsync(
-            EdFiApiClient targetEdFiApiClient,
-            string resourceUrl,
-            string requestBodyJson,
-            CancellationToken ct)
-        {
-            HttpResponseMessage response;
-
-            var requestUri = $"{targetEdFiApiClient.DataManagementApiSegment}{resourceUrl}";
-
-            if (!string.IsNullOrEmpty(targetEdFiApiClient.ProfileName))
-            {
-                var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
-
-                string contentType = _contentTypeByResourceUrl.GetOrAdd(
-                    resourceUrl,
-                    url =>
-                    {
-                        var segment = new StringSegment(url);
-                        var tokenizer = segment.Split(_pathSeparatorChars);
-                        string resourceCollectionName = tokenizer.Last().Value;
-                        string resourceName = CompositeTermInflector.MakeSingular(resourceCollectionName);
-
-                        return $"application/vnd.ed-fi.{resourceName}.{targetEdFiApiClient.ProfileName.ToLower()}.writable+json";
-                    });
-
-                request.Content = new StringContent(requestBodyJson, Encoding.UTF8, contentType);
-
-                response = await targetEdFiApiClient.HttpClient.SendAsync(request, ct);
-            }
-            else
-            {
-                response = await targetEdFiApiClient.HttpClient.PostAsync(
-                    requestUri,
-                    new StringContent(requestBodyJson, Encoding.UTF8, "application/json"),
-                    ct);
-            }
-
-            return response;
-        }
-
-        /// <summary>
         /// Contains details about a missing dependency.
         /// </summary>
         private record MissingDependencyDetails
@@ -707,9 +674,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             $"{resourceUrl} (source id: {sourceId}): Remediating request with POST request to '{remediationRequest.resource}' on target API: {remediationRequestBodyJson}");
                     }
 
-                    var remediationResponse = await SendPostRequestAsync(
+                    var remediationResponse = await RequestHelpers.SendPostRequestAsync(
                         targetEdFiApiClient,
                         remediationRequest.resource,
+                        $"{targetEdFiApiClient.DataManagementApiSegment}{remediationRequest.resource}",
                         remediationRequestBodyJson,
                         CancellationToken.None);
                     

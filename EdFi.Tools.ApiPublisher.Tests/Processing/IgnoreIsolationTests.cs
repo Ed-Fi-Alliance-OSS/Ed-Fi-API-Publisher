@@ -77,6 +77,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 _fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{AnyResourcePattern}", HttpStatusCode.OK);
                 // -----------------------------------------------------------------
 
+                // Configure API connection details for the test
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(ignoreIsolation: true);
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 

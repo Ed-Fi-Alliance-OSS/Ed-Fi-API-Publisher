@@ -358,6 +358,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             //     }
             // }
 
+            // Remove any #retry entries if they have no dependencies.
+            var retryKeys = postDependencyKeysByResourceKey.Keys.Where(k => k.EndsWith(Conventions.RetryKeySuffix)).ToArray();
+
+            foreach (string retryKey in retryKeys)
+            {
+                if (postDependencyKeysByResourceKey[retryKey].Length == 0)
+                {
+                    _logger.Debug($"Removing entry for '{retryKey}' since it has no dependencies.");
+                    postDependencyKeysByResourceKey.Remove(retryKey);
+                }
+            }
+
             _logger.Info($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusions and/or exclusions.");
             
             var reportableResources = GetReportableResources();

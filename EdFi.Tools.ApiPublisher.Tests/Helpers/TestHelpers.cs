@@ -80,7 +80,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             string[] exclude = null,
             string[] excludeOnly = null,
             bool ignoreIsolation = false,
-            int? schoolYear = null)
+            int? schoolYear = null,
+            string? profileName = null)
         {
             return new ApiConnectionDetails
             {
@@ -105,10 +106,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 {
                     { "TestTarget", lastVersionProcessedToTarget },
                 },
+                ProfileName = profileName,
             };
         }
 
-        public static ApiConnectionDetails GetTargetApiConnectionDetails(int? schoolYear = null)
+        public static ApiConnectionDetails GetTargetApiConnectionDetails(int? schoolYear = null, string? profileName = null)
         {
             return new ApiConnectionDetails
             {
@@ -129,6 +131,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 LastChangeVersionsProcessed = null,
                 TreatForbiddenPostAsWarning = true,
                 LastChangeVersionProcessedByTargetName = {},
+                
+                ProfileName =  profileName,
             };
         }
 
