@@ -14,8 +14,8 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
-using log4net.Repository;
 using NUnit.Framework;
+using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing;
 
@@ -188,6 +188,82 @@ public class ProfileApplicationTests
             }
             
             return match.Groups["ProfileName"].Value == TestWritableProfileName.ToLower();
+        }
+    }
+    
+    [TestFixture]
+    public class When_applying_a_profile_to_the_source_and_not_to_the_target_connections
+    {
+        private ChangeProcessor _changeProcessor;
+        private IFakeHttpRequestHandler _fakeTargetRequestHandler;
+        private IFakeHttpRequestHandler _fakeSourceRequestHandler;
+        private ChangeProcessorConfiguration _changeProcessorConfiguration;
+        
+        private const string TestReadableProfileName = "Unit-Test-Source-Profile";
+
+        [Test]
+        public async Task Should_throw_an_exception_to_prevent_data_loss()
+        {
+            // -----------------------------------------------------------------
+            //                      Source Requests
+            // -----------------------------------------------------------------
+            var sourceResourceFaker = TestHelpers.GetGenericResourceFaker();
+
+            var suppliedSourceResources = sourceResourceFaker.Generate(3);
+
+            // Prepare the fake source API endpoint
+            _fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
+                // Test-specific mocks
+                .AvailableChangeVersions(1100)
+                .ResourceCount(responseTotalCountHeader: 3)
+                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{TestHelpers.AnyResourcePattern}", suppliedSourceResources)
+                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{TestHelpers.AnyResourcePattern}/deletes", Array.Empty<object>());
+
+            // -----------------------------------------------------------------
+            //                      Target Requests
+            // -----------------------------------------------------------------
+            _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
+                
+            // Every POST succeeds
+            _fakeTargetRequestHandler.EveryDataManagementPostReturns200Ok();
+
+            // -----------------------------------------------------------------
+            //                  Source/Target Connection Details
+            // -----------------------------------------------------------------
+            var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
+                includeOnly: new[]
+                {
+                    "students",
+                    "academicSubjectDescriptors"
+                },
+                profileName: TestReadableProfileName);
+
+            // No profile name applied to the target
+            var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails(profileName: null);
+
+            // -----------------------------------------------------------------
+            //                    Options and Configuration
+            // -----------------------------------------------------------------
+            // Initialize options
+            var options = TestHelpers.GetOptions();
+            // -----------------------------------------------------------------
+
+            // Initialize logging
+            var loggerRepository = await TestHelpers.InitializeLogging();
+            
+            // Configuration
+            _changeProcessorConfiguration = TestHelpers.CreateChangeProcessorConfiguration(options);
+            
+            Should.Throw<Exception>(
+                () => 
+                    // Create change processor with dependencies
+                    _changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
+                        options,
+                        sourceApiConnectionDetails,
+                        _fakeSourceRequestHandler,
+                        targetApiConnectionDetails,
+                        _fakeTargetRequestHandler))
+                .Message.ShouldBe("The source API connection has a ProfileName specified, but the target API connection does not. POST requests against a target API without the Profile-based context of the source data can lead to accidental data loss.");
         }
     }
 }

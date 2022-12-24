@@ -6,7 +6,6 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
-using log4net.Repository;
 using NUnit.Framework;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
