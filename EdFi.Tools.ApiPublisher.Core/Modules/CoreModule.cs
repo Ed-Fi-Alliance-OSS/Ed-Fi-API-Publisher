@@ -17,7 +17,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
                 .As<IResourceDependencyProvider>()
                 .SingleInstance();
 
-            builder.RegisterType<Log4NetErrorPublisher>()
+            builder.RegisterType<SerilogErrorPublisher>()
                 .As<IErrorPublisher>()
                 .SingleInstance();
             

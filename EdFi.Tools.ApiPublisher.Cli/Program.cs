@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
-using Autofac;
+﻿using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
@@ -13,27 +6,32 @@ using EdFi.Tools.ApiPublisher.Core.Modules;
 using EdFi.Tools.ApiPublisher.Core.Plugin;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Registration;
-using log4net;
-using log4net.Config;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {
     internal class Program
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(Program));
+        private static readonly ILogger _logger = Log.ForContext(typeof(Program));
 
         private static async Task<int> Main(string[] args)
         {
             InitializeLogging();
 
-            _logger.Info(
+            _logger.Information(
                 "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoff@edufied.com, Edufied LLC) in conjunction with Student1.");
 
             var cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = cancellationTokenSource.Token;
-            
+
             try
             {
                 // TODO: Implement plugin architecture to find all plug-ins, supplying the initial configuration as input
@@ -49,7 +47,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                     typeof(ConfigurationStore.SqlServer.Plugin),
                     typeof(ConfigurationStore.Plaintext.Plugin),
                 };
-                
+
                 var plugins = pluginTypes.Select(Activator.CreateInstance).Cast<IPlugin>().ToArray();
 
                 // Build the initial configuration, incorporating command-line arguments
@@ -88,7 +86,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
                 // TODO: How to ensure connections have been configured?
                 // var connectionsConfiguration = initialConfiguration.GetSection("Connections");
-                
+
                 // if (connectionsConfiguration == null)
                 // {
                 //     throw new ArgumentException("Connections have not been configured.");
@@ -105,7 +103,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 if (sourceConnectionDetails.NeedsResolution() || targetConnectionDetails.NeedsResolution())
                 {
                     _logger.Debug($"Connection details are incomplete after initial configuration. Beginning configuration enhancement processing...");
-                    
+
                     var enhancers = serviceProvider.GetServices<IConfigurationBuilderEnhancer>();
 
                     foreach (var enhancer in enhancers)
@@ -114,19 +112,19 @@ namespace EdFi.Tools.ApiPublisher.Cli
                         enhancer.Enhance(initialConfiguration, configBuilder);
                     }
                 }
-                
+
                 // Build the final configuration
                 var finalConfiguration = configBuilder.Build();
-                
+
                 // Prepare final runtime configuration
                 // API Publisher Settings
                 var publisherSettings = finalConfiguration.Get<ApiPublisherSettings>();
-                
+
                 // Validate the finalized options
                 var options = publisherSettings.Options;
                 _logger.Debug($"Validating configuration options...");
                 ValidateOptions(options);
-                
+
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
                 var resourcesWithUpdatableKeys = publisherSettings.ResourcesWithUpdatableKeys;
 
@@ -143,7 +141,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                             .UsingDefaultImplementationConvention();
 
                         builder.RegisterInstance(options);
-                        
+
                         // Allow plugins to perform initial registrations
                         foreach (IPlugin plugin in plugins)
                         {
@@ -166,16 +164,16 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
                 var changeProcessor = executionContainer.Resolve<ChangeProcessor>();
 
-                _logger.Info($"Processing started.");
+                _logger.Information($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
-                _logger.Info($"Processing complete.");
+                _logger.Information($"Processing complete.");
 
                 return 0;
             }
             catch (Exception ex)
             {
                 _logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
-                
+
                 return -1;
             }
 
@@ -186,7 +184,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
                 var connectionDetails = rootContainer.ResolveNamed<INamedConnectionDetails>(connectionType);
                 connectionConfiguration.Bind(connectionDetails);
-                
+
                 return connectionDetails;
             }
         }
@@ -194,12 +192,12 @@ namespace EdFi.Tools.ApiPublisher.Cli
         private static void ValidateOptions(Options options)
         {
             var validationErrors = new List<string>();
-            
+
             if (options.MaxRetryAttempts < 0)
             {
                 validationErrors.Add($"{nameof(options.MaxRetryAttempts)} cannot be a negative number.");
             }
-            
+
             if (options.StreamingPageSize < 1)
             {
                 validationErrors.Add($"{nameof(options.StreamingPageSize)} must be greater than 0.");
@@ -219,22 +217,22 @@ namespace EdFi.Tools.ApiPublisher.Cli
             {
                 validationErrors.Add($"{nameof(options.RetryStartingDelayMilliseconds)} must be greater than 0.");
             }
-            
+
             if (options.StreamingPagesWaitDurationSeconds < 1)
             {
                 validationErrors.Add($"{nameof(options.StreamingPagesWaitDurationSeconds)} must be greater than 0.");
             }
-            
+
             if (options.MaxDegreeOfParallelismForResourceProcessing < 1)
             {
                 validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForResourceProcessing)} must be greater than 0.");
             }
-            
+
             if (options.MaxDegreeOfParallelismForPostResourceItem < 1)
             {
                 validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForPostResourceItem)} must be greater than 0.");
             }
-            
+
             if (options.MaxDegreeOfParallelismForStreamResourcePages < 1)
             {
                 validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForStreamResourcePages)} must be greater than 0.");
@@ -244,7 +242,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             {
                 validationErrors.Add($"{nameof(options.RemediationsScriptFile)} must be a local file path to an existing JavaScript module.");
             }
-            
+
             if (validationErrors.Any())
             {
                 throw new Exception($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");
@@ -292,9 +290,15 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
         private static void InitializeLogging()
         {
-            var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
-            var configFile = new FileInfo("log4net.config");
-            XmlConfigurator.Configure(logRepository, configFile);
+            var configBuilder = new ConfigurationBuilder()
+                .AddJsonFile("logging.json");
+            var loggerConfig = configBuilder.Build();
+            Log.Logger = new LoggerConfiguration()
+               .ReadFrom.Configuration(loggerConfig)
+               .Enrich.WithThreadId()
+               .Enrich.FromLogContext()
+               .CreateLogger();
         }
     }
 }
+

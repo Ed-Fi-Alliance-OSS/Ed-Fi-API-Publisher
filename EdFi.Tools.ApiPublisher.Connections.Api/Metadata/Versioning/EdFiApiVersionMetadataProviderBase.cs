@@ -1,5 +1,5 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
-using log4net;
+using Serilog;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -10,14 +10,14 @@ public class EdFiApiVersionMetadataProviderBase
     private readonly string _role;
     private readonly IEdFiApiClientProvider _edFiApiClientProvider;
 
-    private readonly ILog _logger;
+    private readonly ILogger _logger;
     
     protected EdFiApiVersionMetadataProviderBase(string role, IEdFiApiClientProvider edFiApiClientProvider)
     {
         _role = role;
         _edFiApiClientProvider = edFiApiClientProvider;
         
-        _logger = LogManager.GetLogger(GetType());
+        _logger = Log.ForContext(GetType());
     }
 
     public async Task<JObject> GetVersionMetadata()
@@ -40,7 +40,7 @@ public class EdFiApiVersionMetadataProviderBase
             try
             {
                 versionObject = JObject.Parse(versionJson);
-                _logger.Info($"{_role} version information: {versionObject.ToString(Formatting.Indented)}");
+                _logger.Information($"{_role} version information: {versionObject.ToString(Formatting.Indented)}");
             }
             catch (Exception)
             {

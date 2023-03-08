@@ -6,10 +6,11 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Microsoft.Data.Sqlite;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Blocks;
 
@@ -18,7 +19,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 {
     private readonly Func<SqliteConnection> _createConnection;
 
-    private readonly ILog _logger = LogManager.GetLogger(typeof(UpsertProcessingBlocksFactory));
+    private readonly ILogger _logger = Log.ForContext(typeof(UpsertProcessingBlocksFactory));
 
     protected SqlLiteProcessingBlocksFactoryBase(Func<SqliteConnection> createConnection)
     {
@@ -83,7 +84,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
                         .Handle<Exception>()
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
-                            _logger.Warn($"{msg.ResourceUrl}: INSERT to Sqlite table '{schema}__{table}{tableSuffix}' failed with error '{result.Message}'). Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                            _logger.Warning($"{msg.ResourceUrl}: INSERT to Sqlite table '{schema}__{table}{tableSuffix}' failed with error '{result.Message}'). Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
 
                             return Task.CompletedTask;
                         })
@@ -93,7 +94,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 
                             if (attempts > 1)
                             {
-                                if (_logger.IsDebugEnabled)
+                                if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
                                     _logger.Debug($"{msg.ResourceUrl}: INSERT to Sqlite table '{schema}__{table}{tableSuffix}' attempt #{attempts}.");
                                 }

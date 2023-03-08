@@ -1,13 +1,13 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
-using log4net;
+using Serilog;
 using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Versioning;
 
 public class EdFiApiSourceCurrentChangeVersionProvider : ISourceCurrentChangeVersionProvider
 {
-    private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiSourceCurrentChangeVersionProvider));
+    private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceCurrentChangeVersionProvider));
 
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
 
@@ -28,7 +28,7 @@ public class EdFiApiSourceCurrentChangeVersionProvider : ISourceCurrentChangeVer
 
         if (!versionResponse.IsSuccessStatusCode)
         {
-            _logger.Warn(
+            _logger.Warning(
                 $"Unable to get current change version from source API at '{sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath}' (response status: {versionResponse.StatusCode}). Full synchronization will always be performed against this source, and any concurrent changes made against the source may cause change processing to produce unreliable results.");
 
             return null;

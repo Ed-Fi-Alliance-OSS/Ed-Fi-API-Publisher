@@ -2,7 +2,7 @@ using System.Net;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
-using log4net;
+using Serilog;
 using Newtonsoft.Json.Linq;
 using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
@@ -12,7 +12,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 {
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
 
-    private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiSourceIsolationApplicator));
+    private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceIsolationApplicator));
     
     public EdFiApiSourceIsolationApplicator(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
@@ -58,7 +58,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 
         if (snapshotsResponse.StatusCode == HttpStatusCode.NotFound)
         {
-            _logger.Warn(
+            _logger.Warning(
                 $"Source API at '{sourceApiClient.HttpClient.BaseAddress}' does not support the necessary isolation for reliable API publishing. Errors may occur, or some data may not be published without causing failures.");
 
             return null;
@@ -66,7 +66,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 
         if (snapshotsResponse.StatusCode == HttpStatusCode.Forbidden)
         {
-            _logger.Warn(
+            _logger.Warning(
                 $"The API publisher does not have permissions to access the source API's 'snapshots' resource at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Make sure that the source API is using a correctly configured claim set for your API Publisher's API client.");
 
             return null;
@@ -88,7 +88,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
             if (!snapshotResponseArray.Any())
             {
                 // No snapshots available.
-                _logger.Warn(
+                _logger.Warning(
                     $"Snapshots are supported, but no snapshots are available from source API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'.");
 
                 return null;
@@ -115,7 +115,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
                 .OrderByDescending(x => x.SnapshotDateTime)
                 .First();
 
-            _logger.Info($"Using snapshot identifier '{snapshot.SnapshotIdentifier}' created at '{snapshot.SnapshotDateTime}'.");
+            _logger.Information($"Using snapshot identifier '{snapshot.SnapshotIdentifier}' created at '{snapshot.SnapshotDateTime}'.");
 
             return snapshot.SnapshotIdentifier;
         }

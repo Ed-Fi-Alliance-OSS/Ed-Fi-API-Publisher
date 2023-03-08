@@ -14,17 +14,18 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Jering.Javascript.NodeJS;
-using log4net;
+using Serilog;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 using JsonSerializer = System.Text.Json.JsonSerializer;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 {
     public class PostResourceProcessingBlocksFactory : IProcessingBlocksFactory<PostItemMessage>
     {
-        private readonly ILog _logger = LogManager.GetLogger(typeof(PostResourceProcessingBlocksFactory));
+        private readonly ILogger _logger = Log.ForContext(typeof(PostResourceProcessingBlocksFactory));
         private readonly INodeJSService _nodeJsService;
         private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
         private readonly ISourceConnectionDetails _sourceConnectionDetails;
@@ -107,7 +108,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
             try
             {
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug(
                         $"{postItemMessage.ResourceUrl} (source id: {id}): Processing PostItemMessage (with up to {options.MaxRetryAttempts} retries).");
@@ -171,7 +172,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 if (remediationResult.ModifiedRequestBody is JsonElement modifiedRequestBody
                                     && modifiedRequestBody.ValueKind != JsonValueKind.Null)
                                 {
-                                    if (_logger.IsDebugEnabled)
+                                    if (_logger.IsEnabled(LogEventLevel.Debug))
                                     {
                                         string modifiedRequestBodyJson = JsonSerializer.Serialize(
                                             remediationResult.ModifiedRequestBody,
@@ -187,14 +188,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                             if (result.Exception != null)
                             {
-                                _logger.Warn(
+                                _logger.Warning(
                                     $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with an exception. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{result.Exception}");
                             }
                             else
                             {
                                 string responseContent = await result.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                                _logger.Warn(
+                                _logger.Warning(
                                     $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}");
                             }
                         })
@@ -203,7 +204,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             attempts++;
 
-                            if (_logger.IsDebugEnabled)
+                            if (_logger.IsEnabled(LogEventLevel.Debug))
                             {
                                 if (attempts > 1)
                                 {
@@ -220,7 +221,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                             if (ctx.TryGetValue("ModifiedRequestBody", out dynamic modifiedRequestBody))
                             {
-                                _logger.Info(
+                                _logger.Information(
                                     $"{postItemMessage.ResourceUrl} (source id: {id}): Applying modified request body from remediation plan...");
 
                                 requestBodyJson = JsonSerializer.Serialize(modifiedRequestBody);
@@ -241,13 +242,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 if (!_sourceCapabilities.SupportsGetItemById)
                                 {
-                                    _logger.Warn(
+                                    _logger.Warning(
                                         $"{postItemMessage.ResourceUrl}: Reference '{missingDependencyDetails!.ReferenceName}' to resource '{missingDependencyDetails.ReferencedResourceName}' could not be automatically resolved because the source connection does not support retrieving items by id.");
 
                                     return response;
                                 }
 
-                                _logger.Info(
+                                _logger.Information(
                                     $"{postItemMessage.ResourceUrl}: Attempting to retrieve missing '{missingDependencyDetails.ReferencedResourceName}' reference based on 'authorizationFailureHandling' metadata in apiPublisherSettings.json.");
 
                                 var (missingDependencyItemRetrieved, missingItemJson) = await _sourceResourceItemProvider.TryGetResourceItemAsync(missingDependencyDetails.SourceDependencyItemUrl);
@@ -296,7 +297,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // indicates the data is already present and nothing more needs to be done.
                     if (postItemMessage.ResourceUrl.EndsWith("Descriptors") && apiResponse.StatusCode == HttpStatusCode.Conflict)
                     {
-                        if (_logger.IsDebugEnabled)
+                        if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
                             _logger.Debug(
                                 $"{postItemMessage.ResourceUrl} (source id: {id}): POST returned {HttpStatusCode.Conflict}, but for descriptors this means the value is already present.");
@@ -312,7 +313,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         // Determine if current resource has an authorization retry queue
                         if (postItemMessage.PostAuthorizationFailureRetry != null)
                         {
-                            if (_logger.IsDebugEnabled)
+                            if (_logger.IsEnabled(LogEventLevel.Debug))
                             {
                                 _logger.Debug(
                                     $"{postItemMessage.ResourceUrl} (source id: {id}): Authorization failed -- deferring for retry after pertinent associations are processed.");
@@ -335,7 +336,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         && targetEdFiApiClient.ConnectionDetails?.TreatForbiddenPostAsWarning == true)
                     {
                         // Warn and ignore all future data for this resource
-                        _logger.Warn(
+                        _logger.Warning(
                             $"{postItemMessage.ResourceUrl} (source id: {id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
 
                         ignoredResourceByUrl.TryAdd(postItemMessage.ResourceUrl, true);
@@ -364,16 +365,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 // Success
                 if (attempts > 1)
                 {
-                    if (_logger.IsInfoEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Information))
                     {
-                        _logger.Info(
+                        _logger.Information(
                             $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} returned {apiResponse.StatusCode}.");
                     }
                 }
                 else
                 {
                     // Ensure a log entry when POST succeeds on first attempt and DEBUG logging is enabled
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug(
                             $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} returned {apiResponse.StatusCode}.");
@@ -482,7 +483,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                                 if (dependencyItemUrl == null)
                                 {
-                                    _logger.Warn($"{msg.ResourceUrl}: Unable to extract href to '{referenceName}' from JSON body for obtaining missing dependency.");
+                                    _logger.Warning($"{msg.ResourceUrl}: Unable to extract href to '{referenceName}' from JSON body for obtaining missing dependency.");
                                     return (false, null);
                                 }
 
@@ -491,7 +492,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                                 if (parts.Length < 3)
                                 {
-                                    _logger.Warn($"{msg.ResourceUrl}: Unable to identify missing dependency resource URL from the supplied dependency item URL '{dependencyItemUrl}'.");
+                                    _logger.Warning($"{msg.ResourceUrl}: Unable to identify missing dependency resource URL from the supplied dependency item URL '{dependencyItemUrl}'.");
                                 }
 
                                 try
@@ -507,7 +508,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 }
                                 catch (Exception ex)
                                 {
-                                    _logger.Warn($"{msg.ResourceUrl}: Unable to identify missing dependency resource URL from the supplied dependency item URL '{dependencyItemUrl}'.");
+                                    _logger.Warning($"{msg.ResourceUrl}: Unable to identify missing dependency resource URL from the supplied dependency item URL '{dependencyItemUrl}'.");
                                 }
                             }
                         }
@@ -568,7 +569,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 }
 
                 // Add the item to the buffer for processing into the target API
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug(
                         $"{message.ResourceUrl}: Adding individual action message of type '{nameof(PostItemMessage)}' for item '{item["id"]?.Value<string>() ?? "unknown"}'...");
@@ -632,7 +633,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                 if (!remediationPlanAdditionalRequests.Any())
                 {
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug(
                             $"{resourceUrl} (source id: {sourceId}): Remediation plan for '{responseMessage.StatusCode}' did not return any additional remediation requests.");
@@ -646,7 +647,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 {
                     var remediationRequestBodyJson = (string)remediationRequest.body.ToString();
 
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug(
                             $"{resourceUrl} (source id: {sourceId}): Remediating request with POST request to '{remediationRequest.resource}' on target API: {remediationRequestBodyJson}");
@@ -658,12 +659,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                     if (remediationResponse.IsSuccessStatusCode)
                     {
-                        _logger.Info(
+                        _logger.Information(
                             $"{resourceUrl} (source id: {sourceId}): Remediation for retry attempt {retryAttempt} with POST request to '{remediationRequest.resource}' on target API succeeded with status '{remediationResponse.StatusCode}'.");
                     }
                     else
                     {
-                        _logger.Warn(
+                        _logger.Warning(
                             $"{resourceUrl} (source id: {sourceId}): Remediation for retry attempt {retryAttempt} with POST request to '{remediationRequest.resource}' on target API failed with status '{remediationResponse.StatusCode}'.");
                     }
                 }
@@ -674,7 +675,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             {
                 if (!ex.Message.Contains("has no export named"))
                 {
-                    _logger.Warn($"{resourceUrl} (source id: {sourceId}): Error occurred during remediation invocation: {ex}");
+                    _logger.Warning($"{resourceUrl} (source id: {sourceId}): Error occurred during remediation invocation: {ex}");
                 }
                 else
                 {

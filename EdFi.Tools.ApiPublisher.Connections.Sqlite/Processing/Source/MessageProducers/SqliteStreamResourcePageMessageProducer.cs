@@ -5,7 +5,7 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Microsoft.Data.Sqlite;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Source.MessageProducers;
@@ -15,7 +15,7 @@ public class SqliteStreamResourcePageMessageProducer : IStreamResourcePageMessag
     private readonly ISourceTotalCountProvider _sourceTotalCountProvider;
     private readonly Func<SqliteConnection> _createConnection;
 
-    private readonly ILog _logger = LogManager.GetLogger(typeof(SqliteStreamResourcePageMessageProducer));
+    private readonly ILogger _logger = Log.ForContext(typeof(SqliteStreamResourcePageMessageProducer));
     
     public SqliteStreamResourcePageMessageProducer(
         ISourceTotalCountProvider sourceTotalCountProvider,
@@ -46,7 +46,7 @@ public class SqliteStreamResourcePageMessageProducer : IStreamResourcePageMessag
             return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
         }
 
-        _logger.Info($"{message.ResourceUrl}: Total count = {totalCount}");
+        _logger.Information($"{message.ResourceUrl}: Total count = {totalCount}");
 
         if (totalCount == 0)
         {

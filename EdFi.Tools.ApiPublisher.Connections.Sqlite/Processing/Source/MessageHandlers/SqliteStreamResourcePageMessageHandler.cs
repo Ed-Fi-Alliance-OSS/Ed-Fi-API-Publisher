@@ -3,9 +3,10 @@ using EdFi.Tools.ApiPublisher.Connections.Sqlite.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Source.MessageHandlers;
 
@@ -13,7 +14,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
 {
     private readonly Func<SqliteConnection> _createConnection;
     
-    private readonly ILog _logger = LogManager.GetLogger(typeof(SqliteStreamResourcePageMessageHandler));
+    private readonly ILogger _logger = Log.ForContext(typeof(SqliteStreamResourcePageMessageHandler));
 
     public SqliteStreamResourcePageMessageHandler(Func<SqliteConnection> createConnection)
     {
@@ -39,7 +40,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 return Enumerable.Empty<TProcessDataMessage>();
             }
 
-            if (_logger.IsDebugEnabled)
+            if (_logger.IsEnabled(LogEventLevel.Debug))
             {
                 _logger.Debug($"{message.ResourceUrl}: Retrieving page items for page '{pageId}'.");
             }

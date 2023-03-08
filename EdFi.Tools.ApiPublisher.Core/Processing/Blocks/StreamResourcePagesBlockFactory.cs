@@ -3,7 +3,7 @@ using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
@@ -11,7 +11,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     {
         private readonly IStreamResourcePageMessageHandler _streamResourcePageMessageHandler;
         
-        private readonly ILog _logger = LogManager.GetLogger(typeof(StreamResourcePagesBlockFactory));
+        private readonly ILogger _logger = Log.ForContext(typeof(StreamResourcePagesBlockFactory));
 
         public StreamResourcePagesBlockFactory(IStreamResourcePageMessageHandler streamResourcePageMessageHandler)
         {

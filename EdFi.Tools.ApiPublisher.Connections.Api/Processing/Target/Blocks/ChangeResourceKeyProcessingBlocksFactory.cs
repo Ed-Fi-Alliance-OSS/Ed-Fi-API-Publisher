@@ -8,11 +8,12 @@ using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 {
@@ -24,8 +25,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
     public class ChangeResourceKeyProcessingBlocksFactory : IProcessingBlocksFactory<GetItemForKeyChangeMessage>
     {
         private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
-        
-        private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeResourceKeyProcessingBlocksFactory));
+
+        private static readonly ILogger _logger = Log.Logger.ForContext(typeof(ChangeResourceKeyProcessingBlocksFactory));
 
         public ChangeResourceKeyProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider)
         {
@@ -86,11 +87,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 if (result.Exception != null)
                                 {
-                                    _logger.Warn($"{message.ResourceUrl} (source id: {sourceId}): GET by key on resource failed with an exception. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay){Environment.NewLine}{result.Exception}");
+                                    _logger.Warning($"{message.ResourceUrl} (source id: {sourceId}): GET by key on resource failed with an exception. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay){Environment.NewLine}{result.Exception}");
                                 }
                                 else
                                 {
-                                    _logger.Warn(
+                                    _logger.Warning(
                                         $"{message.ResourceUrl} (source id: {sourceId}): GET by key on resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                                 }
                             })
@@ -100,7 +101,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                                 if (attempts > 1)
                                 {
-                                    if (_logger.IsDebugEnabled)
+                                    if (_logger.IsEnabled(LogEventLevel.Debug))
                                     {
                                         _logger.Debug($"{message.ResourceUrl} (source id: {message.SourceId}): GET by key on target attempt #{attempts} ({queryString}).");
                                     }
@@ -141,13 +142,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         }
 
                         // Success
-                        if (_logger.IsInfoEnabled && attempts > 1)
+                        if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                         {
-                            _logger.Info(
+                            _logger.Information(
                                 $"{message.ResourceUrl} (source id: {sourceId}): GET by key attempt #{attempts} returned {apiResponse.StatusCode}.");
                         }
 
-                        if (_logger.IsDebugEnabled)
+                        if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
                             _logger.Debug($"{message.ResourceUrl} (source id: {sourceId}): GET by key returned {apiResponse.StatusCode}");
                         }
@@ -157,9 +158,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         // If the item whose key is to be changed cannot be found...
                         if (getByKeyResults.Count == 0)
                         {
-                            if (_logger.IsWarnEnabled)
+                            if (_logger.IsEnabled(LogEventLevel.Warning))
                             {
-                                _logger.Warn($"{message.ResourceUrl} (source id: {sourceId}): GET by key for key change returned no results on target API ({queryString}).");
+                                _logger.Warning($"{message.ResourceUrl} (source id: {sourceId}): GET by key for key change returned no results on target API ({queryString}).");
                             }
                             
                             // No key changes to process
@@ -197,7 +198,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                             if (newValueProperty != null) 
                             {
-                                if (_logger.IsDebugEnabled)
+                                if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
                                     _logger.Debug($"{message.ResourceUrl} (source id: {message.SourceId}): Assigning new value for '{candidateProperty.Name}' as '{newValueProperty.Value}'...");
                                 }
@@ -277,11 +278,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             if (result.Exception != null)
                             {
-                                _logger.Warn($"{msg.ResourceUrl} (source id: {sourceId}): Key change attempt #{attempt} threw an exception: {result.Exception}");
+                                _logger.Warning($"{msg.ResourceUrl} (source id: {sourceId}): Key change attempt #{attempt} threw an exception: {result.Exception}");
                             }
                             else
                             {
-                                _logger.Warn(
+                                _logger.Warning(
                                     $"{msg.ResourceUrl} (source id: {id}): Select by key on target resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                             }
                         })
@@ -291,7 +292,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                             if (attempt > 1)
                             {
-                                if (_logger.IsDebugEnabled)
+                                if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
                                     _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): PUT request to update key (attempt #{attempt}.");
                                 }
@@ -326,13 +327,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     }
                     
                     // Success
-                    if (_logger.IsInfoEnabled && attempt > 1)
+                    if (_logger.IsEnabled(LogEventLevel.Information) && attempt > 1)
                     {
-                        _logger.Info(
+                        _logger.Information(
                             $"{msg.ResourceUrl} (source id: {sourceId}): PUT attempt #{attempt} returned {apiResponse.StatusCode}.");
                     }
 
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): PUT returned {apiResponse.StatusCode}");
                     }
@@ -405,7 +406,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 if (obj[EdFiApiConstants.OldKeyValuesPropertyName] == null)
                 {
                     // TODO: GKM - Should we add a flag for specifying that publishing without proper key change support from source API is ok?
-                    _logger.Warn($"Source API's '{EdFiApiConstants.KeyChangesPathSuffix}' response does not include the domain key values. Publishing of key changes to the target API cannot be performed.");
+                    _logger.Warning($"Source API's '{EdFiApiConstants.KeyChangesPathSuffix}' response does not include the domain key values. Publishing of key changes to the target API cannot be performed.");
                     _logger.Debug("Attempting to gracefully cancel key change processing due to lack of support for key values from the source API.");
                 
                     message.CancellationSource.Cancel();

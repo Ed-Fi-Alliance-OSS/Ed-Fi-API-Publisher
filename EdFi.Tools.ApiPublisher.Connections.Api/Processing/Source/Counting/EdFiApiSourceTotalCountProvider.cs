@@ -7,9 +7,10 @@ using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
 
@@ -17,7 +18,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
 {
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
     
-    private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiSourceTotalCountProvider));
+    private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceTotalCountProvider));
 
     public EdFiApiSourceTotalCountProvider(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
@@ -41,14 +42,14 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
             .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
             .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
             {
-                _logger.Warn(
+                _logger.Warning(
                     $"{resourceUrl}: Getting item count from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
             })
             .ExecuteAsync((ctx, ct) =>
             {
                 attempt++;
                 
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug($"{resourceUrl}): Getting item count from source (attempt #{attempt})...");
                 }
@@ -75,7 +76,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         // Try to get the count header from the response
         if (!apiResponse.Headers.TryGetValues("total-count", out IEnumerable<string> headerValues))
         {
-            _logger.Warn(
+            _logger.Warning(
                 $"{resourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing, but overall processing will fail.");
 
             // Publish an error for the resource. Feature is not supported.
@@ -132,7 +133,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 // Being denied read access to descriptors is potentially problematic, but is not considered
                 // to be breaking in its own right for change processing. We'll fail downstream
                 // POSTs if descriptors haven't been initialized correctly on the target.
-                _logger.Warn(
+                _logger.Warning(
                     $"{resourceUrl}: {apiResponse.StatusCode} - Unable to obtain total count for descriptor due to authorization failure. Descriptor values will not be published to the target, but processing will continue.{Environment.NewLine}Response content: {responseContent}");
 
                 return;

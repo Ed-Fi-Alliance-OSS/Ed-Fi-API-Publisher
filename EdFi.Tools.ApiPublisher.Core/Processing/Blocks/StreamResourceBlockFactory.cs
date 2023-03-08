@@ -7,13 +7,14 @@ using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public class StreamResourceBlockFactory
     {
-        private readonly ILog _logger = LogManager.GetLogger(typeof(StreamResourceBlockFactory));
+        private readonly ILogger _logger = Log.ForContext(typeof(StreamResourceBlockFactory));
         private readonly IStreamResourcePageMessageProducer _streamResourcePageMessageProducer;
 
         public StreamResourceBlockFactory(IStreamResourcePageMessageProducer streamResourcePageMessageProducer)
@@ -78,7 +79,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             // ==============================================================
             if (message.Dependencies.Any())
             {
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug($"{message.ResourceUrl}: Waiting for dependencies to complete before streaming...");
                 }
@@ -86,14 +87,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 // Wait for other resources to complete processing
                 await Task.WhenAll(message.Dependencies).ConfigureAwait(false);
 
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug($"{message.ResourceUrl}: Dependencies completed. Waiting for an available processing slot...");
                 }
             }
             else
             {
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug(
                         $"{message.ResourceUrl}: Resource has no dependencies. Waiting for an available processing slot...");
@@ -107,7 +108,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             // Wait for an available processing slot
             await message.ProcessingSemaphore.WaitAsync(cancellationToken);
 
-            if (_logger.IsDebugEnabled)
+            if (_logger.IsEnabled(LogEventLevel.Debug))
             {
                 _logger.Debug(
                     $"{message.ResourceUrl}: Processing slot acquired ({message.ProcessingSemaphore.CurrentCount} remaining). Starting streaming of resources...");

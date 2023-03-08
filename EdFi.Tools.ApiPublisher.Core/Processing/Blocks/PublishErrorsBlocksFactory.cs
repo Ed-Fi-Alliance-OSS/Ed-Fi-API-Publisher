@@ -2,15 +2,14 @@ using System;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public class PublishErrorsBlocksFactory
     {
-        private readonly IErrorPublisher _errorPublisher;
-        
-        private readonly ILog _logger = LogManager.GetLogger(typeof(PublishErrorsBlocksFactory));
+        private static readonly ILogger _logger = Log.Logger.ForContext(typeof(PublishErrorsBlocksFactory));
+        private IErrorPublisher _errorPublisher;
 
         public PublishErrorsBlocksFactory(IErrorPublisher errorPublisher)
         {
