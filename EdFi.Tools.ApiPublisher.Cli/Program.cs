@@ -1,14 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
-using Autofac;
+﻿using Autofac;
 using Autofac.Core;
 using Autofac.Extensions.DependencyInjection;
-using EdFi.Ods.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
@@ -17,25 +9,29 @@ using EdFi.Tools.ApiPublisher.Core.NodeJs;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Registration;
 using Jering.Javascript.NodeJS;
-using log4net;
-using log4net.Config;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Module = Autofac.Module;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {
     internal class Program
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Program));
+        private static readonly ILogger _logger = Log.ForContext(typeof(Program)); 
 
         private static async Task<int> Main(string[] args)
         {
-            InitializeLogging();
-
-            Logger.Info(
+            InitializeDefaultLogging();
+            _logger.Information(
                 "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoffrey@mcelhanon.com, Edufied LLC) in conjunction with Student1.");
-
             var cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = cancellationTokenSource.Token;
             
@@ -81,7 +77,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"Configuration failed: {ex.Message}");
+                    _logger.Error($"Configuration failed: {ex.Message}");
 
                     return -1;
                 }
@@ -91,13 +87,13 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 // After container has been initialized, now enhance the configuration builder
                 if (connections.Source.NeedsResolution() || connections.Target.NeedsResolution())
                 {
-                    Logger.Debug($"API connection details are incomplete from initial configuration. Beginning configuration enhancement processing...");
+                    _logger.Debug($"API connection details are incomplete from initial configuration. Beginning configuration enhancement processing...");
                     
                     var enhancers = serviceProvider.GetServices<IConfigurationBuilderEnhancer>();
 
                     foreach (var enhancer in enhancers)
                     {
-                        Logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
+                        _logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
                         enhancer.Enhance(configBuilder);
                     }
                 }
@@ -110,7 +106,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var publisherSettings = finalConfiguration.Get<ApiPublisherSettings>();
                 
                 var options = publisherSettings.Options;
-                Logger.Debug($"Validating configuration options...");
+                _logger.Debug($"Validating configuration options...");
                 ValidateOptions(options);
                 
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
@@ -145,17 +141,20 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
                 var changeProcessor = serviceProvider.GetRequiredService<IChangeProcessor>();
 
-                Logger.Info($"Processing started.");
+                _logger.Information($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
-                Logger.Info($"Processing complete.");
+                _logger.Information($"Processing complete.");
 
                 return 0;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
-                
+                _logger.Fatal($"Processing failed: {string.Join(" ", GetExceptionMessages(exception))}");
                 return -1;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
             }
         }
 
@@ -242,7 +241,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             // If source and target connections are fully defined, we're done
             if (connections.Source.IsFullyDefined() && connections.Target.IsFullyDefined())
             {
-                Logger.Debug($"Source and target API connections are fully defined. No named connections are being used.");
+                _logger.Debug($"Source and target API connections are fully defined. No named connections are being used.");
                 return;
             }
 
@@ -284,7 +283,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
             string configurationSourceName = configurationStoreSection.GetValue<string>("provider");
             
-            Logger.Debug($"Configuration store provider is '{configurationSourceName}'...");
+            _logger.Debug($"Configuration store provider is '{configurationSourceName}'...");
             
             var moduleType = FindApiConnectionConfigurationModuleType();
 
@@ -301,7 +300,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 throw new Exception($"Unable to create the installer module '{moduleType.Name}' for connection configuration source '{configurationSourceName}'.");
             }
             
-            Logger.Debug($"Registering configuration store provider module '{moduleType.FullName}'...");
+            _logger.Debug($"Registering configuration store provider module '{moduleType.FullName}'...");
             
             containerBuilder.RegisterModule(module);
 
@@ -312,7 +311,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             
                 foreach (FileInfo fileInfo in directoryInfo.GetFiles("EdFi*.dll"))
                 {
-                    Logger.Debug($"Ensuring that assembly '{fileInfo.Name}' is loaded...");
+                    _logger.Debug($"Ensuring that assembly '{fileInfo.Name}' is loaded...");
                     Assembly.LoadFrom(fileInfo.FullName);
                 }
             }
@@ -330,12 +329,17 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 return locatedModuleType;
             }
         }
-
-        private static void InitializeLogging()
+        
+        public static void InitializeDefaultLogging()
         {
-            var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
-            var configFile = new FileInfo("log4net.config");
-            XmlConfigurator.Configure(logRepository, configFile);
+            var configBuilder = new ConfigurationBuilder()
+                .AddJsonFile("logging.json");
+            var loggerConfig = configBuilder.Build();
+            Log.Logger = new LoggerConfiguration()
+               .ReadFrom.Configuration(loggerConfig)
+               .Enrich.WithThreadId()
+               .Enrich.FromLogContext()
+               .CreateLogger();
         }
     }
 }

@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Newtonsoft.Json;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
@@ -10,9 +10,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
     /// Publishes errors without the original request content (due to security considerations) by logging
     /// the JSON serialized representations of the <see cref="ErrorItemMessage" />.
     /// </summary>
-    public class Log4NetErrorPublisher : IErrorPublisher
+    public class SerilogErrorPublisher : IErrorPublisher
     {
-        private readonly ILog _logger = LogManager.GetLogger(typeof(Log4NetErrorPublisher));
+        private readonly ILogger _logger = Log.Logger.ForContext(typeof(SerilogErrorPublisher));
 
         private long _publishedErrorCount;
         

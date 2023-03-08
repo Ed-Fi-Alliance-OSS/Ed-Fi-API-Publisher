@@ -2,13 +2,13 @@ using System;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public static class PublishErrors
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(PublishErrors));
+        private static readonly ILogger _logger = Log.Logger.ForContext(typeof(PublishErrors));
         
         public static ValueTuple<ITargetBlock<ErrorItemMessage>, ActionBlock<ErrorItemMessage[]>> GetBlocks(
             Options options,

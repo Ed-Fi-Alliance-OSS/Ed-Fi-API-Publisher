@@ -1,13 +1,13 @@
-using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using log4net;
 using Microsoft.Extensions.Configuration;
+using Serilog;
+using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration.Plaintext
 {
     public class PlaintextChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
-        private readonly ILog _logger = LogManager.GetLogger(typeof(PlaintextChangeVersionProcessedWriter));
+        private readonly ILogger _logger = Log.Logger.ForContext(typeof(PlaintextChangeVersionProcessedWriter));
         
         public Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
@@ -15,7 +15,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Plaintext
             long changeVersion,
             IConfigurationSection configurationStoreSection)
         {
-            _logger.Warn("Plaintext connections don't support writing back updated change versions.");
+            _logger.Warning("Plaintext connections don't support writing back updated change versions.");
             return Task.FromResult(0);
         }
     }

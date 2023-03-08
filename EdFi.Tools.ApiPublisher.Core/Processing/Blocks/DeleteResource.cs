@@ -9,17 +9,18 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public static class DeleteResource
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(DeleteResource));
+        private static readonly ILogger _logger = Log.Logger.ForContext(typeof(DeleteResource));
         
         public static ValueTuple<ITargetBlock<GetItemForDeletionMessage>, ISourceBlock<ErrorItemMessage>> CreateBlocks(
             CreateBlocksRequest createBlocksRequest)
@@ -76,7 +77,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                                 }
                                 else
                                 {
-                                    _logger.Warn(
+                                    _logger.Warning(
                                         $"{msg.ResourceUrl} (source id: {id}): GET by key for deletion of target resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                                 }
                             })
@@ -86,7 +87,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                                 if (attempts > 1)
                                 {
-                                    if (_logger.IsDebugEnabled)
+                                    if (_logger.IsEnabled(LogEventLevel.Debug))
                                     {
                                         _logger.Debug($"{msg.ResourceUrl} (source id: {msg.Id}): GET by key for deletion of target resource (attempt #{attempts}) using '{queryString}'...");
                                     }
@@ -124,13 +125,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         // Success
                         
                         // Log a message if this was successful after a retry.
-                        if (_logger.IsInfoEnabled && attempts > 1)
+                        if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                         {
-                            _logger.Info(
+                            _logger.Information(
                                 $"{msg.ResourceUrl} (source id: {id}): GET by key attempt #{attempts} returned {apiResponse.StatusCode}.");
                         }
 
-                        if (_logger.IsDebugEnabled)
+                        if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
                             _logger.Debug($"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}");
                         }
@@ -140,7 +141,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         // If the item to be deleted cannot be found...
                         if (getByKeyResults.Count == 0)
                         {
-                            if (_logger.IsDebugEnabled)
+                            if (_logger.IsEnabled(LogEventLevel.Debug))
                             {
                                 _logger.Debug($"{msg.ResourceUrl} (source id: {msg.Id}): GET by key for deletion returned no results on target API ({queryString}).");
                             }
@@ -222,7 +223,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             }
                             else
                             {
-                                _logger.Warn(
+                                _logger.Warning(
                                     $"{msg.ResourceUrl} (source id: {sourceId}): Delete resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                             }
                         })
@@ -232,7 +233,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                             if (attempts > 1)
                             {
-                                if (_logger.IsDebugEnabled)
+                                if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
                                     _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): DELETE request (attempt #{attempts}.");
                                 }
@@ -264,13 +265,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     }
                     
                     // Success
-                    if (_logger.IsInfoEnabled && attempts > 1)
+                    if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                     {
-                        _logger.Info(
+                        _logger.Information(
                             $"{msg.ResourceUrl} (source id: {sourceId}): DELETE attempt #{attempts} returned {apiResponse.StatusCode}.");
                     }
 
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}");
                     }
@@ -304,7 +305,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             if (j[EdFiApiConstants.KeyValuesPropertyName] == null)
             {
                 // TODO: GKM - Should we add a flag for specifying that publishing without proper deletes support from source API is ok?
-                _logger.Warn($"Source API's '{EdFiApiConstants.DeletesPathSuffix}' response does not include the domain key values. Publishing of deletes to the target API cannot be performed.");
+                _logger.Warning($"Source API's '{EdFiApiConstants.DeletesPathSuffix}' response does not include the domain key values. Publishing of deletes to the target API cannot be performed.");
                 _logger.Debug("Attempting to gracefully cancel delete processing due to lack of support for deleted key values from the source API.");
                 
                 msg.CancellationSource.Cancel();

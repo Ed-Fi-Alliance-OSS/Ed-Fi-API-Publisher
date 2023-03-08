@@ -1,3 +1,5 @@
+using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -5,8 +7,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Xml.Linq;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
-using log4net;
 
 // ReSharper disable InconsistentNaming
 
@@ -14,7 +14,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Dependencies
 {
     public class EdFiV3ApiResourceDependencyProvider : IResourceDependencyProvider
     {
-        private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiV3ApiResourceDependencyProvider));
+        private readonly ILogger _logger = Log.ForContext(typeof(EdFiV3ApiResourceDependencyProvider));
         
         public async Task<IDictionary<string, string[]>> GetDependenciesByResourcePathAsync(
             EdFiApiClient edfiApiClient,
@@ -68,7 +68,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Dependencies
             string dependenciesRequestUri = $"metadata/{edFiApiClient.DataManagementApiSegment}/dependencies";
 
             // Get the resource dependencies from the target
-            _logger.Info($"Getting dependencies from API at {edFiApiClient.HttpClient.BaseAddress}{dependenciesRequestUri}...");
+            _logger.Information($"Getting dependencies from API at {edFiApiClient.HttpClient.BaseAddress}{dependenciesRequestUri}...");
             
             var dependencyRequest = new HttpRequestMessage(HttpMethod.Get, dependenciesRequestUri);
             dependencyRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/graphml"));

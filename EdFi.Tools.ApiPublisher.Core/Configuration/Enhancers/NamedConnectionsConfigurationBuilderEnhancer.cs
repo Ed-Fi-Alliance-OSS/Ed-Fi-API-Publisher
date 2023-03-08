@@ -1,9 +1,9 @@
+using EdFi.Tools.ApiPublisher.Core.Management;
+using Microsoft.Extensions.Configuration;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using EdFi.Tools.ApiPublisher.Core.Management;
-using log4net;
-using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers
 {
@@ -11,7 +11,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers
     {
         private readonly INamedApiConnectionDetailsReader _namedApiConnectionDetailsReader;
 
-        private readonly ILog _logger = LogManager.GetLogger(typeof(NamedConnectionsConfigurationBuilderEnhancer));
+        private readonly ILogger _logger = Log.Logger.ForContext(typeof(NamedConnectionsConfigurationBuilderEnhancer));
         
         public NamedConnectionsConfigurationBuilderEnhancer(INamedApiConnectionDetailsReader namedApiConnectionDetailsReader)
         {

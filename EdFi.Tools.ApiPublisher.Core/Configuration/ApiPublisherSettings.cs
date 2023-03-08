@@ -1,6 +1,6 @@
 using System;
 using System.Threading;
-using log4net;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
@@ -21,7 +21,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
     public class Options
     {
-        private readonly ILog _logger = LogManager.GetLogger(typeof(Options));
+        private readonly ILogger _logger = Log.Logger;
         
         public int BearerTokenRefreshMinutes { get; set; } = 12;
         
@@ -40,7 +40,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             {
                 if (value <= 0)
                 {
-                    _logger.Warn($"Attempted max parallelism of '{value}' for posting resources is invalid. Setting has been adjusted to '1'.");
+                    _logger.Warning($"Attempted max parallelism of '{value}' for posting resources is invalid. Setting has been adjusted to '1'.");
                     _maxDegreeOfParallelismForPostResourceItem = 1;
 
                     return;
@@ -57,7 +57,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 
                 if (value > _maxDegreeOfParallelismForPostResourceItem)
                 {
-                    _logger.Warn($"Attempted max parallelism of '{value}' for posting resources is too large. Setting has been adjusted to '{_maxDegreeOfParallelismForPostResourceItem}'.");
+                    _logger.Warning($"Attempted max parallelism of '{value}' for posting resources is too large. Setting has been adjusted to '{_maxDegreeOfParallelismForPostResourceItem}'.");
                 }
             }
         }

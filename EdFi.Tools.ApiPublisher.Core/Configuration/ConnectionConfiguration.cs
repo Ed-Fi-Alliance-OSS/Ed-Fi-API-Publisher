@@ -79,7 +79,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             {
                 if (!string.IsNullOrWhiteSpace(value))
                 {
-                    throw new ConfigurationErrorsException(
+                    throw new Exception(
                         "The 'Connections:Source:Resources' configuration setting has been replaced by 'Connections:Source:Include'. Adjust your connection configuration appropriately and try again.");
                 }
             }
@@ -94,7 +94,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             {
                 if (!string.IsNullOrWhiteSpace(value))
                 {
-                    throw new ConfigurationErrorsException(
+                    throw new Exception(
                         "The 'Connections:Source:ExcludeResources' configuration setting has been replaced by 'Connections:Source:Exclude'. Adjust your connection configuration appropriately and try again.");
                 }
             }
@@ -108,7 +108,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             {
                 if (!string.IsNullOrWhiteSpace(value))
                 {
-                    throw new ConfigurationErrorsException("The 'Connections:Source:SkipResources' configuration setting has been replaced by 'Connections:Source:ExcludeOnly'. Adjust your connection configuration appropriately and try again.");
+                    throw new Exception("The 'Connections:Source:SkipResources' configuration setting has been replaced by 'Connections:Source:ExcludeOnly'. Adjust your connection configuration appropriately and try again.");
                 }
             }
         }

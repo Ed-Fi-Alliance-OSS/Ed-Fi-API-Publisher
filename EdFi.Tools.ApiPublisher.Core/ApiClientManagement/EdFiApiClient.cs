@@ -1,3 +1,9 @@
+using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Processing;
+using Newtonsoft.Json.Linq;
+using Serilog;
+using Serilog.Events;
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -5,18 +11,13 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
-using EdFi.Tools.ApiPublisher.Core.Processing;
-using log4net;
-using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 {
     public class EdFiApiClient : IDisposable
     {
         private readonly string _name;
-        private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiClient));
+        private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClient));
         
         private readonly HttpClient _httpClient;
         private readonly Timer _bearerTokenRefreshTimer;
@@ -80,7 +81,7 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 
         private async Task<string> GetBearerTokenAsync(HttpClient httpClient, string key, string secret, string scope)
         {
-            if (_logger.IsDebugEnabled)
+            if (_logger.IsEnabled(LogEventLevel.Debug))
                 _logger.Debug($"Getting bearer token for {_name} API client with key {key.Substring(0, 3)}...");
             
             var authRequest = new HttpRequestMessage(HttpMethod.Post, "oauth/token");
@@ -99,7 +100,7 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
                     "Basic",
                     encodedKeyAndSecret);
 
-            if (_logger.IsDebugEnabled)
+            if (_logger.IsEnabled(LogEventLevel.Debug))
             {
                 if (string.IsNullOrEmpty(scope))
                 {
@@ -129,7 +130,7 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
                     throw new Exception($"Authentication was successful for {_name.ToLower()} API client but the requested scope of '{scope}' was not honored by the host. Remove the 'scope' parameter from the connection information for this API endpoint to proceed with an unscoped access token.");
                 }
 
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug($"Token request for {_name.ToLower()} API client with scope '{scope}' was returned by server.");
                 }
@@ -154,11 +155,11 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
             
                 if (isInitializing)
                 {
-                    _logger.Info($"Retrieving initial bearer token for {_name.ToLower()} API client.");
+                    _logger.Information($"Retrieving initial bearer token for {_name.ToLower()} API client.");
                 }
                 else
                 {
-                    _logger.Info($"Refreshing bearer token for {_name.ToLower()} API client.");
+                    _logger.Information($"Refreshing bearer token for {_name.ToLower()} API client.");
                 }
 
                 try
@@ -171,11 +172,11 @@ namespace EdFi.Tools.ApiPublisher.Core.ApiClientManagement
 
                     if (isInitializing)
                     {
-                        _logger.Info($"Bearer token retrieved successfully for {_name.ToLower()} API client.");
+                        _logger.Information($"Bearer token retrieved successfully for {_name.ToLower()} API client.");
                     }
                     else
                     {
-                        _logger.Info($"Bearer token refreshed successfully for {_name.ToLower()} API client.");
+                        _logger.Information($"Bearer token refreshed successfully for {_name.ToLower()} API client.");
                     }
                 }
                 catch (Exception ex)

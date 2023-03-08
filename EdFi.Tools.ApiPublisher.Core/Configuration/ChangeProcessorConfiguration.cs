@@ -1,7 +1,7 @@
-using System;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
-using log4net;
 using Microsoft.Extensions.Configuration;
+using Serilog;
+using System;
 using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
@@ -11,7 +11,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         private readonly Lazy<EdFiApiClient> _sourceApiClient;
         private readonly Lazy<EdFiApiClient> _targetApiClient;
 
-        private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeProcessorConfiguration));
+        private readonly ILogger _logger = Log.ForContext(typeof(ChangeProcessorConfiguration));
         
         public ChangeProcessorConfiguration(
             AuthorizationFailureHandling[] authorizationFailureHandling,
@@ -36,7 +36,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             _sourceApiClient = new Lazy<EdFiApiClient>(() =>
             {
                 // Establish connection to source API
-                _logger.Info("Initializing source API client...");
+                _logger.Information("Initializing source API client...");
 
                 return sourceApiClientFactory();
             });
@@ -44,7 +44,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             _targetApiClient = new Lazy<EdFiApiClient>(() =>
             {
                 // Establish connection to target API
-                _logger.Info("Initializing target API client...");
+                _logger.Information("Initializing target API client...");
 
                 return targetApiClientFactory();
             });

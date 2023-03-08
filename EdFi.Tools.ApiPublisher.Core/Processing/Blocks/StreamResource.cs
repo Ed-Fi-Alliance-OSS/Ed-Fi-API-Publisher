@@ -1,3 +1,12 @@
+using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
+using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using Newtonsoft.Json.Linq;
+using Polly;
+using Polly.Contrib.WaitAndRetry;
+using Serilog;
+using Serilog.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,20 +15,12 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
-using EdFi.Tools.ApiPublisher.Core.Helpers;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
-using Newtonsoft.Json.Linq;
-using Polly;
-using Polly.Contrib.WaitAndRetry;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public static class StreamResource
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(StreamResource));
+        private static readonly ILogger _logger = Log.Logger.ForContext(typeof(StreamResource));
         
         public static TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TItemActionMessage>>
             CreateBlock<TItemActionMessage>(
@@ -68,38 +69,38 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         {
             if (message.Dependencies.Any())
             {
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                     _logger.Debug($"{message.ResourceUrl}: Waiting for dependencies to complete before streaming...");
 
                 // Wait for other resources to complete processing
                 await Task.WhenAll(message.Dependencies)
                     .ConfigureAwait(false);
 
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                     _logger.Debug($"{message.ResourceUrl}: Dependencies completed. Waiting for an available processing slot...");
             }
             else
             {
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                     _logger.Debug($"{message.ResourceUrl}: Resource has no dependencies. Waiting for an available processing slot...");
             }
 
             // Wait for an available processing slot
             await message.ProcessingSemaphore.WaitAsync(cancellationToken);
 
-            if (_logger.IsDebugEnabled)
+            if (_logger.IsEnabled(LogEventLevel.Debug))
                 _logger.Debug($"{message.ResourceUrl}: Processing slot acquired ({message.ProcessingSemaphore.CurrentCount} remaining). Starting streaming of resources...");
 
             try
             {
                 if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
                 {
-                    _logger.Info(
+                    _logger.Information(
                         $"{message.ResourceUrl}: Retrieving total count of items in change versions {message.ChangeWindow.MinChangeVersion} to {message.ChangeWindow.MaxChangeVersion}.");
                 }
                 else
                 {
-                    _logger.Info($"{message.ResourceUrl}: Retrieving total count of items.");
+                    _logger.Information($"{message.ResourceUrl}: Retrieving total count of items.");
                 }
 
                 string changeWindowParms = RequestHelper.GetChangeWindowParms(message.ChangeWindow);
@@ -114,14 +115,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                     .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
-                            _logger.Warn(
+                            _logger.Warning(
                                 $"{message.ResourceUrl}: Getting item count from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                         })
                     .ExecuteAsync((ctx, ct) =>
                         {
                             attempt++;
                         
-                            if (_logger.IsDebugEnabled)
+                            if (_logger.IsEnabled(LogEventLevel.Debug))
                             {
                                 _logger.Debug($"{message.ResourceUrl}): Getting item count from source (attempt #{attempt})...");
                             }
@@ -148,7 +149,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 // Try to get the count header from the response
                 if (!apiResponse.Headers.TryGetValues("total-count", out IEnumerable<string> headerValues))
                 {
-                    _logger.Warn(
+                    _logger.Warning(
                         $"{message.ResourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing, but overall processing will fail.");
 
                     // Publish an error for the resource. Feature is not supported.
@@ -188,7 +189,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     return Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
                 }
 
-                _logger.Info($"{message.ResourceUrl}: Total count = {totalCount}");
+                _logger.Information($"{message.ResourceUrl}: Total count = {totalCount}");
 
                 long offset = 0;
                 int limit = message.PageSize;
@@ -243,7 +244,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     // Being denied read access to descriptors is potentially problematic, but is not considered
                     // to be breaking in its own right for change processing. We'll fail downstream
                     // POSTs if descriptors haven't been initialized correctly on the target.
-                    _logger.Warn($"{message.ResourceUrl}: {apiResponse.StatusCode} - Unable to obtain total count for descriptor due to authorization failure. Descriptor values will not be published to the target, but processing will continue.{Environment.NewLine}Response content: {responseContent}");
+                    _logger.Warning($"{message.ResourceUrl}: {apiResponse.StatusCode} - Unable to obtain total count for descriptor due to authorization failure. Descriptor values will not be published to the target, but processing will continue.{Environment.NewLine}Response content: {responseContent}");
                     return;
                 }
             }

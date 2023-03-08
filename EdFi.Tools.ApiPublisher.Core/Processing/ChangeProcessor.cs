@@ -1,3 +1,14 @@
+using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Dependencies;
+using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
+using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Serilog;
+using Serilog.Events;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -7,16 +18,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Dependencies;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
-using EdFi.Tools.ApiPublisher.Core.Helpers;
-using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
@@ -24,8 +25,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
     public class ChangeProcessor : IChangeProcessor
     {
         private const string RetryKeySuffix = "#Retry";
-        
-        private readonly ILog _logger = LogManager.GetLogger(typeof(ChangeProcessor));
+
+        private ILogger _logger = Log.ForContext(typeof(ChangeProcessor));
 
         private readonly IResourceDependencyProvider _resourceDependencyProvider;
         private readonly IChangeVersionProcessedWriter _changeVersionProcessedWriter;
@@ -56,9 +57,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             var targetApiClient = configuration.TargetApiClient;
             var options = configuration.Options;
             var javascriptModuleFactory = configuration.JavascriptModuleFactory;
-
+            Serilog.Debugging.SelfLog.Enable(Console.Error);
             _logger.Debug($"Options for processing:{Environment.NewLine}{JsonConvert.SerializeObject(options, Formatting.Indented)}");
-            
+
             try
             {
                 // Check Ed-Fi API and Standard versions for compatibility
@@ -86,7 +87,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
                 {
-                    _logger.Info($"Last change version processed of '{GetLastChangeVersionProcessed(sourceApiConnectionDetails, targetApiConnectionDetails)}' for target API '{targetApiConnectionDetails.Name}' indicates that all available changes have already been published.");
+                    _logger.Information($"Last change version processed of '{GetLastChangeVersionProcessed(sourceApiConnectionDetails, targetApiConnectionDetails)}' for target API '{targetApiConnectionDetails.Name}' indicates that all available changes have already been published.");
                     return;
                 }
 
@@ -159,7 +160,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
             finally
             {
-                _logger.Info($"Processing finished in {processStopwatch.Elapsed.TotalSeconds:N0} seconds.");
+                _logger.Information($"Processing finished in {processStopwatch.Elapsed.TotalSeconds:N0} seconds.");
             }
         }
 
@@ -204,7 +205,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Warn if API versions don't match
             if (!sourceApiVersion.Equals(targetApiVersion))
             {
-                _logger.Warn($"Source API version {sourceApiVersion} and target API version {targetApiVersion} do not match.");
+                _logger.Warning($"Source API version {sourceApiVersion} and target API version {targetApiVersion} do not match.");
             }
             
             // Try comparing Ed-Fi versions
@@ -215,13 +216,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 if (sourceEdFiVersion != targetEdFiVersion)
                 {
-                    _logger.Warn($"Source API is using Ed-Fi {sourceEdFiVersion} but target API is using Ed-Fi {targetEdFiVersion}. Some resources may not be publishable.");
+                    _logger.Warning($"Source API is using Ed-Fi {sourceEdFiVersion} but target API is using Ed-Fi {targetEdFiVersion}. Some resources may not be publishable.");
                 }
             }
             else
             {
                 throw new NotSupportedException("The Ed-Fi API Publisher is not compatible with Ed-Fi ODS API versions prior to v3.1.");
-                // Consider: _logger.Warn("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
+                // Consider: _logger.Warning("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
             }
 
             /*
@@ -296,7 +297,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 try
                 {
                     versionObject = JObject.Parse(versionJson);
-                    _logger.Info($"{role} API version information: {versionObject.ToString(Formatting.Indented)}");
+                    _logger.Information($"{role} API version information: {versionObject.ToString(Formatting.Indented)}");
                 }
                 catch (Exception)
                 {
@@ -333,12 +334,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             {
                 if (changeWindow == null)
                 {
-                    _logger.Warn(
+                    _logger.Warning(
                         $"No change window was defined, so last processed change version for source connection '{sourceApiConnectionDetails.Name}' cannot be updated.");
                 }
                 else if (GetLastChangeVersionProcessed(sourceApiConnectionDetails, targetApiConnectionDetails) != changeWindow.MaxChangeVersion)
                 {
-                    _logger.Info(
+                    _logger.Information(
                         $"Updating last processed change version from '{GetLastChangeVersionProcessed(sourceApiConnectionDetails, targetApiConnectionDetails)}' to '{changeWindow.MaxChangeVersion}' for target connection '{targetApiConnectionDetails.Name}'.");
 
                     // Record the successful completion of the change window
@@ -356,14 +357,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     if (string.IsNullOrEmpty(sourceApiConnectionDetails.Name))
                     {
-                        _logger.Info($"Unable to update the last change version processed because no connection name for source '{sourceApiConnectionDetails.Url}' was provided.");
+                        _logger.Information($"Unable to update the last change version processed because no connection name for source '{sourceApiConnectionDetails.Url}' was provided.");
                     }
                     else
                     {
-                        _logger.Info($"Unable to update the last change version processed because no connection name for target '{targetApiConnectionDetails.Url}' was provided.");
+                        _logger.Information($"Unable to update the last change version processed because no connection name for target '{targetApiConnectionDetails.Url}' was provided.");
                     }
                     
-                    _logger.Info($"Last Change Version Processed for source '{sourceApiConnectionDetails.Url}' to target '{targetApiConnectionDetails.Url}': {changeWindow.MaxChangeVersion}");
+                    _logger.Information($"Last Change Version Processed for source '{sourceApiConnectionDetails.Url}' to target '{targetApiConnectionDetails.Url}': {changeWindow.MaxChangeVersion}");
                 }
             }
         }
@@ -390,7 +391,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Filter resources down to just those requested, if an explicit inclusion list provided
             if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Include) || !string.IsNullOrWhiteSpace(sourceApiConnectionDetails.IncludeOnly))
             {
-                _logger.Info("Applying resource inclusions...");
+                _logger.Information("Applying resource inclusions...");
                 _logger.Debug($"Filtering processing to the following configured inclusion of source API resources:{Environment.NewLine}    Included (with dependencies):    {sourceApiConnectionDetails.Include}{Environment.NewLine}    Included (without dependencies): {sourceApiConnectionDetails.IncludeOnly}");
 
                 var includeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.Include);
@@ -412,7 +413,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     includeResourcePaths.Concat(retryDependenciesForIncludeResourcePaths).ToArray(),
                     includeOnlyResourcePaths.Concat(retryDependenciesForIncludeOnlyResourcePaths).ToArray());
 
-                // _logger.Info($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusion."); //"adding Ed-Fi dependencies.");
+                // _logger.Information($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusion."); //"adding Ed-Fi dependencies.");
                 //
                 // var reportableResources = GetReportableResources();
                 //
@@ -420,7 +421,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 //
                 // if (options.WhatIf)
                 // {
-                //     _logger.Info(resourceListMessage);
+                //     _logger.Information(resourceListMessage);
                 // }
                 // else
                 // {
@@ -430,7 +431,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             
             if (!string.IsNullOrWhiteSpace(sourceApiConnectionDetails.Exclude) || !string.IsNullOrWhiteSpace(sourceApiConnectionDetails.ExcludeOnly))
             {
-                _logger.Info("Applying resource exclusions...");
+                _logger.Information("Applying resource exclusions...");
                 _logger.Debug($"Filtering processing to the following configured exclusion of source API resources:{Environment.NewLine}    Excluded (along with dependents): {sourceApiConnectionDetails.Exclude}{Environment.NewLine}    Excluded (dependents unaffected): {sourceApiConnectionDetails.ExcludeOnly}");
 
                 var excludeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(sourceApiConnectionDetails.Exclude);
@@ -452,7 +453,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     excludeResourcePaths.Concat(retryDependenciesForExcludeResourcePaths).ToArray(),
                     excludeOnlyResourcePaths.Concat(retryDependenciesForExcludeOnlyResourcePaths).ToArray());
 
-                // _logger.Info(
+                // _logger.Information(
                 //     $"{postDependencyKeysByResourceKey.Count} resources to be processed after removing dependent Ed-Fi resources.");
                 //
                 // var reportableResources = GetReportableResources();
@@ -461,7 +462,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 //
                 // if (options.WhatIf)
                 // {
-                //     _logger.Info(resourceListMessage);
+                //     _logger.Information(resourceListMessage);
                 // }
                 // else
                 // {
@@ -476,11 +477,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             //     {
             //         var reportableResources = GetReportableResources();
             //         var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Dependencies.Select(x => Environment.NewLine + "\t" + x))))}";
-            //         _logger.Info(resourceListMessage);
+            //         _logger.Information(resourceListMessage);
             //     }
             // }
 
-            _logger.Info($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusions and/or exclusions.");
+            _logger.Information($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusions and/or exclusions.");
             
             var reportableResources = GetReportableResources();
             
@@ -488,7 +489,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             
             // if (options.WhatIf)
             // {
-                _logger.Info(resourceListMessage);
+                _logger.Information(resourceListMessage);
             // }
             // else
             // {
@@ -570,7 +571,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         resourceItem.Value.Where(dp => filteredResources.ContainsKey(dp)).ToArray();
                 }
 
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     if (allExclusionTraceEntries.Any())
                     {
@@ -644,7 +645,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         resourceItem.Value.Where(dp => filteredResources.ContainsKey(dp)).ToArray();
                 }
                 
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     if (allInclusionTraceEntries.Count > 0)
                     {
@@ -793,13 +794,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Only process deletes if we are using a specific Change Window
             if (changeWindow == null)
             {
-                _logger.Info($"No change window was defined, so no delete processing will be performed.");
+                _logger.Information($"No change window was defined, so no delete processing will be performed.");
                 return Array.Empty<TaskStatus>();
             }
 
             if (changeWindow.MinChangeVersion <= 1)
             {
-                _logger.Info($"Change window starting value indicates all values are being published, and so there is no need to perform delete processing.");
+                _logger.Information($"Change window starting value indicates all values are being published, and so there is no need to perform delete processing.");
                 return Array.Empty<TaskStatus>();
             }
             
@@ -849,7 +850,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
                 else
                 {
-                    _logger.Warn($"Request to Source API for the '{EdFiApiConstants.DeletesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Delete processing cannot be performed.");
+                    _logger.Warning($"Request to Source API for the '{EdFiApiConstants.DeletesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Delete processing cannot be performed.");
                 }
             }
 
@@ -870,13 +871,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Only process key changes if we are using a specific Change Window
             if (changeWindow == null)
             {
-                _logger.Info($"No change window was defined, so no key change processing will be performed.");
+                _logger.Information($"No change window was defined, so no key change processing will be performed.");
                 return Array.Empty<TaskStatus>();
             }
 
             if (changeWindow.MinChangeVersion <= 1)
             {
-                _logger.Info($"Change window starting value indicates all values are being published, and so there is no need to perform key change processing.");
+                _logger.Information($"Change window starting value indicates all values are being published, and so there is no need to perform key change processing.");
                 return Array.Empty<TaskStatus>();
             }
             
@@ -893,7 +894,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 if (resourcePathSegment == null)
                 {
-                    _logger.Info($"None of the API resources configured to allow key changes were found in the resources to be processed (based on dependency metadata retrieved from the target API).");
+                    _logger.Information($"None of the API resources configured to allow key changes were found in the resources to be processed (based on dependency metadata retrieved from the target API).");
 
                     return Array.Empty<TaskStatus>();
                 }
@@ -934,7 +935,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
                 else
                 {
-                    _logger.Warn($"Request to Source API for the '{EdFiApiConstants.KeyChangesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Key change processing cannot be performed.");
+                    _logger.Warning($"Request to Source API for the '{EdFiApiConstants.KeyChangesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Key change processing cannot be performed.");
                 }
             }
 
@@ -1132,13 +1133,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             if (snapshotsResponse.StatusCode == HttpStatusCode.NotFound)
             {
-                _logger.Warn($"Source API at '{sourceApiClient.HttpClient.BaseAddress}' does not support the necessary isolation for reliable API publishing. Errors may occur, or some data may not be published without causing failures.");
+                _logger.Warning($"Source API at '{sourceApiClient.HttpClient.BaseAddress}' does not support the necessary isolation for reliable API publishing. Errors may occur, or some data may not be published without causing failures.");
                 return null;
             }
             
             if (snapshotsResponse.StatusCode == HttpStatusCode.Forbidden)
             {
-                _logger.Warn($"The API publisher does not have permissions to access the source API's 'snapshots' resource at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Make sure that the source API is using a correctly configured claim set for your API Publisher's API client.");
+                _logger.Warning($"The API publisher does not have permissions to access the source API's 'snapshots' resource at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Make sure that the source API is using a correctly configured claim set for your API Publisher's API client.");
                 return null;
             }
 
@@ -1158,7 +1159,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 if (!snapshotResponseArray.Any())
                 {
                     // No snapshots available.
-                    _logger.Warn($"Snapshots are supported, but no snapshots are available from source API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'.");
+                    _logger.Warning($"Snapshots are supported, but no snapshots are available from source API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'.");
                     return null;
                 }
                 
@@ -1184,7 +1185,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     .OrderByDescending(x => x.SnapshotDateTime)
                     .First();
 
-                _logger.Info($"Using snapshot identifier '{snapshot.SnapshotIdentifier}' created at '{snapshot.SnapshotDateTime}'.");
+                _logger.Information($"Using snapshot identifier '{snapshot.SnapshotIdentifier}' created at '{snapshot.SnapshotDateTime}'.");
                 
                 return snapshot.SnapshotIdentifier;
             }
@@ -1207,7 +1208,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             if (!versionResponse.IsSuccessStatusCode)
             {
-                _logger.Warn($"Unable to get current change version from source API at '{sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath}' (response status: {versionResponse.StatusCode}). Full synchronization will always be performed against this source, and any concurrent changes made against the source may cause change processing to produce unreliable results.");
+                _logger.Warning($"Unable to get current change version from source API at '{sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath}' (response status: {versionResponse.StatusCode}). Full synchronization will always be performed against this source, and any concurrent changes made against the source may cause change processing to produce unreliable results.");
                 return null;
             }
             
@@ -1250,7 +1251,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             CancellationToken cancellationToken,
             string resourceUrlPathSuffix = null)
         {
-            _logger.Info($"Initiating resource streaming.");
+            _logger.Information($"Initiating resource streaming.");
 
             var linkOptions = new DataflowLinkOptions {PropagateCompletion = true};
 
@@ -1342,7 +1343,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 var streamingBlock = streamingResourceBlockByResourceKey[resourceKey];
 
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug($"{message.ResourceUrl}: Sending message to initiate streaming.");
                 }
@@ -1362,7 +1363,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         {
             var completedStreamingPagesByResourcePath = new Dictionary<string, StreamingPagesItem>(StringComparer.OrdinalIgnoreCase);
 
-            _logger.Info($"Waiting for {streamingPagesByResourcePath.Count} {activityDescription} streaming sources to complete...");
+            _logger.Information($"Waiting for {streamingPagesByResourcePath.Count} {activityDescription} streaming sources to complete...");
 
             var lastProgressUpdate = DateTime.Now;
             
@@ -1453,13 +1454,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     
                     string logMessage = $"Waiting for the {activityDescription} streaming of {resourcePaths.Length} resources to complete...{Environment.NewLine}{itemsMessage}";
                     
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug(logMessage);
                     }
                     else 
                     {
-                        _logger.Info(logMessage);
+                        _logger.Information(logMessage);
                     }
                     
                     lastProgressUpdate = DateTime.Now;
@@ -1487,12 +1488,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                     streamingPagesByResourcePath.Remove(resourcePaths[completedIndex]);
 
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug($"Streaming of '{resourcePaths[completedIndex]}' completed. Releasing a processing slot ({processingSemaphore.CurrentCount} slots currently available)...");
                     }
 
-                    _logger.Info($"Streaming of '{resourcePaths[completedIndex]}' completed. {streamingPagesByResourcePath.Count} resource(s) remaining. {processingSemaphore.CurrentCount + 1} processing slot(s) soon to be available.");
+                    _logger.Information($"Streaming of '{resourcePaths[completedIndex]}' completed. {streamingPagesByResourcePath.Count} resource(s) remaining. {processingSemaphore.CurrentCount + 1} processing slot(s) soon to be available.");
 
                     try
                     {
@@ -1500,7 +1501,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warn($"Attempt to release the semaphore resulted in an exception: {ex}");
+                        _logger.Warning($"Attempt to release the semaphore resulted in an exception: {ex}");
                     }
                 }
             }

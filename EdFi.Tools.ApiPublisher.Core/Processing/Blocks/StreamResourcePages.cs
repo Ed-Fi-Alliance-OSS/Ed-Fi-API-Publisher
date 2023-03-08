@@ -1,3 +1,12 @@
+using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
+using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using Newtonsoft.Json.Linq;
+using Polly;
+using Polly.Contrib.WaitAndRetry;
+using Serilog;
+using Serilog.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -5,20 +14,12 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
-using EdFi.Tools.ApiPublisher.Core.Helpers;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
-using Newtonsoft.Json.Linq;
-using Polly;
-using Polly.Contrib.WaitAndRetry;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public static class StreamResourcePages
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(StreamResourcePages));
+        private static readonly ILogger _logger = Log.Logger.ForContext(typeof(StreamResourcePages));
         
         public static TransformManyBlock<StreamResourcePageMessage<TItemActionMessage>, TItemActionMessage> GetBlock<TItemActionMessage>(
             Options options, 
@@ -68,7 +69,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         return Enumerable.Empty<TItemActionMessage>();
                     }
                     
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug($"{message.ResourceUrl}: Retrieving page items {offset} to {offset + limit - 1}.");
                     }
@@ -83,7 +84,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
-                            _logger.Warn(
+                            _logger.Warning(
                                 $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                         })
                         .ExecuteAsync((ctx, ct) =>
@@ -92,7 +93,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                             if (attempts > 1)
                             {
-                                if (_logger.IsDebugEnabled)
+                                if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
                                     _logger.Debug($"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} from source attempt #{attempts}.");
                                 }
@@ -129,9 +130,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     }
 
                     // Success
-                    if (_logger.IsInfoEnabled && attempts > 1)
+                    if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                     {
-                        _logger.Info(
+                        _logger.Information(
                             $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} attempt #{attempts} returned {apiResponse.StatusCode}.");
                     }
 
@@ -173,7 +174,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         }
                         
                         // Add the item to the buffer for processing into the target API
-                        if (_logger.IsDebugEnabled)
+                        if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
                             _logger.Debug($"{message.ResourceUrl}: Adding individual action message of type '{typeof(TItemActionMessage).Name}' for item {item["id"].Value<string>()}...");
                         }
@@ -183,7 +184,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                     if (message.IsFinalPage && items.Count == limit)
                     {
-                        if (_logger.IsDebugEnabled)
+                        if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
                             _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
                         }
