@@ -23,9 +23,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <None Update="Serilog.config">
-        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      </None>
       <None Update="apiPublisherSettings.json">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>

@@ -154,9 +154,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     options,
                     configurationStoreSection);
 
-                // Initialize logging
-                var loggerRepository = await TestHelpers.InitializeLogging();
-
                 // Create dependencies
                 var resourceDependencyMetadataProvider = new EdFiApiGraphMLDependencyMetadataProvider(targetEdFiApiClientProvider);
                 var resourceDependencyProvider = new ResourceDependencyProvider(resourceDependencyMetadataProvider);
