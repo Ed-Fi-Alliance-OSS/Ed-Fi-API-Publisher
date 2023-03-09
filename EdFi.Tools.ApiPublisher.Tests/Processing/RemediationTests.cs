@@ -120,9 +120,6 @@ public class RemediationTests
                 options,
                 configurationStoreSection);
 
-            // Initialize logging
-            var loggerRepository = await TestHelpers.InitializeLogging();
-
             // Create dependencies
             var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
             var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();

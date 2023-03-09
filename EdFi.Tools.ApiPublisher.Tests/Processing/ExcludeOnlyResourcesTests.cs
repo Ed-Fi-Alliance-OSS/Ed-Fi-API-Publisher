@@ -11,12 +11,12 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
+using FluentAssertions;
 using Jering.Javascript.NodeJS;
-using log4net.Appender;
-using log4net.Core;
-using log4net.Repository;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
+using Serilog;
+using Serilog.Events;
 using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
@@ -31,7 +31,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
-            private ILoggerRepository _loggerRepository;
             private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
             
             protected override async Task ArrangeAsync()
@@ -104,9 +103,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     options,
                     configurationStoreSection);
 
-                // Initialize logging
-                _loggerRepository = await TestHelpers.InitializeLogging();
-
                 // Create dependencies
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
                 var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
@@ -162,17 +158,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             [Test]
             public void Should_reflect_the_processing_as_an_exclusion_without_affecting_its_dependents_in_the_log()
             {
-                // Inspect the log entries
-                var memoryAppender = _loggerRepository.GetAppenders().OfType<MemoryAppender>().Single();
-                var events = memoryAppender.GetEvents();
-                
-                var skipInitializationEvents = events.Where(e => e.RenderedMessage.Contains("Excluding resource '/ed-fi/schools' leaving dependents intact...")).ToArray();
-
-                skipInitializationEvents.ShouldSatisfyAllConditions(() =>
-                {
-                    skipInitializationEvents.ShouldNotBeEmpty();
-                    skipInitializationEvents.Select(x => x.Level).ShouldAllBe(x => x == Level.Debug);
-                });
+                LogEvents
+                   .Should()
+                   .Contain(e => e.MessageTemplate.Text.Contains("Excluding resource '/ed-fi/schools' leaving dependents intact..."))
+                   .Which.Level
+                   .Should()
+                   .Be(LogEventLevel.Debug);
             }
 
             [Test]

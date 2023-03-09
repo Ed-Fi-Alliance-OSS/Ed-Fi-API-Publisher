@@ -12,7 +12,6 @@ using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using Jering.Javascript.NodeJS;
-using log4net.Repository;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 
@@ -28,7 +27,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
-            private ILoggerRepository _loggerRepository;
             private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
 
             private const int SuppliedSchoolYear = MockRequests.SchoolYear;
@@ -102,9 +100,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     options,
                     configurationStoreSection);
 
-                // Initialize logging
-                _loggerRepository = await TestHelpers.InitializeLogging();
-
                 // Create dependencies
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
                 var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
@@ -161,7 +156,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
-            private ILoggerRepository _loggerRepository;
             private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
 
             private const int SuppliedSchoolYear = MockRequests.SchoolYear;
@@ -238,9 +232,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     options,
                     configurationStoreSection);
 
-                // Initialize logging
-                _loggerRepository = await TestHelpers.InitializeLogging();
-
                 // Create dependencies
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
                 var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
@@ -299,7 +290,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
-            private ILoggerRepository _loggerRepository;
             private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
 
             private const int SuppliedSchoolYear = MockRequests.SchoolYear;
@@ -376,9 +366,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     null,
                     options,
                     configurationStoreSection);
-
-                // Initialize logging
-                _loggerRepository = await TestHelpers.InitializeLogging();
 
                 // Create dependencies
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();

@@ -1,9 +1,3 @@
-using System;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
@@ -11,13 +5,17 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
+using FluentAssertions;
 using Jering.Javascript.NodeJS;
-using log4net.Appender;
-using log4net.Core;
-using log4net.Repository;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
-using Shouldly;
+using Serilog;
+using Serilog.Events;
+using System;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -31,7 +29,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
-            private ILoggerRepository _loggerRepository;
             private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
             
             protected override async Task ArrangeAsync()
@@ -104,9 +101,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     options,
                     configurationStoreSection);
 
-                // Initialize logging
-                _loggerRepository = await TestHelpers.InitializeLogging();
-
                 // Create dependencies
                 var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
                 var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
@@ -165,18 +159,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             [Test]
             public void Should_reflect_the_processing_as_an_inclusion_without_its_dependencies_in_the_log()
             {
-                // Inspect the log entries
-                var memoryAppender = _loggerRepository.GetAppenders().OfType<MemoryAppender>().Single();
-                var events = memoryAppender.GetEvents();
-                
-                var initializationEvents = events.Where(e 
-                    => e.RenderedMessage.Contains("Including resource '/ed-fi/schools' without its dependencies...")).ToArray();
-
-                initializationEvents.ShouldSatisfyAllConditions(() =>
-                {
-                    initializationEvents.ShouldNotBeEmpty();
-                    initializationEvents.Select(x => x.Level).ShouldAllBe(x => x == Level.Debug);
-                });
+                LogEvents
+                   .Should()
+                   .Contain(e => e.MessageTemplate.Text.Contains("Including resource '/ed-fi/schools' without its dependencies..."))
+                   .Which.Level
+                   .Should()
+                   .Be(LogEventLevel.Debug);
             }
 
             [TestCase("students")]

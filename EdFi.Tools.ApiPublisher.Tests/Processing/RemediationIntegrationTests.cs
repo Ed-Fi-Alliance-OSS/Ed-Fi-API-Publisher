@@ -14,7 +14,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using Jering.Javascript.NodeJS;
-using log4net;
+using Serilog;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -230,9 +230,6 @@ public class RemediationIntegrationTests
                 _remediationJavaScriptModuleFactory,
                 options,
                 configurationStoreSection);
-
-            // Initialize logging
-            var loggerRepository = await TestHelpers.InitializeLogging();
 
             // Create dependencies
             var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
@@ -527,9 +524,6 @@ public class RemediationIntegrationTests
                 options,
                 configurationStoreSection);
 
-            // Initialize logging
-            var loggerRepository = await TestHelpers.InitializeLogging();
-
             // Create dependencies
             var resourceDependencyProvider = new EdFiV3ApiResourceDependencyProvider();
             var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
@@ -615,7 +609,7 @@ public class RemediationIntegrationTests
 
     public class TestNodeJsService : INodeJSService
     {
-        private readonly ILog _logger = LogManager.GetLogger(typeof(TestNodeJsService));
+        private readonly ILogger _logger = Log.ForContext(typeof(TestNodeJsService));
 
         private readonly string _testCacheIdentifier;
 

@@ -4,15 +4,30 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using NUnit.Framework;
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.TestCorrelator;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
     [TestFixture]
     public abstract class TestFixtureAsyncBase
     {
+
+        private IEnumerable<LogEvent> _logEvents;
+
+        public IEnumerable<LogEvent> LogEvents
+        {
+            get { return _logEvents; }
+            set { _logEvents = value; }
+        }
+
+
         private Exception _actualException;
         private bool _actualExceptionInspected;
 
@@ -33,30 +48,35 @@ namespace EdFi.Tools.ApiPublisher.Tests
         [OneTimeSetUp]
         public virtual async Task RunOnceBeforeAnyAsync()
         {
-            try
+            TestHelpers.InitializeLogging();
+            using (TestCorrelator.CreateContext())
             {
-                //Arrange
-                await ArrangeAsync();
-            }
-            catch (Exception ex)
-            {
-                var handled = HandleArrangeException(ex);
-
-                if (!handled)
+                try
                 {
-                    throw;
+                    //Arrange
+                    await ArrangeAsync();
                 }
-            }
+                catch (Exception ex)
+                {
+                    var handled = HandleArrangeException(ex);
 
-            //Act
-            // Execute the behavior
-            try
-            {
-                await ActAsync();
-            }
-            catch (Exception ex)
-            {
-                ActualException = ex;
+                    if (!handled)
+                    {
+                        throw;
+                    }
+                }
+
+                //Act
+                // Execute the behavior
+                try
+                {
+                    await ActAsync();
+                }
+                catch (Exception ex)
+                {
+                    ActualException = ex;
+                }
+                LogEvents = TestCorrelator.GetLogEventsFromCurrentContext();
             }
         }
 
@@ -69,7 +89,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                 Assert.Fail(
                     $"The exception of type '{_actualException.GetType().Name}' was not inspected by the test:{Environment.NewLine} {_actualException}.");
             }
-
+            Log.CloseAndFlush();
             return Task.CompletedTask;
         }
 
