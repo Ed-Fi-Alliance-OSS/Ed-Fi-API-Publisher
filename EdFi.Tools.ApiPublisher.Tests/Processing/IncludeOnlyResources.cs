@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Autofac.Features.Indexed;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
@@ -21,6 +22,7 @@ using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
+using EdFi.Tools.ApiPublisher.Core.Finalization;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
@@ -141,7 +143,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 var sourceIsolationApplicator = new EdFiApiSourceIsolationApplicator(sourceEdFiApiClientProvider);
                 var dataSourceCapabilities = new EdFiApiSourceCapabilities(sourceEdFiApiClientProvider);
                 var publishErrorsBlocksFactory = new PublishErrorsBlocksFactory(errorPublisher);
-
+                var sourceCapabilities = A.Fake<ISourceCapabilities>();
+                var sourceResourceItemProvider = A.Fake<ISourceResourceItemProvider>();
+                var sourceConnectionDetails = A.Fake<ISourceConnectionDetails>();
+                var finalizationActivities = A.Fake<IFinalizationActivity>();
                 var streamingResourceProcessor = new StreamingResourceProcessor(
                     new StreamResourceBlockFactory(
                         new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(
@@ -161,7 +166,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .Returns(
                         new UpsertPublishingStageInitiator(
                             streamingResourceProcessor,
-                            new PostResourceProcessingBlocksFactory(nodeJsService, sourceEdFiApiClientProvider, targetEdFiApiClientProvider)));
+                            new PostResourceProcessingBlocksFactory(nodeJsService, targetEdFiApiClientProvider, sourceConnectionDetails, dataSourceCapabilities, sourceResourceItemProvider)));
 
                 A.CallTo(() => stageInitiators[PublishingStage.Deletes])
                     .Returns(
@@ -180,7 +185,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     sourceIsolationApplicator,
                     dataSourceCapabilities,
                     publishErrorsBlocksFactory,
-                    stageInitiators);
+                    stageInitiators,
+                    new[] { finalizationActivities });
             }
 
             protected override async Task ActAsync()
