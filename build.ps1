@@ -50,7 +50,7 @@ param(
 
     # Assembly and package version number, defaults 2.6.1
     [string]
-    $Version = "1.0.0",
+    $Version = "0.1.0",
 
     # .NET project build configuration, defaults to "Debug". Options are: Debug, Release.
     [string]
@@ -200,7 +200,12 @@ function RunTests {
 
     $testAssemblies | ForEach-Object {
         Write-Host "Executing: dotnet test $($_)"
-        Invoke-Execute { dotnet test --filter Category=$Category $_ }
+        Invoke-Execute { 
+            dotnet test --filter Category=$Category $_ `
+            --logger "trx;LogFileName=$($_).trx" `
+            --nologo `
+            --no-build
+        }
     }
 }
 

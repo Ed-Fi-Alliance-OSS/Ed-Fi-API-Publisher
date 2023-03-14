@@ -233,7 +233,7 @@ jobs:
             NuGetApiKey = "${{ env.ARTIFACTS_API_KEY }}"
           }
 
-          $artifact | ForEach-Object {
-              $arguments.PackageFile = $_
-              ./build.ps1 Push @arguments
-           }
+          # $artifact | ForEach-Object {
+          #     $arguments.PackageFile = $_
+          #     ./build.ps1 Push @arguments
+          #  }

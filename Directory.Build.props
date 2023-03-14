@@ -5,7 +5,7 @@
         <Authors>Ed-Fi Alliance, LLC and contributors</Authors>
         <Company>Ed-Fi Alliance, LLC and contributors</Company>
         <Copyright>Copyright Â© 2023 Ed-Fi Alliance</Copyright>
-        <VersionPrefix>1.0.0</VersionPrefix>
+        <VersionPrefix>0.1.0.1</VersionPrefix>
         <VersionSuffix></VersionSuffix>
     </PropertyGroup>
 </Project>
