@@ -43,7 +43,7 @@
 param(
     # Command to execute, defaults to "Build".
     [string]
-    [ValidateSet("Build", "Publish", "Package", "Push", "UnitTest")]
+    [ValidateSet("Build", "BuildAndPublish", "Package", "Push", "UnitTest")]
     $Command = "Build",
 
   #  [switch] $SelfContained,
@@ -182,17 +182,6 @@ function DotnetPush {
     dotnet nuget push $PackageFileName --api-key $NuGetApiKey --source $EdFiNuGetFeed
 }
 
-
-function Push {
-    param (
-        [string]
-        $PackageFileName
-    )
-
-    Write-Host "Pushing $PackageFileName to $EdFiNuGetFeed"
-    dotnet nuget push $PackageFileName --api-key $NuGetApiKey --source $EdFiNuGetFeed
-}
-
 function RunTests {
     param (
         # File search filter
@@ -226,7 +215,7 @@ function Invoke-Build {
     Invoke-Step { Compile }
 }
 
-function Invoke-Publish {
+function Invoke-BuildAndPublish {
     Invoke-Build
     Invoke-Step { Publish }
 }
@@ -247,7 +236,7 @@ Invoke-Main {
     switch ($Command) {       
         Build { Invoke-Build }
         UnitTest { Invoke-UnitTests }		
-        Publish { Invoke-Publish }
+        BuildAndPublish { Invoke-BuildAndPublish }
         Package { Invoke-Package }
         Push { Invoke-Push }
         default { throw "Command '$Command' is not recognized" }

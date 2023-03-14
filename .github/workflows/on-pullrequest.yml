@@ -18,65 +18,49 @@ jobs:
   scan-actions-bidi:
     name: Scan Actions, scan all files for BIDI Trojan Attacks
     uses: ed-fi-alliance-oss/ed-fi-actions/.github/workflows/repository-scanner.yml@main
+    with:
+      config-file-path: ./.github/workflows/bidi-config.json
 
-  run-cs-tests:
-    name: Run C# Tests
+  build-and-test:
+    name: Build and Test
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        shell: pwsh
     steps:
-    - name: Checkout
-      uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      - name: Checkout the Repo
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@607fce577a46308457984d59e4954e075820f10a # v3.0.3
-      with:
-        dotnet-version: 6.0.x
+      - name: Setup .NET
+        uses: actions/setup-dotnet@607fce577a46308457984d59e4954e075820f10a # v3.0.3
+        with:
+          dotnet-version: 6.0.x
 
-    - name: Restore dependencies
-      run: dotnet restore
+      - name: Build
+        run: ./build.ps1 -Command Build -Configuration Debug
 
-    - name: Build
-      run: dotnet build --no-restore
+      - name: Run Unit Tests
+        if: success()
+        run: ./build.ps1 -Command UnitTest -Configuration Debug
 
-    - name: Run Unit Tests
-      run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=api-publisher.trx"
+      - name: Upload Results as Workflow Artifact
+        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        with:
+          name: csharp-tests
+          path: "**/*.trx"
+          retention-days: 5
 
-    - name: Upload Test Results
-      uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
-      with:
-        name: csharp-tests
-        path: api-publisher.trx
-        retention-days: 5
-    
-    - name: Dependency Review ("Dependabot on PR")
-      uses: actions/dependency-review-action@c090f4e553673e6e505ea70d6a95362ee12adb94 # v3.0.3
+      - name: Dependency Review ("Dependabot on PR")
+        uses: actions/dependency-review-action@c090f4e553673e6e505ea70d6a95362ee12adb94 # v3.0.3
+      - name: Initialize CodeQL
+        if: success()
+        uses: github/codeql-action/init@896079047b4bb059ba6f150a5d87d47dde99e6e5 # codeql-bundle-20221211
+        with:
+          languages: csharp
 
-  code-ql:
-    # CodeQL needs a completely fresh build
-    name: Run CodeQL
-    runs-on: ubuntu-latest
+      - name: Rebuild for CodeQL
+        run: ./build.ps1 -Command Build -Configuration Debug
 
-    steps:
-    - name: Checkout
-      uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@607fce577a46308457984d59e4954e075820f10a # v3.0.3
-      with:
-        dotnet-version: 6.0.x
-
-    - name: Restore dependencies
-      run: dotnet restore
-    
-    - name: Initialize CodeQL
-      if: success()
-      uses: github/codeql-action/init@896079047b4bb059ba6f150a5d87d47dde99e6e5 # codeql-bundle-20221211
-      with:
-        languages: csharp
-
-    - name: Build
-      run: dotnet build --no-restore
-
-    - name: Perform CodeQL Analysis
-      if: success()
-      uses: github/codeql-action/analyze@896079047b4bb059ba6f150a5d87d47dde99e6e5 # codeql-bundle-20221211
+      - name: Perform CodeQL Analysis
+        if: success()
+        uses: github/codeql-action/analyze@896079047b4bb059ba6f150a5d87d47dde99e6e5 # codeql-bundle-20221211
