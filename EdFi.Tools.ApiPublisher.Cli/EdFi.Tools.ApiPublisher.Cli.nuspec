@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>EdFi.ApiPublisher</id>
+    <version>$version$</version>
+    <title>Ed-Fi API-Publisher</title>
+    <authors>Ed-Fi Alliance</authors>
+    <projectUrl>https://github.com/Ed-Fi-Alliance-OSS/Ed-Fi-API-Publisher.git</projectUrl>
+    <copyright>Copyright © 2021, Ed-Fi Alliance, LLC.</copyright>
+    <summary>Ed-Fi API-Publisher</summary>
+    <description>Ed-Fi API-Publisher</description>
+    <license type="expression">edfi</license>
+  </metadata>
+  <files>  
+      <file src="publish\fdd\**\*.*" target="EdFi.ApiPublisher" />
+      <file src="publish\scd\**\*.*" target="EdFi.ApiPublisher.Win64" />
+  </files>
+</package>
