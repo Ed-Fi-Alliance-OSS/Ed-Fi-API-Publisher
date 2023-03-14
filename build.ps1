@@ -11,7 +11,7 @@
         
         * Build: runs `dotnet build` with several implicit steps
           (clean, restore, inject version information).
-        * Publish: creates the publish files.
+        * BuildAndPublish: build and creates the publish files.
         * Package: create nuget package.
         * Push: Push package to azure artifacts.        
         * UnitTest: runs the unit tests.  
@@ -22,8 +22,8 @@
         mode with assembly version 2.0.0.45.
 	
     .EXAMPLE
-        .\build.ps1 Publish
-        Output: Publish files will be created.
+        .\build.ps1 BuildAndPublish
+        Output: Build and publish files will be created.
     
     .EXAMPLE
         .\build.ps1 Package -Version "2.0.0"
