@@ -5,9 +5,13 @@ using Microsoft.Extensions.Configuration;
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
     public class ConfigurationBuilderFactory 
-        //: IConfigurationBuilderFactory
     {
-        public IConfigurationBuilder CreateConfigurationBuilder(string[] commandLineArgs)
+        /// <summary>
+        /// Creates a configuration builder incorporating settings files, environment variables and command-line arguments.
+        /// </summary>
+        /// <param name="commandLineArgs"></param>
+        /// <returns></returns>
+        public IConfigurationBuilder Create(string[] commandLineArgs)
         {
             var configBuilder = new ConfigurationBuilder()
                 .AddJsonFile("apiPublisherSettings.json")
@@ -15,21 +19,32 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 .AddEnvironmentVariables("EdFi:ApiPublisher:")
                 .AddCommandLine(commandLineArgs, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    // API connections configuration
+                    // Source connection configuration
                     ["--sourceName"] = "Connections:Source:Name",
+                    ["--sourceType"] = "Connections:Source:Type", // api | sqlite
+
+                    // Source API connection configuration
                     ["--sourceUrl"] = "Connections:Source:Url",
                     ["--sourceKey"] = "Connections:Source:Key",
                     ["--sourceSecret"] = "Connections:Source:Secret",
                     ["--sourceScope"] = "Connections:Source:Scope",
                     ["--sourceSchoolYear"] = "Connections:Source:SchoolYear",
                     ["--lastChangeVersionProcessed"] = "Connections:Source:LastChangeVersionProcessed",
+                    
+                    // Target connection configuration
                     ["--targetName"] = "Connections:Target:Name",
+                    ["--targetType"] = "Connections:Target:Type", // api | sqlite
+
+                    // Target API connection configuration
                     ["--targetUrl"] = "Connections:Target:Url",
                     ["--targetKey"] = "Connections:Target:Key",
                     ["--targetSecret"] = "Connections:Target:Secret",
                     ["--targetScope"] = "Connections:Target:Scope",
                     ["--targetSchoolYear"] = "Connections:Target:SchoolYear",
-                    
+
+                    // Target SqlLite connection configuration
+                    ["--targetUrl"] = "Connections:Target:Url",
+
                     // Publisher Options
                     ["--bearerTokenRefreshMinutes"] = "Options:BearerTokenRefreshMinutes",
                     ["--retryStartingDelayMilliseconds"] = "Options:RetryStartingDelayMilliseconds",
@@ -42,6 +57,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--includeDescriptors"] = "Options:IncludeDescriptors",
                     ["--errorPublishingBatchSize"] = "Options:ErrorPublishingBatchSize",
                     ["--ignoreSslErrors"] = "Options:IgnoreSslErrors",
+                    ["--useSourceDependencyMetadata"] = "Options:UseSourceDependencyMetadata",
                     ["--whatIf"] = "Options:WhatIf",
                     
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")

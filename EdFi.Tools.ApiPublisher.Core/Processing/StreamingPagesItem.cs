@@ -8,6 +8,5 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
     {
         public string[] DependencyPaths { get; set; }
         public ISourceBlock<ErrorItemMessage> CompletionBlock { get; set; }
-        public Action<object> PostForAuthorizationRetry { get; set; }
     }
 }

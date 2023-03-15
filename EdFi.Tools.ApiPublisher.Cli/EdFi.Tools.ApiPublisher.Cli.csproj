@@ -43,9 +43,12 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Configuration.Aws\EdFi.Tools.ApiPublisher.Configuration.Aws.csproj" />
-      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Configuration.PostgreSql\EdFi.Tools.ApiPublisher.Configuration.PostgreSql.csproj" />
-      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Configuration.SqlServer\EdFi.Tools.ApiPublisher.Configuration.SqlServer.csproj" />
+      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.Aws\EdFi.Tools.ApiPublisher.ConfigurationStore.Aws.csproj" />
+      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext\EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext.csproj" />
+      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql\EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql.csproj" />
+      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer\EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer.csproj" />
+      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj" />
+      <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.Sqlite\EdFi.Tools.ApiPublisher.Connections.Sqlite.csproj" />
       <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj" />
     </ItemGroup>
 

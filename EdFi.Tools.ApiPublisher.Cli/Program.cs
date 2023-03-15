@@ -6,99 +6,112 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Autofac;
-using Autofac.Core;
 using Autofac.Extensions.DependencyInjection;
-using EdFi.Ods.Api.Helpers;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
 using EdFi.Tools.ApiPublisher.Core.Modules;
-using EdFi.Tools.ApiPublisher.Core.NodeJs;
+using EdFi.Tools.ApiPublisher.Core.Plugin;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Registration;
-using Jering.Javascript.NodeJS;
 using log4net;
 using log4net.Config;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Module = Autofac.Module;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {
     internal class Program
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Program));
+        private static readonly ILog _logger = LogManager.GetLogger(typeof(Program));
 
         private static async Task<int> Main(string[] args)
         {
             InitializeLogging();
 
-            Logger.Info(
-                "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoffrey@mcelhanon.com, Edufied LLC) in conjunction with Student1.");
+            _logger.Info(
+                "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoff@edufied.com, Edufied LLC) in conjunction with Student1.");
 
             var cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = cancellationTokenSource.Token;
             
             try
             {
-                var configBuilder = new ConfigurationBuilderFactory()
-                    .CreateConfigurationBuilder(args);
+                // TODO: Implement plugin architecture to find all plug-ins, supplying the initial configuration as input
+                var pluginTypes = new[]
+                {
+                    // Connection plugins
+                    typeof(Connections.Api.Plugin),
+                    typeof(Connections.Sqlite.Plugin),
+                    
+                    // Configuration store plugins
+                    typeof(ConfigurationStore.Aws.Plugin),
+                    typeof(ConfigurationStore.PostgreSql.Plugin),
+                    typeof(ConfigurationStore.SqlServer.Plugin),
+                    typeof(ConfigurationStore.Plaintext.Plugin),
+                };
                 
+                var plugins = pluginTypes.Select(Activator.CreateInstance).Cast<IPlugin>().ToArray();
+
+                // Build the initial configuration, incorporating command-line arguments
+                IConfigurationBuilder configBuilder = new ConfigurationBuilderFactory().Create(args);
+
+                // Allow plugins to introduce configuration values
+                foreach (IPlugin plugin in plugins)
+                {
+                    plugin.ApplyConfiguration(args, configBuilder);
+                }
+
+                // Build the configuration
                 var initialConfiguration = configBuilder.Build();
-                
-                // Validate initial connection configuration
-                var connections = initialConfiguration.Get<ConnectionConfiguration>().Connections;
-                ValidateInitialConnectionConfiguration(connections);
 
-                // Initialize the container
-                var services = new ServiceCollection();
+                // Initialize the configuration container
+                var configurationContainerBuilder = new ContainerBuilder();
 
-                if (!string.IsNullOrEmpty(initialConfiguration.GetValue<string>("Options:RemediationsScriptFile")))
-                {
-                    // Add support for NodeJS
-                    services.AddNodeJS();
+                // Prepare NodeJS (if remediations file supplied)
+                var remediationsModule = new NodeJsRemediationsModule(initialConfiguration);
+                configurationContainerBuilder.RegisterModule(remediationsModule);
 
-                    // Allow for multiple node processes to support processing
-                    services.Configure<OutOfProcessNodeJSServiceOptions>(
-                        options => { options.Concurrency = Concurrency.MultiProcess; });
-                }
-                else
-                {
-                    // Provide an instance of an implementations that throws exceptions if called
-                    services.AddSingleton<INodeJSService>(new NullNodeJsService());
-                }
-
-                // Integrate Autofac
-                var containerBuilder = new ContainerBuilder();
-                containerBuilder.Populate(services);
-
-                IContainer container;
+                IContainer configurationContainer;
 
                 try
                 {
-                    var configurationStoreSection = initialConfiguration.GetSection("configurationStore");
-                    container = InitializeContainer(containerBuilder, configurationStoreSection);
+                    configurationContainer = BuildConfigurationContainer(configurationContainerBuilder, initialConfiguration, plugins);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"Configuration failed: {ex.Message}");
+                    _logger.Error($"Configuration failed: {ex.Message}");
 
                     return -1;
                 }
 
-                var serviceProvider = new AutofacServiceProvider(container);
+                var serviceProvider = new AutofacServiceProvider(configurationContainer);
 
-                // After container has been initialized, now enhance the configuration builder
-                if (connections.Source.NeedsResolution() || connections.Target.NeedsResolution())
+                // TODO: How to ensure connections have been configured?
+                // var connectionsConfiguration = initialConfiguration.GetSection("Connections");
+                
+                // if (connectionsConfiguration == null)
+                // {
+                //     throw new ArgumentException("Connections have not been configured.");
+                // }
+
+                // Validate initial connection configuration
+                var sourceConnectionDetails = GetConnectionConfiguration(initialConfiguration, configurationContainer, "Source");
+                EnsureConnectionFullyDefinedOrNamed(sourceConnectionDetails, "Source");
+
+                var targetConnectionDetails = GetConnectionConfiguration(initialConfiguration, configurationContainer, "Target");
+                EnsureConnectionFullyDefinedOrNamed(targetConnectionDetails, "Target");
+
+                // After root container has been initialized, resolve configuration builder enhancers and enhance the configuration details
+                if (sourceConnectionDetails.NeedsResolution() || targetConnectionDetails.NeedsResolution())
                 {
-                    Logger.Debug($"API connection details are incomplete from initial configuration. Beginning configuration enhancement processing...");
+                    _logger.Debug($"Connection details are incomplete after initial configuration. Beginning configuration enhancement processing...");
                     
                     var enhancers = serviceProvider.GetServices<IConfigurationBuilderEnhancer>();
 
                     foreach (var enhancer in enhancers)
                     {
-                        Logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
-                        enhancer.Enhance(configBuilder);
+                        _logger.Debug($"Running configuration builder enhancer '{enhancer.GetType().FullName}'...");
+                        enhancer.Enhance(initialConfiguration, configBuilder);
                     }
                 }
                 
@@ -109,53 +122,72 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 // API Publisher Settings
                 var publisherSettings = finalConfiguration.Get<ApiPublisherSettings>();
                 
+                // Validate the finalized options
                 var options = publisherSettings.Options;
-                Logger.Debug($"Validating configuration options...");
+                _logger.Debug($"Validating configuration options...");
                 ValidateOptions(options);
                 
                 var authorizationFailureHandling = publisherSettings.AuthorizationFailureHandling;
                 var resourcesWithUpdatableKeys = publisherSettings.ResourcesWithUpdatableKeys;
 
-                var apiConnections = finalConfiguration.Get<ConnectionConfiguration>().Connections;
-                
-                // Initialize source/target API clients
-                var sourceApiConnectionDetails = apiConnections.Source;
-                var targetApiConnectionDetails = apiConnections.Target;
-                
-                EdFiApiClient CreateSourceApiClient() => new ("Source", sourceApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
-                EdFiApiClient CreateTargetApiClient() => new ("Target", targetApiConnectionDetails, options.BearerTokenRefreshMinutes, options.IgnoreSSLErrors);
+                // Create child container for execution
+                await using var executionContainer = configurationContainer.BeginLifetimeScope(
+                    builder =>
+                    {
+                        builder.RegisterModule<CoreModule>();
 
-                Func<string> moduleFactory = null;
+                        // Add "default" registrations from the "core" assembly, leaving any existing registrations intact
+                        // Registers types found matching the simple "default service" naming convention (Foo for IFoo)
+                        builder
+                            .RegisterAssemblyTypes(typeof(CoreModule).Assembly)
+                            .UsingDefaultImplementationConvention();
 
-                if (!string.IsNullOrWhiteSpace(options.RemediationsScriptFile))
-                {
-                    moduleFactory = () => File.ReadAllText(options.RemediationsScriptFile);
-                }
-                
+                        builder.RegisterInstance(options);
+                        
+                        // Allow plugins to perform initial registrations
+                        foreach (IPlugin plugin in plugins)
+                        {
+                            plugin.PerformFinalRegistrations(builder, finalConfiguration);
+                        }
+                    });
+
+                Func<string>? moduleFactory = (!string.IsNullOrWhiteSpace(options.RemediationsScriptFile))
+                    ? () => File.ReadAllText(options.RemediationsScriptFile)
+                    : null as Func<string>;
+
+                var configurationStoreSection = finalConfiguration.GetSection("configurationStore");
+
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
                     authorizationFailureHandling,
                     resourcesWithUpdatableKeys,
-                    sourceApiConnectionDetails,
-                    targetApiConnectionDetails,
-                    CreateSourceApiClient,
-                    CreateTargetApiClient,
                     moduleFactory,
                     options,
-                    finalConfiguration.GetSection("configurationStore"));
+                    configurationStoreSection);
 
-                var changeProcessor = serviceProvider.GetRequiredService<IChangeProcessor>();
+                var changeProcessor = executionContainer.Resolve<ChangeProcessor>();
 
-                Logger.Info($"Processing started.");
+                _logger.Info($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
-                Logger.Info($"Processing complete.");
+                _logger.Info($"Processing complete.");
 
                 return 0;
             }
             catch (Exception ex)
             {
-                Logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
+                _logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
                 
                 return -1;
+            }
+
+            INamedConnectionDetails GetConnectionConfiguration(IConfigurationRoot initialConfiguration, IContainer rootContainer, string connectionSectionName)
+            {
+                var connectionConfiguration = initialConfiguration.GetSection("Connections").GetSection(connectionSectionName);
+                var connectionType = connectionConfiguration.GetValue<string>("Type") ?? "api";
+
+                var connectionDetails = rootContainer.ResolveNamed<INamedConnectionDetails>(connectionType);
+                connectionConfiguration.Bind(connectionDetails);
+                
+                return connectionDetails;
             }
         }
 
@@ -231,104 +263,31 @@ namespace EdFi.Tools.ApiPublisher.Cli
             }
         }
 
-        private static void ValidateInitialConnectionConfiguration(Connections connections)
+        private static void EnsureConnectionFullyDefinedOrNamed(INamedConnectionDetails connectionDetails, string type)
         {
-            // Ensure connections have been configured
-            if (connections == null)
-            {
-                throw new ArgumentException("Connections have not been configured.");
-            }
-            
             // If source and target connections are fully defined, we're done
-            if (connections.Source.IsFullyDefined() && connections.Target.IsFullyDefined())
+            if (connectionDetails.IsFullyDefined())
             {
-                Logger.Debug($"Source and target API connections are fully defined. No named connections are being used.");
+                _logger.Debug($"{type} connection is fully defined.");
                 return;
             }
 
-            // Ensure that names are provided for API connections that are not already fully defined
-            if (!connections.Source.IsFullyDefined() && string.IsNullOrEmpty(connections.Source.Name))
+            // Ensure that names are provided for the connection if it's not already fully defined
+            if (!connectionDetails.IsFullyDefined() && string.IsNullOrEmpty(connectionDetails.Name))
             {
-                throw new ArgumentException("Source API connection is not fully defined and no connection name was provided.");
-            }
-
-            if (!connections.Target.IsFullyDefined() && string.IsNullOrEmpty(connections.Target.Name))
-            {
-                throw new ArgumentException("Target API connection is not fully defined and no connection name was provided.");
+                throw new ArgumentException($"{type} connection is not fully defined and no connection name was provided.");
             }
         }
 
-        private static IContainer InitializeContainer(
-            ContainerBuilder containerBuilder,
-            IConfigurationSection configurationStoreSection)
+        private static IContainer BuildConfigurationContainer(ContainerBuilder containerBuilder, IConfigurationRoot configuration, IPlugin[] plugins)
         {
-            containerBuilder.RegisterModule<EdFiToolsApiPublisherCoreModule>();
-
-            // NOTE: Consider a plugin model here
-            InstallApiConnectionConfigurationSupport(containerBuilder, configurationStoreSection);
-
-            // Add "default" registrations from the "core" assembly, leaving any existing registrations intact
-            // Registers types found matching the simple "default service" naming convention (Foo for IFoo)
-            containerBuilder
-                .RegisterAssemblyTypes(typeof(EdFiToolsApiPublisherCoreModule).Assembly)
-                .UsingDefaultImplementationConvention();
+            // Allow plugins to perform initial registrations
+            foreach (IPlugin plugin in plugins)
+            {
+                plugin.PerformConfigurationRegistrations(containerBuilder, configuration);
+            }
 
             return containerBuilder.Build();
-        }
-
-        private static void InstallApiConnectionConfigurationSupport(
-            ContainerBuilder containerBuilder,
-            IConfigurationSection configurationStoreSection)
-        {
-            EnsureEdFiAssembliesLoaded();
-
-            string configurationSourceName = configurationStoreSection.GetValue<string>("provider");
-            
-            Logger.Debug($"Configuration store provider is '{configurationSourceName}'...");
-            
-            var moduleType = FindApiConnectionConfigurationModuleType();
-
-            if (moduleType == null)
-            {
-                throw new Exception($"Unable to find an installer for API connection configuration source '{configurationSourceName}'.");
-            }
-
-            // Install chosen support for API connection configuration
-            var module = (Module?) Activator.CreateInstance(moduleType);
-
-            if (module == null)
-            {
-                throw new Exception($"Unable to create the installer module '{moduleType.Name}' for connection configuration source '{configurationSourceName}'.");
-            }
-            
-            Logger.Debug($"Registering configuration store provider module '{moduleType.FullName}'...");
-            
-            containerBuilder.RegisterModule(module);
-
-            // Ensure all Ed-Fi API Publisher assemblies are loaded
-            void EnsureEdFiAssembliesLoaded()
-            {
-                var directoryInfo = new DirectoryInfo(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
-            
-                foreach (FileInfo fileInfo in directoryInfo.GetFiles("EdFi*.dll"))
-                {
-                    Logger.Debug($"Ensuring that assembly '{fileInfo.Name}' is loaded...");
-                    Assembly.LoadFrom(fileInfo.FullName);
-                }
-            }
-
-            // Search for the installer for the chosen configuration source
-            Type? FindApiConnectionConfigurationModuleType()
-            {
-                var locatedModuleType = AppDomain.CurrentDomain.GetAssemblies()
-                    .SelectMany(a => a.GetExportedTypes())
-                    .Where(t => t.GetInterfaces().Any(i => i == typeof(IModule)))
-                    .FirstOrDefault(t => t.GetCustomAttributes<ApiConnectionsConfigurationSourceNameAttribute>()
-                        .FirstOrDefault()
-                        ?.Name.Equals(configurationSourceName, StringComparison.OrdinalIgnoreCase) == true);
-                
-                return locatedModuleType;
-            }
         }
 
         private static void InitializeLogging()

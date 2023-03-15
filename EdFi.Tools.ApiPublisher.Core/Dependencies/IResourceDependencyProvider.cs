@@ -6,6 +6,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Dependencies
 {
     public interface IResourceDependencyProvider
     {
-        Task<IDictionary<string, string[]>> GetDependenciesByResourcePathAsync(EdFiApiClient httpClient, bool includeDescriptors);
+        Task<IDictionary<string, string[]>> GetDependenciesByResourcePathAsync(bool includeDescriptors);
     }
 }

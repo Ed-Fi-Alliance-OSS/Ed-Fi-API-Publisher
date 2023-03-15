@@ -5,6 +5,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers
 {
     public interface IConfigurationBuilderEnhancer
     {
-        void Enhance(IConfigurationBuilder configurationBuilder);
+        void Enhance(IConfigurationRoot initialConfiguration, IConfigurationBuilder configurationBuilder);
     }
 }

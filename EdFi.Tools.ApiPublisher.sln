@@ -4,13 +4,19 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Cli
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Core", "EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj", "{482A7531-642C-460C-B682-EB1CE4F01F54}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.Aws", "EdFi.Tools.ApiPublisher.Configuration.Aws\EdFi.Tools.ApiPublisher.Configuration.Aws.csproj", "{609536D2-C903-45CC-BAF2-63039791593C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.ConfigurationStore.Aws", "EdFi.Tools.ApiPublisher.ConfigurationStore.Aws\EdFi.Tools.ApiPublisher.ConfigurationStore.Aws.csproj", "{609536D2-C903-45CC-BAF2-63039791593C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.SqlServer", "EdFi.Tools.ApiPublisher.Configuration.SqlServer\EdFi.Tools.ApiPublisher.Configuration.SqlServer.csproj", "{08CA1DB7-B451-4E83-91B6-2E22B4BE7B31}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer", "EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer\EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer.csproj", "{08CA1DB7-B451-4E83-91B6-2E22B4BE7B31}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Configuration.PostgreSql", "EdFi.Tools.ApiPublisher.Configuration.PostgreSql\EdFi.Tools.ApiPublisher.Configuration.PostgreSql.csproj", "{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql", "EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql\EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql.csproj", "{E0F3EDB1-3FB2-45B7-BDD5-D7DBDF0E4645}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Tests", "EdFi.Tools.ApiPublisher.Tests\EdFi.Tools.ApiPublisher.Tests.csproj", "{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Connections.Sqlite", "EdFi.Tools.ApiPublisher.Connections.Sqlite\EdFi.Tools.ApiPublisher.Connections.Sqlite.csproj", "{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.Connections.Api", "EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj", "{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext", "EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext\EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext.csproj", "{624C34FE-DA4D-41F0-B791-738D91422ACB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -42,5 +48,17 @@ Global
 		{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F4335A14-FF6A-484A-B7CB-7F759C1E4CB3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D33B235E-09E5-45E8-AAFE-DB3AFAFFF080}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CCCE6AC0-9F8C-423D-88C6-8B63C0A56299}.Release|Any CPU.Build.0 = Release|Any CPU
+		{624C34FE-DA4D-41F0-B791-738D91422ACB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{624C34FE-DA4D-41F0-B791-738D91422ACB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{624C34FE-DA4D-41F0-B791-738D91422ACB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{624C34FE-DA4D-41F0-B791-738D91422ACB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -77,5 +77,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public bool IgnoreSSLErrors { get; set; } = false;
 
         public string RemediationsScriptFile { get; set; }
+
+        public bool UseSourceDependencyMetadata { get; set; }
     }
 }

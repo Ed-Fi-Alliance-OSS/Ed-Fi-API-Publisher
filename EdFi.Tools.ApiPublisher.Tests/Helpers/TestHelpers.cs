@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
 using Bogus;
+using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Models;
@@ -224,7 +225,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             var hierarchy = LogManager.GetRepository(Assembly.GetExecutingAssembly());
             XmlConfigurator.Configure(hierarchy, ms);
 
-            var _logger = LogManager.GetLogger(typeof(KeyChangesTests));
+            var _logger = LogManager.GetLogger(typeof(TestHelpers));
             _logger.Debug("Test logging initialized.");
 
             return hierarchy;
