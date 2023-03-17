@@ -7,7 +7,7 @@
     "WriteTo:Console": {
       "Name": "Console",
       "Args": {
-        "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss,fff}] [{Level:u3}] [{ThreadId:00}] {SourceContext} - {Message} {Exception} {NewLine}",
+        "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss,fff}] [{Level:u4}] [{ThreadId:00}] {SourceContext} - {Message} {Exception} {NewLine}",
         "theme": "Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme::Code, Serilog.Sinks.Console"
       }
     },
@@ -15,7 +15,7 @@
       "Name": "File",
       "Args": {
         "path": "C:\\ProgramData\\Ed-Fi-API-Publisher\\Ed-Fi-API-PublisherSerilog.log",
-        "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss,fff}] [{Level:u3}] [{ThreadId:00}] {SourceContext} - {Message} {Exception} {NewLine}"
+        "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss,fff}] [{Level:u4}] [{ThreadId:00}] {SourceContext} - {Message} {Exception} {NewLine}"
       }
     }
     //,"WriteTo:AWSCloudWatch": {
