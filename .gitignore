@@ -50,6 +50,9 @@ packages/
 /*.pdb
 /*.XML
 
+/**/publish/
+/**/*.nupkg
+
 #nDevConfig
 .workspaceInitialized
 nDevConfig/
