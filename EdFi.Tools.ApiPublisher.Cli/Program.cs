@@ -1,4 +1,4 @@
-﻿using Autofac;
+using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
@@ -18,6 +18,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {
+    // meaningless change in order to test workflow
     internal class Program
     {
         private static readonly ILogger _logger = Log.ForContext(typeof(Program));
