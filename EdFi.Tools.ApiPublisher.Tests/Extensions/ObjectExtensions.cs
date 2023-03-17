@@ -1,21 +1,18 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Linq;
 using System.Reflection;
 using System.Web;
-using EdFi.Tools.ApiPublisher.Tests.Serialization;
-using log4net;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Extensions
 {
     public static class ObjectExtensions
     {
-        private static readonly ILog _logger = LogManager.GetLogger(typeof(ObjectExtensions));
+        private static readonly ILogger _logger = Log.ForContext(typeof(ObjectExtensions));
 
         public static IDictionary<string, object> ToDictionary(
             this object instance,

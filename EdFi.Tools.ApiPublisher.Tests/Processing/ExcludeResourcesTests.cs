@@ -30,12 +30,12 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
+using FluentAssertions;
 using Jering.Javascript.NodeJS;
-using log4net.Appender;
-using log4net.Core;
-using log4net.Repository;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
+using Serilog;
+using Serilog.Events;
 using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
@@ -50,7 +50,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
-            private ILoggerRepository _loggerRepository;
             private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
             
             protected override async Task ArrangeAsync()
@@ -121,9 +120,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     null,
                     options,
                     configurationStoreSection);
-
-                // Initialize logging
-                _loggerRepository = await TestHelpers.InitializeLogging();
 
                 // Create dependencies
                 var resourceDependencyMetadataProvider = new EdFiApiGraphMLDependencyMetadataProvider(targetEdFiApiClientProvider);
@@ -234,18 +230,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             [TestCase("/ed-fi/schools")]
             public void Should_reflect_the_processing_as_an_exclusion_with_its_dependents_in_the_log(string resourceCollectionUrl)
             {
-                // Inspect the log entries
-                var memoryAppender = _loggerRepository.GetAppenders().OfType<MemoryAppender>().Single();
-                var events = memoryAppender.GetEvents();
-                
-                var excludeInitializationEvents = events.Where(e 
-                    => e.RenderedMessage.Contains($"Excluding resource '{resourceCollectionUrl}' and its dependents...")).ToArray();
-
-                excludeInitializationEvents.ShouldSatisfyAllConditions(() =>
-                {
-                    excludeInitializationEvents.ShouldNotBeEmpty();
-                    excludeInitializationEvents.Select(x => x.Level).ShouldAllBe(x => x == Level.Debug);
-                });
+                LogEvents
+                   .Should()
+                   .Contain(e => e.MessageTemplate.Text.Contains($"Excluding resource '{resourceCollectionUrl}' and its dependents..."))
+                   .Which.Level
+                   .Should()
+                   .Be(LogEventLevel.Debug);
             }
 
             [TestCase("/ed-fi/sessions")]

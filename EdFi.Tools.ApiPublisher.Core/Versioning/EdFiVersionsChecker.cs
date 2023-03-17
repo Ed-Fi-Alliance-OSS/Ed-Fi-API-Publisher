@@ -3,7 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
-using log4net;
+using Serilog;
 using Newtonsoft.Json.Linq;
 using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
@@ -14,7 +14,7 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
     private readonly ISourceEdFiApiVersionMetadataProvider _sourceEdFiApiVersionMetadataProvider;
     private readonly ITargetEdFiApiVersionMetadataProvider _targetEdFiApiVersionMetadataProvider;
 
-    private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiVersionsChecker));
+    private readonly ILogger _logger = Log.ForContext(typeof(EdFiVersionsChecker));
     
     public EdFiVersionsChecker(
         ISourceEdFiApiVersionMetadataProvider sourceEdFiApiVersionMetadataProvider,
@@ -38,13 +38,13 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
 
         if (sourceVersionObject == null)
         {
-            _logger.Warn("Source connection does not support Ed-Fi version metadata. Version compatibility check for publishing operation cannot be performed.");
+            _logger.Warning("Source connection does not support Ed-Fi version metadata. Version compatibility check for publishing operation cannot be performed.");
             return;
         }
         
         if (targetVersionObject == null)
         {
-            _logger.Warn("Target connection does not support Ed-Fi version metadata. Version compatibility check for publishing operation cannot be performed.");
+            _logger.Warning("Target connection does not support Ed-Fi version metadata. Version compatibility check for publishing operation cannot be performed.");
             return;
         }
         
@@ -62,7 +62,7 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
         // Warn if API versions don't match
         if (!sourceApiVersion.Equals(targetApiVersion))
         {
-            _logger.Warn($"Source API version {sourceApiVersion} and target API version {targetApiVersion} do not match.");
+            _logger.Warning($"Source API version {sourceApiVersion} and target API version {targetApiVersion} do not match.");
         }
 
         // Try comparing Ed-Fi versions
@@ -73,13 +73,13 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
 
             if (sourceEdFiVersion != targetEdFiVersion)
             {
-                _logger.Warn($"Source API is using Ed-Fi {sourceEdFiVersion} but target API is using Ed-Fi {targetEdFiVersion}. Some resources may not be publishable.");
+                _logger.Warning($"Source API is using Ed-Fi {sourceEdFiVersion} but target API is using Ed-Fi {targetEdFiVersion}. Some resources may not be publishable.");
             }
         }
         else
         {
             throw new NotSupportedException("The Ed-Fi API Publisher is not compatible with Ed-Fi ODS API versions prior to v3.1.");
-            // Consider: _logger.Warn("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
+            // Consider: _logger.Warning("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
         }
 
         string GetEdFiStandardVersion(JObject jObject)

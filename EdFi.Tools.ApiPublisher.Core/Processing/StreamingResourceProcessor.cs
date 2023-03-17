@@ -8,8 +8,9 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Newtonsoft.Json.Linq;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing;
 
@@ -29,7 +30,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
 
     private readonly ISourceConnectionDetails _sourceConnectionDetails;
 
-    private readonly ILog _logger = LogManager.GetLogger(typeof(StreamingResourceProcessor));
+    private readonly ILogger _logger = Log.ForContext(typeof(StreamingResourceProcessor));
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StreamingResourceProcessor"/> class using the supplied TPL blocks and
@@ -54,7 +55,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
         ProcessingContext processingContext,
         CancellationToken cancellationToken)
     {
-        _logger.Info($"Initiating resource streaming.");
+        _logger.Information($"Initiating resource streaming.");
 
         var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
         
@@ -152,7 +153,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
 
             var streamingBlock = streamingResourceBlockByResourceKey[resourceKey];
 
-            if (_logger.IsDebugEnabled)
+            if (_logger.IsEnabled(LogEventLevel.Debug))
             {
                 _logger.Debug($"{message.ResourceUrl}: Sending message to initiate streaming.");
             }

@@ -5,17 +5,18 @@ using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
 
 public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessageHandler
 {
-    private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiStreamResourcePageMessageHandler));
+    private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiStreamResourcePageMessageHandler));
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
 
     public EdFiApiStreamResourcePageMessageHandler(
@@ -50,7 +51,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     return Enumerable.Empty<TProcessDataMessage>();
                 }
 
-                if (_logger.IsDebugEnabled)
+                if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug($"{message.ResourceUrl}: Retrieving page items {offset} to {offset + limit - 1}.");
                 }
@@ -67,7 +68,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         delay,
                         (result, ts, retryAttempt, ctx) =>
                         {
-                            _logger.Warn(
+                            _logger.Warning(
                                 $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                         })
                     .ExecuteAsync(
@@ -77,7 +78,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
                             if (attempts > 1)
                             {
-                                if (_logger.IsDebugEnabled)
+                                if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
                                     _logger.Debug(
                                         $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} from source attempt #{attempts}.");
@@ -123,9 +124,9 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 }
 
                 // Success
-                if (_logger.IsInfoEnabled && attempts > 1)
+                if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                 {
-                    _logger.Info(
+                    _logger.Information(
                         $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} attempt #{attempts} returned {apiResponse.StatusCode}.");
                 }
 
@@ -160,7 +161,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 // Perform limit/offset final page check (for need for possible continuation)
                 if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
                 {
-                    if (_logger.IsDebugEnabled)
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
                     }

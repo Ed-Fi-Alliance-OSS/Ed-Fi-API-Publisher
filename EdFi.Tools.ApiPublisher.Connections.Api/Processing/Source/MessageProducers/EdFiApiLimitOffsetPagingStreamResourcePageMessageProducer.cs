@@ -3,7 +3,7 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using log4net;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
 
@@ -11,7 +11,7 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
 {
     private readonly ISourceTotalCountProvider _sourceTotalCountProvider;
     
-    private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer));
+    private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer));
     
     public EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(ISourceTotalCountProvider sourceTotalCountProvider)
     {
@@ -27,12 +27,12 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
     {
         if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
         {
-            _logger.Info(
+            _logger.Information(
                 $"{message.ResourceUrl}: Retrieving total count of items in change versions {message.ChangeWindow.MinChangeVersion} to {message.ChangeWindow.MaxChangeVersion}.");
         }
         else
         {
-            _logger.Info($"{message.ResourceUrl}: Retrieving total count of items.");
+            _logger.Information($"{message.ResourceUrl}: Retrieving total count of items.");
         }
 
         // Get total count of items in source resource for change window (if applicable)
@@ -49,7 +49,7 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
             return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
         }
 
-        _logger.Info($"{message.ResourceUrl}: Total count = {totalCount}");
+        _logger.Information($"{message.ResourceUrl}: Total count = {totalCount}");
 
         long offset = 0;
         int limit = message.PageSize;

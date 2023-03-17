@@ -9,9 +9,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using EdFi.Tools.ApiPublisher.Tests.Processing;
 using FakeItEasy;
-using log4net;
-using log4net.Config;
-using log4net.Repository;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 {
@@ -176,59 +174,13 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             }
         }
 
-        public static async Task<ILoggerRepository> InitializeLogging()
+        public static void InitializeLogging()
         {
-            var ms = new MemoryStream();
-            var sw = new StreamWriter(ms);
-
-            // const string logLevel = "INFO";
-            
-            await sw.WriteLineAsync(
-                $@"
-<log4net>
-    <appender name=""ConsoleAppender"" type=""log4net.Appender.ConsoleAppender"">
-        <layout type=""log4net.Layout.PatternLayout"">
-            <conversionPattern value=""%date [%thread] %-5level %logger [%property{{NDC}}] - %message%newline"" />
-        </layout>
-        <filter type=""log4net.Filter.LevelRangeFilter"">
-            <levelMin value=""INFO"" />
-            <levelMax value=""FATAL"" />
-        </filter>
-    </appender>
-    <appender name=""MemoryAppender"" type=""log4net.Appender.MemoryAppender"">
-        <onlyFixPartialEventData value=""true"" />
-    </appender>
-    <appender name=""FileAppender"" type=""log4net.Appender.FileAppender"">
-        <file value=""C:\ProgramData\Ed-Fi-API-Publisher\Ed-Fi-API-Publisher-Tests.log"" />
-        <appendToFile value=""false"" />
-        <layout type=""log4net.Layout.PatternLayout"">
-            <conversionPattern value=""%date [%thread] %-5level %logger [%property{{NDC}}] - %message%newline"" />
-        </layout>
-    </appender>
-    <root>
-        <level value=""DEBUG"" />
-        <appender-ref ref=""ConsoleAppender"" />
-        <appender-ref ref=""MemoryAppender"" />
-        <appender-ref ref=""FileAppender"" />
-    </root>
-    <logger name=""EdFi.Tools.ApiPublisher.Core.Processing.Blocks.PostResource"">
-        <level value=""DEBUG"" />
-    </logger>
-    <logger name=""EdFi.Tools.ApiPublisher.Core.Processing.Blocks.StreamResourcePages"">
-        <level value=""DEBUG"" />
-    </logger>
-</log4net>");
-
-            await sw.FlushAsync();
-            ms.Position = 0;
-
-            var hierarchy = LogManager.GetRepository(Assembly.GetExecutingAssembly());
-            XmlConfigurator.Configure(hierarchy, ms);
-
-            var _logger = LogManager.GetLogger(typeof(TestHelpers));
-            _logger.Debug("Test logging initialized.");
-
-            return hierarchy;
+            Log.Logger = new LoggerConfiguration()
+                .WriteTo.TestCorrelator()
+                .MinimumLevel.Debug()
+                .Enrich.FromLogContext()
+                .CreateLogger();
         }
 
         public static IFakeHttpRequestHandler GetFakeBaselineSourceApiRequestHandler(

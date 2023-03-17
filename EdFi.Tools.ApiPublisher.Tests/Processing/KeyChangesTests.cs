@@ -38,7 +38,6 @@ using EdFi.Tools.ApiPublisher.Tests.Models;
 using EdFi.Tools.ApiPublisher.Tests.Resources;
 using FakeItEasy;
 using Jering.Javascript.NodeJS;
-using log4net.Repository;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using NUnit.Framework;
@@ -60,7 +59,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private List<GenericResource<FakeKey>> _suppliedTargetResources;
             private List<KeyChange<FakeKey>> _suppliedKeyChanges;
-            private ILoggerRepository _loggerRepository;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
 
             protected override async Task ArrangeAsync()
@@ -158,9 +156,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     options,
                     configurationStoreSection);
 
-                // Initialize logging
-                _loggerRepository = await TestHelpers.InitializeLogging();
-
                 // Create dependencies
                 var resourceDependencyMetadataProvider = new EdFiApiGraphMLDependencyMetadataProvider(targetEdFiApiClientProvider);
                 var resourceDependencyProvider = new ResourceDependencyProvider(resourceDependencyMetadataProvider);
@@ -227,7 +222,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             protected override async Task ActAsync()
             {
-                _loggerRepository = await TestHelpers.InitializeLogging();
                 await _changeProcessor.ProcessChangesAsync(_changeProcessorConfiguration, CancellationToken.None);
             }
 

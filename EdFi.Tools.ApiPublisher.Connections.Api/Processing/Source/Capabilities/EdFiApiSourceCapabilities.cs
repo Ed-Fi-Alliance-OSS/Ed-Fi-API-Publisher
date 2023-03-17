@@ -1,7 +1,7 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using log4net;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
 
@@ -9,7 +9,7 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
 {
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
 
-    private readonly ILog _logger = LogManager.GetLogger(typeof(EdFiApiSourceCapabilities));
+    private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceCapabilities));
     
     public EdFiApiSourceCapabilities(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
@@ -32,7 +32,7 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
             return true;
         }
 
-        _logger.Warn($"Request to Source API for the '{EdFiApiConstants.KeyChangesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Key change processing cannot be performed.");
+        _logger.Warning($"Request to Source API for the '{EdFiApiConstants.KeyChangesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Key change processing cannot be performed.");
 
         return false;
     }
@@ -54,7 +54,7 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
             return true;
         }
 
-        _logger.Warn($"Request to Source API for the '{EdFiApiConstants.DeletesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Delete processing cannot be performed.");
+        _logger.Warning($"Request to Source API for the '{EdFiApiConstants.DeletesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Delete processing cannot be performed.");
 
         return false;
     }

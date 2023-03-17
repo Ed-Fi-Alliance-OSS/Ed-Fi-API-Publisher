@@ -2,9 +2,10 @@ using System.Net;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
-using log4net;
+using Serilog;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 
@@ -13,7 +14,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
     private readonly Options _options;
         
-    private readonly ILog _logger = LogManager.GetLogger(typeof(ApiSourceResourceItemProvider));
+    private readonly ILogger _logger = Log.ForContext(typeof(ApiSourceResourceItemProvider));
         
     public ApiSourceResourceItemProvider(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider, Options options)
     {
@@ -40,7 +41,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                 getByIdDelay,
                 (result, ts, retryAttempt, ctx) =>
                 {
-                    _logger.Warn(
+                    _logger.Warning(
                         $"Retrying GET for resource item '{resourceItemUrl}' from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {_options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                 })
             .ExecuteAsync(
@@ -50,7 +51,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
 
                     if (getByIdAttempts > 1)
                     {
-                        if (_logger.IsDebugEnabled)
+                        if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
                             _logger.Debug(
                                 $"GET for missing dependency '{resourceItemUrl}' reference from source attempt #{getByIdAttempts}.");
@@ -87,7 +88,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                 TimeSpan.FromMilliseconds(_options.RetryStartingDelayMilliseconds),
                 _options.MaxRetryAttempts);
 
-            if (_logger.IsDebugEnabled)
+            if (_logger.IsEnabled(LogEventLevel.Debug))
             {
                 _logger.Debug(
                     $"{resourceUrl}: Attempting to POST missing '{referencedResourceName}' reference to the target.");
@@ -100,7 +101,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                     missingItemDelay,
                     (result, ts, retryAttempt, ctx) =>
                     {
-                        _logger.Warn(
+                        _logger.Warning(
                             $"{resourceUrl}: Retrying POST for missing '{referencedResourceName}' reference against target failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {_options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                     })
                 .ExecuteAsync(
@@ -110,7 +111,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
 
                         if (getByIdAttempts > 1)
                         {
-                            if (_logger.IsDebugEnabled)
+                            if (_logger.IsEnabled(LogEventLevel.Debug))
                             {
                                 _logger.Debug(
                                     $"{resourceUrl}: GET for missing '{referencedResourceName}' reference from source attempt #{getByIdAttempts}.");
@@ -138,14 +139,14 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
             }
             else
             {
-                _logger.Info(
+                _logger.Information(
                     $"{resourceUrl}: POST of missing '{referencedResourceName}' reference to the target returned status '{missingItemPostResponse.StatusCode}'.");
             }
             */
         }
         else
         {
-            _logger.Warn(
+            _logger.Warning(
                 $"GET request from source API for '{resourceItemUrl}' reference failed with status '{getByIdResponse.StatusCode}': {responseContent}");
 
             return (false, null);

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using log4net;
+using Serilog;
 
 // ReSharper disable InconsistentNaming
 
@@ -12,7 +12,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Dependencies
     {
         private readonly IGraphMLDependencyMetadataProvider _graphMLDependencyMetadataProvider;
 
-        private readonly ILog _logger = LogManager.GetLogger(typeof(ResourceDependencyProvider));
+        private readonly ILogger _logger = Log.ForContext(typeof(ResourceDependencyProvider));
 
         public ResourceDependencyProvider(IGraphMLDependencyMetadataProvider graphMlDependencyMetadataProvider)
         {

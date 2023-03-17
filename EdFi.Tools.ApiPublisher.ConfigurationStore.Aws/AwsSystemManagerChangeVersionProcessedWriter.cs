@@ -4,7 +4,7 @@ using Amazon.SimpleSystemsManagement;
 using Amazon.SimpleSystemsManagement.Model;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using log4net;
+using Serilog;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -13,7 +13,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
 {
     public class AwsSystemManagerChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
-        private readonly ILog _logger = LogManager.GetLogger(typeof(AwsSystemManagerChangeVersionProcessedWriter));
+        private readonly ILogger _logger = Log.ForContext(typeof(AwsSystemManagerChangeVersionProcessedWriter));
         
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
