@@ -125,7 +125,7 @@ jobs:
           &$out generate `
               -b ./ `
               -bl ./buildfilelist.txt `
-              -bc "./$packageName" `
+              -bc "./EdFi.Tools.ApiPublisher.Cli" `
               -pn "$packageName" `
               -pv $version `
               -nsb https://ed-fi.org `
