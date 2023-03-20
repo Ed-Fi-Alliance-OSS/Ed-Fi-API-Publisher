@@ -186,12 +186,10 @@ function RunTests {
     param (
         # File search filter
         [string]
-        $Filter,
-		[string]
-        $Category
+        $Filter	
     )
 
-    $testAssemblyPath = "$solutionRoot/$Filter/bin/$Configuration"
+    $testAssemblyPath = "$solutionRoot/$Filter/bin/$Configuration/"    
     $testAssemblies = Get-ChildItem -Path $testAssemblyPath -Filter "$Filter.dll" -Recurse
 
     if ($testAssemblies.Length -eq 0) {
@@ -201,7 +199,7 @@ function RunTests {
     $testAssemblies | ForEach-Object {
         Write-Host "Executing: dotnet test $($_)"
         Invoke-Execute { 
-            dotnet test --filter Category=$Category $_ `
+            dotnet test $_ `
             --logger "trx;LogFileName=$($_).trx" `
             --nologo `
             --no-build
@@ -210,7 +208,7 @@ function RunTests {
 }
 
 function UnitTests {
-    Invoke-Execute { RunTests -Filter $testProjectName -Category UnitTest}
+    Invoke-Execute { RunTests -Filter $testProjectName }
 }
 
 function Invoke-Build {
