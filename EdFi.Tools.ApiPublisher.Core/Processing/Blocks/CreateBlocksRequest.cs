@@ -19,7 +19,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
-            Func<string>? javaScriptModuleFactory)
+            Func<string> javaScriptModuleFactory)
         {
             // SourceApiClient = sourceApiClient;
             // TargetApiClient = targetApiClient;
@@ -34,6 +34,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         public Options Options { get; set; }
         public AuthorizationFailureHandling[] AuthorizationFailureHandling { get; set; }
         public ITargetBlock<ErrorItemMessage> ErrorHandlingBlock { get; set; }
-        public Func<string>? JavaScriptModuleFactory { get; }
+        public Func<string> JavaScriptModuleFactory { get; }
     }
 }

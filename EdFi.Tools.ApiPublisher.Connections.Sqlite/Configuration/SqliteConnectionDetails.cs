@@ -9,7 +9,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Configuration;
 
 public class SqliteConnectionDetails : SourceConnectionDetailsBase, ITargetConnectionDetails
 {
-    public string? File { get; set; }
+    public string File { get; set; }
     
     public override bool IsFullyDefined() => !string.IsNullOrEmpty(File);
 

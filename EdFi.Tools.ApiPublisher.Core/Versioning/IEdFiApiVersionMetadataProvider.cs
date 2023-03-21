@@ -10,5 +10,5 @@ namespace EdFi.Tools.ApiPublisher.Core.Versioning;
 
 public interface IEdFiApiVersionMetadataProvider
 {
-    Task<JObject?> GetVersionMetadata();
+    Task<JObject> GetVersionMetadata();
 }

@@ -21,7 +21,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public bool ShouldSkip { get; set; }
 
         // Source Ed-Fi ODS API processing context (resource-specific) 
-        public Action<object>? PostAuthorizationFailureRetry { get; set; }
+        public Action<object> PostAuthorizationFailureRetry { get; set; }
 
         // -------------------------------------------------
         // Source Ed-Fi ODS API processing context (shared)
@@ -34,8 +34,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // ----------------------------
         // Global processing context
         // ----------------------------
-        public CancellationTokenSource? CancellationSource { get; set; }
-        public SemaphoreSlim? ProcessingSemaphore { get; set; }
-        public ChangeWindow? ChangeWindow { get; set; }
+        public CancellationTokenSource CancellationSource { get; set; }
+        public SemaphoreSlim ProcessingSemaphore { get; set; }
+        public ChangeWindow ChangeWindow { get; set; }
     }
 }

@@ -50,7 +50,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 _logger.Debug($"{message.ResourceUrl}: Retrieving page items for page '{pageId}'.");
             }
 
-            string? json;
+            string json;
 
             try
             {
@@ -63,7 +63,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
 
                 await connection.OpenAsync();
 
-                json = (string?)await cmd.ExecuteScalarAsync(message.CancellationSource.Token).ConfigureAwait(false);
+                json = (string)await cmd.ExecuteScalarAsync(message.CancellationSource.Token).ConfigureAwait(false);
 
                 if (string.IsNullOrEmpty(json))
                 {

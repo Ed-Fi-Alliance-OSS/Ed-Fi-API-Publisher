@@ -16,12 +16,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.JavascriptHosting
     {
         class Result
         {
-            public string greeting { get; set; }
+            public string? greeting { get; set; }
         }
 
         class Person
         {
-            public string name { get; set; }
+            public string? name { get; set; }
             public int age { get; set; }
         }
         
@@ -112,7 +112,7 @@ module.exports = {
                 exportName: "sayHello",
                 args: new object?[] { new Person { name = "Bob", age = 42 }});
 
-            results.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
+            results?.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
             
             var results2 = await StaticNodeJSService.InvokeFromStringAsync<Result>(
                 helloPersonSource,
@@ -120,7 +120,7 @@ module.exports = {
                 exportName: "sayGoodbye",
                 args: new object?[] { new Person { name = "Bob", age = 42 }});
 
-            results2.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
+            results2?.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
         }
         
         [Test]
@@ -145,7 +145,7 @@ module.exports = {
                 exportName: "200",
                 args: new object?[] { new Person { name = "Bob", age = 42 }});
 
-            results.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
+            results?.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
             
             var results2 = await StaticNodeJSService.InvokeFromStringAsync<Result>(
                 helloPersonSource2,
@@ -153,7 +153,7 @@ module.exports = {
                 exportName: "500",
                 args: new object?[] { new Person { name = "Bob", age = 42 }});
 
-            results2.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
+            results2?.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
         }
 
         [Test]
@@ -178,7 +178,7 @@ module.exports = {
                 exportName: "/ed-fi/students/200",
                 args: new object?[] { new Person { name = "Bob", age = 42 }});
 
-            results.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
+            results?.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
             
             var results2 = await StaticNodeJSService.InvokeFromStringAsync<Result>(
                 helloPersonSource3,
@@ -186,7 +186,7 @@ module.exports = {
                 exportName: "/ed-fi/students/500",
                 args: new object?[] { new Person { name = "Bob", age = 42 }});
 
-            results2.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
+            results2?.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
         }
     }
 }

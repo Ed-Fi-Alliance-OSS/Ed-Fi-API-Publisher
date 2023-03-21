@@ -107,63 +107,63 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
 
                 // Fill in source configuration details
                 yield return new KeyValuePair<string, string>(
-                    $"Connections:{connectionRole.ToString()}:Url",
+                    $"Connections:{connectionRole}:Url",
                     namedApiConnectionDetails.Url);
 
                 yield return new KeyValuePair<string, string>(
-                    $"Connections:{connectionRole.ToString()}:Key",
+                    $"Connections:{connectionRole}:Key",
                     namedApiConnectionDetails.Key);
 
                 yield return new KeyValuePair<string, string>(
-                    $"Connections:{connectionRole.ToString()}:Secret",
+                    $"Connections:{connectionRole}:Secret",
                     namedApiConnectionDetails.Secret);
 
                 if (!string.IsNullOrEmpty(namedApiConnectionDetails.Scope))
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionRole.ToString()}:Scope",
+                        $"Connections:{connectionRole}:Scope",
                         namedApiConnectionDetails.Scope);
                 }
 
                 if (namedApiConnectionDetails.IgnoreIsolation.HasValue)
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionRole.ToString()}:Force",
+                        $"Connections:{connectionRole}:Force",
                         namedApiConnectionDetails.IgnoreIsolation.ToString());
                 }
 
                 if (namedApiConnectionDetails.LastChangeVersionProcessedByTargetName.Any())
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionRole.ToString()}:LastChangeVersionsProcessed",
+                        $"Connections:{connectionRole}:LastChangeVersionsProcessed",
                         namedApiConnectionDetails.LastChangeVersionsProcessed);
                 }
 
                 if (!string.IsNullOrEmpty(namedApiConnectionDetails.Include))
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionRole.ToString()}:Include",
+                        $"Connections:{connectionRole}:Include",
                         namedApiConnectionDetails.Include);
                 }
 
                 if (!string.IsNullOrEmpty(namedApiConnectionDetails.IncludeOnly))
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionRole.ToString()}:IncludeOnly",
+                        $"Connections:{connectionRole}:IncludeOnly",
                         namedApiConnectionDetails.IncludeOnly);
                 }
 
                 if (!string.IsNullOrEmpty(namedApiConnectionDetails.Exclude))
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionRole.ToString()}:Exclude",
+                        $"Connections:{connectionRole}:Exclude",
                         namedApiConnectionDetails.Exclude);
                 }
 
                 if (!string.IsNullOrEmpty(namedApiConnectionDetails.ExcludeOnly))
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionRole.ToString()}:ExcludeOnly",
+                        $"Connections:{connectionRole}:ExcludeOnly",
                         namedApiConnectionDetails.ExcludeOnly);
                 }
 
@@ -171,7 +171,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
                 if (namedApiConnectionDetails.TreatForbiddenPostAsWarning.HasValue && connectionRole == ConnectionRole.Target)
                 {
                     yield return new KeyValuePair<string, string>(
-                        $"Connections:{connectionRole.ToString()}:TreatForbiddenPostAsWarning",
+                        $"Connections:{connectionRole}:TreatForbiddenPostAsWarning",
                         namedApiConnectionDetails.TreatForbiddenPostAsWarning.ToString());
                 }
             }

@@ -52,8 +52,8 @@ public class SourceConnectionDetailsBase : NamedConnectionDetailsBase, ISourceCo
     public IDictionary<string, long> LastChangeVersionProcessedByTargetName { get; private set; } =
         new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
-    public string? Include { get; set; }
-    public string? IncludeOnly { get; set; }
-    public string? Exclude { get; set; }
-    public string? ExcludeOnly { get; set; }
+    public string Include { get; set; }
+    public string IncludeOnly { get; set; }
+    public string Exclude { get; set; }
+    public string ExcludeOnly { get; set; }
 }

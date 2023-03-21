@@ -358,9 +358,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
             return changeKey;
 
-            JObject? ParseToJObjectOrDefault(string json)
+            JObject ParseToJObjectOrDefault(string json)
             {
-                JObject? body = null;
+                JObject body = null;
 
                 try
                 {
@@ -403,8 +403,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                 yield return itemMessage;
             }
-            
-            GetItemForKeyChangeMessage? CreateMessage(JObject obj)
+
+            GetItemForKeyChangeMessage CreateMessage(JObject obj)
             {
                 // If there are no key values on the message, cancel key change processing since the source
                 // API isn't providing the information to publish key changes between ODS API instances

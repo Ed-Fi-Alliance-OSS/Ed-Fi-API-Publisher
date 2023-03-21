@@ -342,7 +342,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 yield return itemMessage;
             }
 
-            GetItemForDeletionMessage? CreateItemActionMessage(JObject obj)
+            GetItemForDeletionMessage CreateItemActionMessage(JObject obj)
             {
                 // If there are no key values on the message, cancel delete processing since the source
                 // API isn't providing the information to publish deletes between ODS API instances

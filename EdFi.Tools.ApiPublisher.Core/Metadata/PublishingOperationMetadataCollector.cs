@@ -13,27 +13,27 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata;
 public class PublishingOperationMetadataCollector : IPublishingOperationMetadataCollector
 {
     private long? _currentChangeVersion;
-    private JObject? _sourceVersionMetadata;
-    private JObject? _targetVersionMetadata;
+    private JObject _sourceVersionMetadata;
+    private JObject _targetVersionMetadata;
     private readonly ConcurrentDictionary<string, long> _resourceItemCountByPath = new(StringComparer.OrdinalIgnoreCase);
-    private ChangeWindow? _changeWindow;
+    private ChangeWindow _changeWindow;
 
     public void SetCurrentChangeVersion(long? changeVersion)
     {
         _currentChangeVersion = changeVersion;
     }
 
-    public void SetSourceVersionMetadata(JObject? versionMetadata)
+    public void SetSourceVersionMetadata(JObject versionMetadata)
     {
         _sourceVersionMetadata = versionMetadata;
     }
 
-    public void SetTargetVersionMetadata(JObject? versionMetadata)
+    public void SetTargetVersionMetadata(JObject versionMetadata)
     {
         _targetVersionMetadata = versionMetadata;
     }
 
-    public void SetChangeWindow(ChangeWindow? changeWindow)
+    public void SetChangeWindow(ChangeWindow changeWindow)
     {
         _changeWindow ??= changeWindow;
     }

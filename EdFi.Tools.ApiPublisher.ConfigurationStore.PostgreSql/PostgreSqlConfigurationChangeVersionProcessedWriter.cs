@@ -40,7 +40,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
                 
                 var currentParameter = new JObject();
 
-                if (configurationValues.TryGetValue("lastChangeVersionsProcessed", out string? changeVersionsJson))
+                if (configurationValues.TryGetValue("lastChangeVersionsProcessed", out string changeVersionsJson))
                 {
                     currentParameter = JObject.Parse(string.IsNullOrEmpty(changeVersionsJson) ? "{}" : changeVersionsJson);
                 }

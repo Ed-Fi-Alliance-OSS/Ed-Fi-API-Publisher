@@ -38,8 +38,8 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
 
         await Task.WhenAll(sourceVersionTask, targetVersionTask).ConfigureAwait(false);
 
-        var sourceVersionObject = sourceVersionTask.Result;
-        var targetVersionObject = targetVersionTask.Result;
+        var sourceVersionObject = sourceVersionTask?.Result;
+        var targetVersionObject = targetVersionTask?.Result;
 
         if (sourceVersionObject == null)
         {

@@ -33,7 +33,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 
     protected abstract string TableSuffix { get; }
 
-    private readonly ConcurrentDictionary<string, (string schema, string table, string? tableSuffix)> _tableTupleByResourceUrl 
+    private readonly ConcurrentDictionary<string, (string schema, string table, string tableSuffix)> _tableTupleByResourceUrl 
         = new(StringComparer.OrdinalIgnoreCase);
 
     public (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(

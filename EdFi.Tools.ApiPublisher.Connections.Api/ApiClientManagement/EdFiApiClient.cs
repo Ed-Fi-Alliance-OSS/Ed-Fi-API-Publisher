@@ -33,7 +33,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             ApiConnectionDetails apiConnectionDetails,
             int bearerTokenRefreshMinutes,
             bool ignoreSslErrors,
-            HttpClientHandler? httpClientHandler = null)
+            HttpClientHandler httpClientHandler = null)
         {
             ConnectionDetails = apiConnectionDetails ?? throw new ArgumentNullException(nameof(apiConnectionDetails));
             _name = name;
@@ -83,7 +83,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         public HttpClient HttpClient => _httpClient;
 
-        private async Task<string> GetBearerTokenAsync(HttpClient httpClient, string key, string secret, string? scope)
+        private async Task<string> GetBearerTokenAsync(HttpClient httpClient, string key, string secret, string scope)
         {
             if (_logger.IsEnabled(LogEventLevel.Debug))
                 _logger.Debug($"Getting bearer token for {_name} API client with key {key.Substring(0, 3)}...");
@@ -151,7 +151,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return Convert.ToBase64String(plainTextBytes);
         }
         
-        private void RefreshBearerToken(object? state)
+        private void RefreshBearerToken(object state)
         {
             try
             {

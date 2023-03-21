@@ -13,13 +13,13 @@ public interface ISourceConnectionDetails : INamedConnectionDetails
 
     IDictionary<string, long> LastChangeVersionProcessedByTargetName { get; }
         
-    public string? Include { get; set; }
+    public string Include { get; set; }
         
-    public string? IncludeOnly { get; set; }
+    public string IncludeOnly { get; set; }
         
-    public string? Exclude { get; set; }
+    public string Exclude { get; set; }
         
-    public string? ExcludeOnly { get; set; }
+    public string ExcludeOnly { get; set; }
         
     /// <summary>
     /// Gets or sets the explicitly provided value to use for the last change version processed.

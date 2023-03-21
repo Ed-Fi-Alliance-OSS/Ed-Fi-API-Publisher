@@ -10,10 +10,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 
 public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnectionDetails, ITargetConnectionDetails
 {
-    public string? Url { get; set; }
-    public string? Key { get; set; }
-    public string? Secret { get; set; }
-    public string? Scope { get; set; }
+    public string Url { get; set; }
+    public string Key { get; set; }
+    public string Secret { get; set; }
+    public string Scope { get; set; }
     public int? SchoolYear { get; set; }
 
     [Obsolete(

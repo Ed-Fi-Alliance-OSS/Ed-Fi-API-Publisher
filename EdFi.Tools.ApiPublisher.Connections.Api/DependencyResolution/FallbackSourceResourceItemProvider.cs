@@ -12,5 +12,5 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 /// </summary>
 public class FallbackSourceResourceItemProvider : ISourceResourceItemProvider
 {
-    public Task<(bool success, string? itemJson)> TryGetResourceItemAsync(string resourceItemUrl) => Task.FromResult((false, null as string));
+    public Task<(bool success, string itemJson)> TryGetResourceItemAsync(string resourceItemUrl) => Task.FromResult((false, null as string));
 }
