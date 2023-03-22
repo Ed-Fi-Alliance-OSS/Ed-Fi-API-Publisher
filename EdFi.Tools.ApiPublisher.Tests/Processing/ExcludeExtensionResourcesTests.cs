@@ -22,16 +22,12 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Finalization;
-using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
-using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
@@ -39,10 +35,7 @@ using FluentAssertions;
 using Jering.Javascript.NodeJS;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
-using Shouldly;
-using Serilog;
 using Serilog.Events;
-using Serilog.Sinks.TestCorrelator;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -57,8 +50,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
             private const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
-            
-            protected override async Task ArrangeAsync()
+
+            protected override Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
@@ -189,6 +182,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+                return Task.CompletedTask;
             }
 
             protected override async Task ActAsync()

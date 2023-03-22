@@ -27,13 +27,10 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
 using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Finalization;
-using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
-using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
@@ -174,7 +171,7 @@ public class RemediationIntegrationTests
          }}
          ";
         
-        protected override async Task ArrangeAsync()
+        protected override Task ArrangeAsync()
         {
             // -----------------------------------------------------------------
             //                      Source Requests
@@ -318,6 +315,7 @@ public class RemediationIntegrationTests
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+                return Task.CompletedTask;
         }
 
         protected override async Task ActAsync()
@@ -517,7 +515,7 @@ public class RemediationIntegrationTests
          }}
          ";
         
-        protected override async Task ArrangeAsync()
+        protected override Task ArrangeAsync()
         {
             // -----------------------------------------------------------------
             //                      Source Requests
@@ -660,6 +658,7 @@ public class RemediationIntegrationTests
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+               return Task.CompletedTask;
         }
 
         protected override async Task ActAsync()
@@ -710,7 +709,7 @@ public class RemediationIntegrationTests
 
         private bool WithExactEntriesForStaffUniqueIds(HttpRequestMessage msg, params string[] requiredStaffUniqueIds)
         {
-            string? content = msg?.Content?.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            string content = msg?.Content?.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
 
             if (content == null)
             {

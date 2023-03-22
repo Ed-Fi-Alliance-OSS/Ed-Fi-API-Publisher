@@ -73,12 +73,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
                 // Get additional named configuration values for source/target, if necessary
                 // if (!connection.IsFullyDefined())
                 // {
-                    _logger.Debug($"{connectionType.ToString()} connection details are not fully defined.");
+                    _logger.Debug($"{connectionType} connection details are not fully defined.");
 
                     if (string.IsNullOrEmpty(connection.Name))
                     {
                         throw new ArgumentException(
-                            $"{connectionType.ToString()} connection details were not available and no connection name was supplied.");
+                            $"{connectionType} connection details were not available and no connection name was supplied.");
                     }
 
                     var configurationValues = CreateNamedConnectionConfigurationValues(connection.Name, connectionType).ToArray();

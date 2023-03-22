@@ -55,7 +55,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             private const int SuppliedSchoolYear = MockRequests.SchoolYear;
 
-            protected override async Task ArrangeAsync()
+            protected override Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
@@ -185,6 +185,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+                return Task.CompletedTask;
             }
 
             protected override async Task ActAsync()
@@ -236,7 +237,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             private const int SuppliedSchoolYear = MockRequests.SchoolYear;
 
-            protected override async Task ArrangeAsync()
+            protected override Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
@@ -369,6 +370,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+                return Task.CompletedTask;
             }
 
             protected override async Task ActAsync()
@@ -422,7 +424,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             private const int SuppliedSchoolYear = MockRequests.SchoolYear;
 
-            protected override async Task ArrangeAsync()
+            protected override Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
@@ -556,6 +558,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+                return Task.CompletedTask;
             }
 
             protected override async Task ActAsync()

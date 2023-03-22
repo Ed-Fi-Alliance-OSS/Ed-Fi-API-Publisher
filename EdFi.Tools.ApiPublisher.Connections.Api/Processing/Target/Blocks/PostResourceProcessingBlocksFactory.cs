@@ -511,7 +511,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                         SourceDependencyItemUrl = dependencyItemUrl,
                                     });
                                 }
-                                catch (Exception ex)
+                                catch (Exception)
                                 {
                                     _logger.Warning($"{msg.ResourceUrl}: Unable to identify missing dependency resource URL from the supplied dependency item URL '{dependencyItemUrl}'.");
                                 }

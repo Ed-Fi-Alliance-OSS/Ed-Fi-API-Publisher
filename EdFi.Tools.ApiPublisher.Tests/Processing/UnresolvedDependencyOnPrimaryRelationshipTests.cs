@@ -73,7 +73,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             const string TestResourcePath = "/ed-fi/studentSchoolAssociations";
 
-            protected override async Task ArrangeAsync()
+            protected override Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
@@ -221,6 +221,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+                return Task.CompletedTask;
             }
 
             protected override async Task ActAsync()

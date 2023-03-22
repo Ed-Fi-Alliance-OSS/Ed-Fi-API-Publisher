@@ -62,7 +62,7 @@ public class RemediationTests
         const string resourcePath = StaffDisciplineIncidentAssociations;
         const bool shouldRetry = true;
 
-        protected override async Task ArrangeAsync()
+        protected override Task ArrangeAsync()
         {
             // -----------------------------------------------------------------
             //                      Source Requests
@@ -232,6 +232,7 @@ public class RemediationTests
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+            return Task.CompletedTask;
         }
 
         protected override async Task ActAsync()
