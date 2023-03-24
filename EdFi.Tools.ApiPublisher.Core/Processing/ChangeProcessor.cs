@@ -109,7 +109,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
 
                 // Establish the change window we're processing, if any.
-                ChangeWindow? changeWindow = null;
+                ChangeWindow changeWindow = null;
 
                 // Only named (managed) connections can use a Change Window for processing.
                 if (!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Name) 
@@ -569,14 +569,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
         }
 
-        private async Task<ChangeWindow?> EstablishChangeWindowAsync()
+        private async Task<ChangeWindow> EstablishChangeWindowAsync()
         {
             // Get the current change version of the source database (or snapshot database)
             long? currentSourceChangeVersion =
                 await _sourceCurrentChangeVersionProvider.GetCurrentChangeVersionAsync().ConfigureAwait(false);
 
             // Establish change window
-            ChangeWindow? changeWindow = null;
+            ChangeWindow changeWindow = null;
 
             if (currentSourceChangeVersion.HasValue)
             {
@@ -610,7 +610,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             AuthorizationFailureHandling[] authorizationFailureHandling,
             ChangeWindow changeWindow,
             ITargetBlock<ErrorItemMessage> errorPublishingBlock,
-            Func<string>? javascriptModuleFactory,
+            Func<string> javascriptModuleFactory,
             CancellationToken cancellationToken)
         {
             using var processingSemaphore = new SemaphoreSlim(
@@ -716,7 +716,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         }
 
         private async Task<TaskStatus[]> ProcessKeyChangesToCompletionAsync(
-            ChangeWindow? changeWindow,
+            ChangeWindow changeWindow,
             IDictionary<string, string[]> dependencyKeysByResourceKey,
             string[] resourcesWithUpdatableKeys,
             Options options,
@@ -744,7 +744,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 var keyChangeDependenciesByResourcePath = GetKeyChangeDependencies(dependencyKeysByResourceKey, resourcesWithUpdatableKeys);
 
                 // Probe for key changes support (using first by name sorted alphabetically for deterministic behavior)
-                string? probeResourceKey = keyChangeDependenciesByResourcePath.Keys.MinBy(x => x);
+                string probeResourceKey = keyChangeDependenciesByResourcePath.Keys.MinBy(x => x);
 
                 if (probeResourceKey == null)
                 {
@@ -1137,8 +1137,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         Options Options,
         AuthorizationFailureHandling[] AuthorizationFailureHandling,
         string[] ResourcesWithUpdatableKeys,
-        Func<string>? JavaScriptModuleFactory,
-        string? ResourceUrlPathSuffix)
+        Func<string> JavaScriptModuleFactory,
+        string ResourceUrlPathSuffix)
     {
         public override string ToString()
         {

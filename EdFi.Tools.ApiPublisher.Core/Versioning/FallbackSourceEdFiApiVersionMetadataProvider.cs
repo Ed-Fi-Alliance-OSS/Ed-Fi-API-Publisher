@@ -10,5 +10,5 @@ namespace EdFi.Tools.ApiPublisher.Core.Versioning;
 
 public class FallbackSourceEdFiApiVersionMetadataProvider : ISourceEdFiApiVersionMetadataProvider
 {
-    public Task<JObject?> GetVersionMetadata() => Task.FromResult(null as JObject);
+    public Task<JObject> GetVersionMetadata() => Task.FromResult(null as JObject);
 }

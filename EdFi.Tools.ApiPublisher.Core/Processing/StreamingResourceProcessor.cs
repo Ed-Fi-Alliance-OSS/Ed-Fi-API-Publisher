@@ -133,7 +133,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             // Record the dependencies for status reporting
             streamingPagesByResourceKey[resourceKey].DependencyPaths = dependencyPaths;
 
-            postAuthorizationRetryByResourceKey.TryGetValue(resourceKey, out Action<object>? postRetry);
+            postAuthorizationRetryByResourceKey.TryGetValue(resourceKey, out Action<object> postRetry);
 
             var skippedResources = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.ExcludeOnly);
 

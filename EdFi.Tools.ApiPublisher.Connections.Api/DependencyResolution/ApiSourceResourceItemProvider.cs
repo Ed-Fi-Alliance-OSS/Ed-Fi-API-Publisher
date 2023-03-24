@@ -27,7 +27,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
         _options = options;
     }
         
-    public async Task<(bool success, string? itemJson)> TryGetResourceItemAsync(string resourceItemUrl)
+    public async Task<(bool success, string itemJson)> TryGetResourceItemAsync(string resourceItemUrl)
     {
         var sourceEdFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
             

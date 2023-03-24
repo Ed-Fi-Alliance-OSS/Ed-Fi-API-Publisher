@@ -10,10 +10,10 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
     public class PostgreSqlConfigurationSource : IConfigurationSource
     {
         public string ConfigurationKeyPrefix { get; }
-        public string? ConnectionString { get; }
-        public string? EncryptionPassword { get; set; }
+        public string ConnectionString { get; }
+        public string EncryptionPassword { get; set; }
 
-        public PostgreSqlConfigurationSource(string configurationKeyPrefix, string? connectionString, string? encryptionPassword)
+        public PostgreSqlConfigurationSource(string configurationKeyPrefix, string connectionString, string encryptionPassword)
         {
             // Ensure the stored-prefix includes the key separator
             ConfigurationKeyPrefix = configurationKeyPrefix.TrimEnd('/') + '/';

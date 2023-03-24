@@ -53,7 +53,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
             private const string AnyResourcePattern = "/ed-fi/\\w+";
             
-            protected override async Task ArrangeAsync()
+            protected override Task ArrangeAsync()
             {
                 // -----------------------------------------------------------------
                 //                      Source Requests
@@ -180,8 +180,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     publishErrorsBlocksFactory,
                     stageInitiators,
                     new[] { finalizationActivities });
+                return Task.CompletedTask;
             }
-            
+
             protected override async Task ActAsync()
             {
                 await _changeProcessor.ProcessChangesAsync(_changeProcessorConfiguration, CancellationToken.None);

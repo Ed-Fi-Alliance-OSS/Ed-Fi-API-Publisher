@@ -29,7 +29,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
         var sourceApiClient = _sourceEdFiApiClientProvider.GetApiClient();
         var sourceApiConnectionDetails = sourceApiClient.ConnectionDetails;
 
-        string? snapshotIdentifier =
+        string snapshotIdentifier =
             await GetSourceSnapshotIdentifierAsync(sourceApiClient, sourceApiVersion).ConfigureAwait(false);
 
         // Confirm that a snapshot exists or --ignoreIsolation=true has been provided
@@ -45,7 +45,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
         sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Snapshot-Identifier", snapshotIdentifier);
     }
 
-    private async Task<string?> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)
+    private async Task<string> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)
     {
         string snapshotsRelativePath;
 

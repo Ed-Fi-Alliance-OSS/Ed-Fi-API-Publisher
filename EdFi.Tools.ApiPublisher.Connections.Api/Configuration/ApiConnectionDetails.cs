@@ -3,17 +3,15 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
-
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 
 public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnectionDetails, ITargetConnectionDetails
 {
-    public string? Url { get; set; }
-    public string? Key { get; set; }
-    public string? Secret { get; set; }
-    public string? Scope { get; set; }
+    public string Url { get; set; }
+    public string Key { get; set; }
+    public string Secret { get; set; }
+    public string Scope { get; set; }
     public int? SchoolYear { get; set; }
 
     [Obsolete(
@@ -61,7 +59,7 @@ public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnecti
 
     public bool? TreatForbiddenPostAsWarning { get; set; }
 
-    public bool IsFullyDefined()
+    public override bool IsFullyDefined()
     {
         return (Url != null && Key != null && Secret != null);
     }
@@ -83,8 +81,8 @@ public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnecti
             yield return "Secret";
         }
     }
-        
-    public bool NeedsResolution()
+
+    public override bool NeedsResolution()
     {
         return !IsFullyDefined() && !string.IsNullOrEmpty(Name);
     }

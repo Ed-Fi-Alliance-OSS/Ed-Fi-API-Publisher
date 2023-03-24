@@ -30,8 +30,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // --------------------------------
         public long? Offset { get; set; }
         public int? Limit { get; set; }
-        public string? PartitionFrom { get; set; }
-        public string? PartitionUntil { get; set; }
+        public string PartitionFrom { get; set; }
+        public string PartitionUntil { get; set; }
         public bool IsFinalPage { get; set; }
         
         // -------------------------------------------------
@@ -42,7 +42,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // ----------------------------
         // Global processing context
         // ----------------------------
-        public ChangeWindow? ChangeWindow { get; set; }
+        public ChangeWindow ChangeWindow { get; set; }
         public CancellationTokenSource CancellationSource { get; set; }
 
         // TODO: GKM - Need to eliminate use of JObject in signature of this factory method -- needs proper abstractions

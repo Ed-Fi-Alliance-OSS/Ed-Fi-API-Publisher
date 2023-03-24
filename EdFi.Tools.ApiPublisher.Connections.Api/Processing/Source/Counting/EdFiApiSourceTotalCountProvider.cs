@@ -30,7 +30,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
     }
     
-    public async Task<(bool, long)> TryGetTotalCountAsync(string resourceUrl, Options options, ChangeWindow? changeWindow, ITargetBlock<ErrorItemMessage> errorHandlingBlock, CancellationToken cancellationToken)
+    public async Task<(bool, long)> TryGetTotalCountAsync(string resourceUrl, Options options, ChangeWindow changeWindow, ITargetBlock<ErrorItemMessage> errorHandlingBlock, CancellationToken cancellationToken)
     {
         var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
         

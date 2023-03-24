@@ -98,7 +98,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             ConcurrentDictionary<string, bool> ignoredResourceByUrl,
             PostItemMessage postItemMessage,
             Options options,
-            Func<string>? javaScriptModuleFactory,
+            Func<string> javaScriptModuleFactory,
             EdFiApiClient targetEdFiApiClient,
             HashSet<(string resourceUrl, HttpStatusCode statusCode)> knownUnremediatedRequests,
             Dictionary<string, string> missingDependencyByResourcePath)
@@ -460,7 +460,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 }
             }
 
-            async Task<(bool success, MissingDependencyDetails?)> TryGetMissingDependencyDetailsAsync(HttpResponseMessage postItemResponse, PostItemMessage msg)
+            async Task<(bool success, MissingDependencyDetails)> TryGetMissingDependencyDetailsAsync(HttpResponseMessage postItemResponse, PostItemMessage msg)
             {
                 // If response is a Bad Request (which is the API's error response for missing Staff/Student/Parent), check for need to explicitly fetch dependencies
                 // NOTE: If support is expanded for other missing dependencies, the response code from the API (currently) will be a 409 Conflict status.
@@ -484,7 +484,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 string referenceName = referencedResourceName.ToCamelCase() + "Reference";
 
                                 // Get the missing reference's source URL
-                                string? dependencyItemUrl = msg.Item.SelectToken($"{referenceName}.link.href")?.Value<string>();
+                                string dependencyItemUrl = msg.Item.SelectToken($"{referenceName}.link.href")?.Value<string>();
 
                                 if (dependencyItemUrl == null)
                                 {
@@ -511,7 +511,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                         SourceDependencyItemUrl = dependencyItemUrl,
                                     });
                                 }
-                                catch (Exception ex)
+                                catch (Exception)
                                 {
                                     _logger.Warning($"{msg.ResourceUrl}: Unable to identify missing dependency resource URL from the supplied dependency item URL '{dependencyItemUrl}'.");
                                 }
@@ -711,7 +711,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
         public bool FoundRemediation { get; }
 
-        public dynamic? ModifiedRequestBody { get; }
+        public dynamic ModifiedRequestBody { get; }
     }
 
     public class FailureContext
@@ -731,9 +731,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
     public class RemediationPlan
     {
-        public dynamic? modifiedRequestBody { get; set; }
+        public dynamic modifiedRequestBody { get; set; }
 
-        public RemediationRequest[]? additionalRequests { get; set; }
+        public RemediationRequest[] additionalRequests { get; set; }
 
         public class RemediationRequest
         {

@@ -13,8 +13,8 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
     public class PostgreSqlConfigurationValuesProvider
     {
         public IDictionary<string, string> GetConfigurationValues(
-            string? connectionString, 
-            string? encryptionPassword, 
+            string connectionString, 
+            string encryptionPassword, 
             string configurationKeyPrefix)
         {
             using var conn = new NpgsqlConnection(connectionString);

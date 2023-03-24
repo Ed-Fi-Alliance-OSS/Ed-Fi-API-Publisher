@@ -28,7 +28,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             // ApiConnectionDetails targetApiConnectionDetails,
             // Func<EdFiApiClient> sourceApiClientFactory,
             // Func<EdFiApiClient> targetApiClientFactory,
-            Func<string>? javascriptModuleFactory,
+            Func<string> javascriptModuleFactory,
             Options options,
             IConfigurationSection configurationStoreSection)
             // ISourceEdFiApiClientProvider sourceEdFiApiClientProvider,
@@ -69,7 +69,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         //
         // public ApiConnectionDetails TargetApiConnectionDetails => _targetEdFiApiClientProvider.GetApiClient().ConnectionDetails;
         
-        public Func<string>? JavascriptModuleFactory { get; }
+        public Func<string> JavascriptModuleFactory { get; }
 
         // public EdFiApiClient SourceApiClient
         // {

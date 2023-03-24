@@ -27,7 +27,7 @@ public class ResourceItemCountCollector : ISourceTotalCountProvider
     public async Task<(bool, long)> TryGetTotalCountAsync(
         string resourceUrl,
         Options options,
-        ChangeWindow? changeWindow,
+        ChangeWindow changeWindow,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock,
         CancellationToken cancellationToken)
     {

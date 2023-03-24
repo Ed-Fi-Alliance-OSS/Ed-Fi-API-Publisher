@@ -22,7 +22,7 @@ public class TargetEdFiVersionMetadataCollector : ITargetEdFiApiVersionMetadataP
         _metadataCollector = metadataCollector;
     }
 
-    public async Task<JObject?> GetVersionMetadata()
+    public async Task<JObject> GetVersionMetadata()
     {
         var versionMetadata = await _targetEdFiApiVersionMetadataProvider.GetVersionMetadata();
         

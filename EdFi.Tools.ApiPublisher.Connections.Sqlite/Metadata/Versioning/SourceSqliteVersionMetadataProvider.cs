@@ -18,7 +18,7 @@ public class SqliteSourceEdFiApiVersionMetadataProvider : ISourceEdFiApiVersionM
         _createConnection = createConnection;
     }
 
-    public async Task<JObject?> GetVersionMetadata()
+    public async Task<JObject> GetVersionMetadata()
     {
         await using var connection = _createConnection();
 

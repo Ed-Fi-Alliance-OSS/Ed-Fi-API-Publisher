@@ -17,7 +17,7 @@ public interface ISourceTotalCountProvider
     Task<(bool, long)> TryGetTotalCountAsync(
         string resourceUrl,
         Options options,
-        ChangeWindow? changeWindow,
+        ChangeWindow changeWindow,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock,
         CancellationToken cancellationToken);
 }

@@ -10,5 +10,5 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 
 public interface ISourceResourceItemProvider
 {
-    Task<(bool success, string? itemJson)> TryGetResourceItemAsync(string resourceItemUrl);
+    Task<(bool success, string itemJson)> TryGetResourceItemAsync(string resourceItemUrl);
 }

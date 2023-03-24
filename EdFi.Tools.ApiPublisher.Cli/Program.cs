@@ -154,9 +154,9 @@ namespace EdFi.Tools.ApiPublisher.Cli
                         }
                     });
 
-                Func<string>? moduleFactory = (!string.IsNullOrWhiteSpace(options.RemediationsScriptFile))
+                Func<string> moduleFactory = (!string.IsNullOrWhiteSpace(options.RemediationsScriptFile))
                     ? () => File.ReadAllText(options.RemediationsScriptFile)
-                    : null as Func<string>;
+                    : null;
 
                 var configurationStoreSection = finalConfiguration.GetSection("configurationStore");
 

@@ -36,7 +36,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
         }
 
         #region Generated Equatable Members
-        public bool Equals(Version? other)
+        public bool Equals(Version other)
         {
             if (ReferenceEquals(null, other))
             {
@@ -51,7 +51,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
             return Major == other.Major && Minor == other.Minor && Revision == other.Revision;
         }
 
-        public override bool Equals(object? obj)
+        public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj))
             {

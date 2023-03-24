@@ -13,7 +13,7 @@ namespace Microsoft.Extensions.Configuration
         public static IConfigurationBuilder AddConfigurationStoreForSqlServer(
             this IConfigurationBuilder builder,
             string configurationKeyPath,
-            string? connectionString)
+            string connectionString)
         {
             builder.Sources.Add(new SqlServerConfigurationSource(configurationKeyPath, connectionString));
 
