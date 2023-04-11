@@ -9,10 +9,12 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Web;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json.Linq;
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.Versioning;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
@@ -65,11 +67,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
             };
 
+            AddProductInfoToRequestHeader(_httpClient);
+
             // Create a separate HttpClient for token refreshes to avoid possible "Snapshot-Identifier" header presence
             _tokenRefreshHttpClient = new HttpClient(httpClientHandler)
             {
                 BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
             };
+
+            AddProductInfoToRequestHeader(_tokenRefreshHttpClient);
 
             // Get initial bearer token for Ed-Fi ODS API
             RefreshBearerToken(true);
@@ -79,6 +85,29 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 false,
                 TimeSpan.FromMinutes(bearerTokenRefreshMinutes),
                 TimeSpan.FromMinutes(bearerTokenRefreshMinutes));
+
+            void AddProductInfoToRequestHeader(HttpClient httpClient)
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                var fileVersion = FileVersionInfo.GetVersionInfo(assembly.Location);
+                var version = fileVersion.FileVersion;
+                var productInfo = new ProductInfoHeaderValue("Ed-Fi-API-Publisher", version);
+
+                var targetFrameWorkAttributes = assembly.CustomAttributes.Where(attribute =>
+                                   attribute.AttributeType.Name == nameof(TargetFrameworkAttribute));
+                var customAttribute = targetFrameWorkAttributes.FirstOrDefault();
+                var customAttributeValue = customAttribute?.NamedArguments.FirstOrDefault();
+                if (customAttributeValue != null)
+                {
+                    var dotnetVersionValues = customAttributeValue?.TypedValue.Value.ToString().Split(' ');
+                    if (dotnetVersionValues.Length > 0)
+                    {
+                        var dotnetInfo = new ProductInfoHeaderValue(dotnetVersionValues[0], dotnetVersionValues[1]);
+                        httpClient.DefaultRequestHeaders.UserAgent.Add(dotnetInfo);
+                    }
+                }
+                httpClient.DefaultRequestHeaders.UserAgent.Add(productInfo);
+            }
         }
 
         public HttpClient HttpClient => _httpClient;
