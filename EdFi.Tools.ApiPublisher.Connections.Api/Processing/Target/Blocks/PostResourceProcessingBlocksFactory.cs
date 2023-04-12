@@ -264,8 +264,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                                     // Clean up the JObject for POSTing against the target
                                     // Remove attributes not usable between API instances
-                                    missingItem.Remove("id");
-                                    missingItem.Remove("_etag");
+                                    //These lines have commented out because the same logic is in the HandlePostItemMessage method
+                                    //missingItem.Remove("id");
+                                    //missingItem.Remove("_etag");
 
                                     // string dependencyResourceUrl = dependencyItemUrl.Substring(0, dependencyItemUrl.LastIndexOf('/'));
 
@@ -275,7 +276,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                         Item = missingItem,
                                         PostAuthorizationFailureRetry = postItemMessage.PostAuthorizationFailureRetry, // TODO: Is this appropriate to copy?
                                     };
-                                    
+
                                     await HandlePostItemMessage(
                                         ignoredResourceByUrl,
                                         postDependencyItemMessage!,
