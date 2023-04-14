@@ -86,10 +86,20 @@ public class EdFiApiAsSourceModule : Module
             .As<ISourceResourceItemProvider>()
             .SingleInstance();
 
+        // Register resource page message producer using a key set paging strategy
+        if (options.UseKeySetPaging)
+        {
+            builder.RegisterType<EdFiApiKeysetPagingStreamResourcePageMessageProducer>()
+                .As<IStreamResourcePageMessageProducer>()
+                .SingleInstance();
+        }
         // Register resource page message producer using a limit/offset paging strategy
-        builder.RegisterType<EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer>()
-            .As<IStreamResourcePageMessageProducer>()
-            .SingleInstance();
+        else
+        {
+            builder.RegisterType<EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer>()
+                .As<IStreamResourcePageMessageProducer>()
+                .SingleInstance();
+        }
         
         // Register handler to perform page-based requests against a Source API
         builder.RegisterType<EdFiApiStreamResourcePageMessageHandler>()

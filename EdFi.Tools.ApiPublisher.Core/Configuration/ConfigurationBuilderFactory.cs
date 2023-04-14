@@ -64,7 +64,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--ignoreSslErrors"] = "Options:IgnoreSslErrors",
                     ["--useSourceDependencyMetadata"] = "Options:UseSourceDependencyMetadata",
                     ["--whatIf"] = "Options:WhatIf",
-                    
+                    ["--useKeySetPaging"] = "Options:UseKeySetPaging",
+                    ["--keySetPagingPartitionsize"] = "Options:KeySetPagingPartitionsize",
+
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
                     ["--include"] = "Connections:Source:Include",
                     ["--includeOnly"] = "Connections:Source:IncludeOnly",

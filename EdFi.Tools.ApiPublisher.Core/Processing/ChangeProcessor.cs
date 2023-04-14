@@ -112,8 +112,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 ChangeWindow changeWindow = null;
 
                 // Only named (managed) connections can use a Change Window for processing.
-                if (!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Name) 
+                if ((!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Name) 
                     && !string.IsNullOrWhiteSpace(_targetConnectionDetails.Name))
+                    || options.UseKeySetPaging)
                 {
                     changeWindow = await EstablishChangeWindowAsync().ConfigureAwait(false);
                 }
@@ -240,7 +241,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
             else
             {
-                if (changeWindow?.MaxChangeVersion != null && changeWindow.MaxChangeVersion != default(long))
+                if (changeWindow?.MaxChangeVersion != null && changeWindow.MaxChangeVersion != default)
                 {
                     if (string.IsNullOrEmpty(sourceDetails.Name))
                     {

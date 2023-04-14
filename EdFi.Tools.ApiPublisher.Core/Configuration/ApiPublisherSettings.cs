@@ -84,5 +84,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public string RemediationsScriptFile { get; set; }
 
         public bool UseSourceDependencyMetadata { get; set; }
+
+        public bool UseKeySetPaging { get; set; }
+
+        public int keySetPagingPartitionsize { get; set; }
     }
 }
