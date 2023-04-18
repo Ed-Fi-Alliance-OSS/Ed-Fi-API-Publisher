@@ -257,7 +257,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.That.Matches(HasSuppliedStudentInPostRequestBody, "has supplied source item in POST request body")))
                     .MustHaveHappened();
             }
-
+            
             private bool HasSuppliedStudentInPostRequestBody(HttpRequestMessage req)
             {
                 string content = req.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
@@ -268,7 +268,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         o => o.ShouldNotBeNull(),
                         o => o.ShouldNotContainKey("id"),
                         o => o.ShouldNotContainKey("_etag"),
-                     
+                    
                         o => o.ShouldContainKey("firstName"),
                         o => o.ShouldContainKey("lastSurname"),
 
