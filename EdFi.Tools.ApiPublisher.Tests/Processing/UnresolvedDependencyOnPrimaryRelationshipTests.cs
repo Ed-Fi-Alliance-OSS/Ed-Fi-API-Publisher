@@ -173,9 +173,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     sourceEdFiVersionMetadataProvider,
                     targetEdFiVersionMetadataProvider);
                 var sourceCapabilities = A.Fake<ISourceCapabilities>();
-                var sourceResourceItemProvider = A.Fake<ISourceResourceItemProvider>();
                 var sourceConnectionDetails = A.Fake<ISourceConnectionDetails>();
                 var finalizationActivities = A.Fake<IFinalizationActivity>();
+                var apiResourceItemProvider = new ApiSourceResourceItemProvider(sourceEdFiApiClientProvider, options);
                 var sourceCurrentChangeVersionProvider = new EdFiApiSourceCurrentChangeVersionProvider(sourceEdFiApiClientProvider);
                 var sourceIsolationApplicator = new EdFiApiSourceIsolationApplicator(sourceEdFiApiClientProvider);
                 var dataSourceCapabilities = new EdFiApiSourceCapabilities(sourceEdFiApiClientProvider);
@@ -200,7 +200,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .Returns(
                         new UpsertPublishingStageInitiator(
                             streamingResourceProcessor,
-                            new PostResourceProcessingBlocksFactory(nodeJsService, targetEdFiApiClientProvider, sourceConnectionDetails, dataSourceCapabilities, sourceResourceItemProvider)));
+                            new PostResourceProcessingBlocksFactory(nodeJsService, targetEdFiApiClientProvider, sourceConnectionDetails, dataSourceCapabilities, apiResourceItemProvider)));
 
                 A.CallTo(() => stageInitiators[PublishingStage.Deletes])
                     .Returns(
@@ -240,7 +240,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             }
 
             [Test]
-            [Ignore("This test will be fixed as part the ticket APIPUB-10")]
             public void Should_attempt_to_get_the_item_for_the_unresolved_reference_from_the_source_API()
             {
                 A.CallTo(
@@ -251,12 +250,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             }
             
             [Test]
-            [Ignore("This test will be fixed as part the ticket APIPUB-10")]
             public void Should_attempt_to_post_the_item_obtained_from_the_source_API_for_the_unresolved_reference_to_the_target_API()
             {
                 A.CallTo(
                         () => _fakeTargetRequestHandler.Post(
-                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/students", // This resource path is derived from the authorizationFailureHandling
+                            $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}/ed-fi/somethings",  // This resource path is derived from the authorizationFailureHandling
                             A<HttpRequestMessage>.That.Matches(HasSuppliedStudentInPostRequestBody, "has supplied source item in POST request body")))
                     .MustHaveHappened();
             }

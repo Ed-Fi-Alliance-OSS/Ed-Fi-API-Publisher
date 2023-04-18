@@ -85,16 +85,9 @@ namespace EdFi.Tools.ApiPublisher.Tests
             string url,
             TData data)
         {
-            A.CallTo(
-                    () => fakeRequestHandler.Get(
-                        A<string>.Ignored,
-                        A<HttpRequestMessage>.That.Matches(
-                            msg => 
-                                (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)) 
-                                // && !HasTotalCountParameter(msg) 
-                                // && RequestMatchesParameters(msg, parameters)
-                                )))
-                .Returns(FakeResponse.OK(data));
+            A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{url}",
+                A<HttpRequestMessage>.Ignored))
+               .Returns(FakeResponse.OK(JsonConvert.SerializeObject(data)));
 
             return fakeRequestHandler;
         }

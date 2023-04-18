@@ -262,13 +262,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 {
                                     var missingItem = JObject.Parse(missingItemJson!);
 
-                                    // Clean up the JObject for POSTing against the target
-                                    // Remove attributes not usable between API instances
-                                    missingItem.Remove("id");
-                                    missingItem.Remove("_etag");
-
-                                    // string dependencyResourceUrl = dependencyItemUrl.Substring(0, dependencyItemUrl.LastIndexOf('/'));
-
                                     var postDependencyItemMessage = new PostItemMessage
                                     {
                                         ResourceUrl = missingDependencyDetails.DependencyResourceUrl,
