@@ -79,7 +79,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 //                      Source Requests
                 // -----------------------------------------------------------------
                 var sourceResourceFaker = TestHelpers.GetGenericResourceFaker();
-                
+            
                 var suppliedSourceResources = sourceResourceFaker.Generate(1);
 
                 // Prepare the fake source API endpoint
@@ -117,7 +117,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 _fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{TestResourcePath}", 
                     (HttpStatusCode.BadRequest, JObject.Parse("{\r\n  \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tSome reference could not be resolved.\\n\"\r\n}")), 
                     (HttpStatusCode.OK, null));
-                
+            
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
@@ -173,7 +173,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     sourceEdFiVersionMetadataProvider,
                     targetEdFiVersionMetadataProvider);
                 var sourceCapabilities = A.Fake<ISourceCapabilities>();
-                var sourceResourceItemProvider = A.Fake<ISourceResourceItemProvider>();
                 var sourceConnectionDetails = A.Fake<ISourceConnectionDetails>();
                 var finalizationActivities = A.Fake<IFinalizationActivity>();
                 var apiResourceItemProvider = new ApiSourceResourceItemProvider(sourceEdFiApiClientProvider, options);
@@ -248,7 +247,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
             }
-
+            
             [Test]
             public void Should_attempt_to_post_the_item_obtained_from_the_source_API_for_the_unresolved_reference_to_the_target_API()
             {
@@ -269,7 +268,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         o => o.ShouldNotBeNull(),
                         o => o.ShouldNotContainKey("id"),
                         o => o.ShouldNotContainKey("_etag"),
-
+                     
                         o => o.ShouldContainKey("firstName"),
                         o => o.ShouldContainKey("lastSurname"),
 
