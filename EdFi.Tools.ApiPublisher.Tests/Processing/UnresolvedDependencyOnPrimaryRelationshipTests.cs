@@ -60,13 +60,13 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             {
                 [JsonProperty("id")]
                 public string Id { get; set; }
-
+                
                 [JsonProperty("firstName")]
                 public string FirstName { get; set; }
-
+                
                 [JsonProperty("lastSurname")]
                 public string LastSurname { get; set; }
-
+                
                 [JsonProperty("_etag")]
                 public string ETag { get; set; }
             }
@@ -79,7 +79,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 //                      Source Requests
                 // -----------------------------------------------------------------
                 var sourceResourceFaker = TestHelpers.GetGenericResourceFaker();
-
+                
                 var suppliedSourceResources = sourceResourceFaker.Generate(1);
 
                 // Prepare the fake source API endpoint
@@ -101,7 +101,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     LastSurname = "Jones",
                     ETag = "etagvalue"
                 };
-
+                
                 _fakeSourceRequestHandler.GetResourceDataItem(
                     $"{EdFiApiConstants.DataManagementApiSegment}{_suppliedSourceLinkHref}",
                     suppliedMissingPerson);
@@ -110,19 +110,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 //                      Target Requests
                 // -----------------------------------------------------------------
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
-
+                
                 // Override dependencies to a single resource to minimize extraneous noise
                 _fakeTargetRequestHandler.Dependencies(TestResourcePath);
-
-                _fakeTargetRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}{TestResourcePath}",
-                    (HttpStatusCode.BadRequest, JObject.Parse("{\r\n  \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tSome reference could not be resolved.\\n\"\r\n}")),
+                
+                _fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{TestResourcePath}", 
+                    (HttpStatusCode.BadRequest, JObject.Parse("{\r\n  \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tSome reference could not be resolved.\\n\"\r\n}")), 
                     (HttpStatusCode.OK, null));
-
+                
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    include: new[] { TestResourcePath });
-
+                    include: new []{ TestResourcePath });
+            
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
                 EdFiApiClient SourceApiClientFactory() =>
@@ -149,7 +149,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // Only include descriptors if our test subject resource is a descriptor (trying to avoid any dependencies to keep things simpler)
                 var options = TestHelpers.GetOptions();
                 options.IncludeDescriptors = false;
-
+                
                 var configurationStoreSection = null as IConfigurationSection; //new ConfigurationSection()
 
                 _changeProcessorConfiguration = new ChangeProcessorConfiguration(
@@ -188,7 +188,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider))),
                     new StreamResourcePagesBlockFactory(new EdFiApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider)),
                     sourceApiConnectionDetails);
-
+                    
                 var stageInitiators = A.Fake<IIndex<PublishingStage, IPublishingStageInitiator>>();
 
                 A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
