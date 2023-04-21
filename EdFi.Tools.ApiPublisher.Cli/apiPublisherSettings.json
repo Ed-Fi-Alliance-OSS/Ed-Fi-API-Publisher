@@ -1,17 +1,17 @@
 {
   "options": {
-    "bearerTokenRefreshMinutes": 28,
+    "bearerTokenRefreshMinutes": 178,
     "retryStartingDelayMilliseconds": 100,
     "maxRetryAttempts": 10,
     "maxDegreeOfParallelismForResourceProcessing": 10,
     "maxDegreeOfParallelismForPostResourceItem": 20,
     "maxDegreeOfParallelismForStreamResourcePages": 5,
     "streamingPagesWaitDurationSeconds": 10,
-    "streamingPageSize": 10,
+    "streamingPageSize": 75,
     "includeDescriptors": false,
     "errorPublishingBatchSize": 25,
-    "useKeySetPaging": true,
-    "keySetPagingPartitionsize": 100
+    "useChangeVersionPaging": true,
+    "changeVersionPagingWindowSize": 25000
   },
     "authorizationFailureHandling": [
         {

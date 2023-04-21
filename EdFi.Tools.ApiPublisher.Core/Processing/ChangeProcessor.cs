@@ -114,7 +114,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // Only named (managed) connections can use a Change Window for processing.
                 if ((!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Name) 
                     && !string.IsNullOrWhiteSpace(_targetConnectionDetails.Name))
-                    || options.UseKeySetPaging)
+                    || options.UseChangeVersionPaging)
                 {
                     changeWindow = await EstablishChangeWindowAsync().ConfigureAwait(false);
                 }

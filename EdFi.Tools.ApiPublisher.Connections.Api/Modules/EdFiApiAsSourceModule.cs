@@ -87,9 +87,9 @@ public class EdFiApiAsSourceModule : Module
             .SingleInstance();
 
         // Register resource page message producer using a key set paging strategy
-        if (options.UseKeySetPaging)
+        if (options.UseChangeVersionPaging)
         {
-            builder.RegisterType<EdFiApiKeysetPagingStreamResourcePageMessageProducer>()
+            builder.RegisterType<EdFiApiChangeVersionPagingStreamResourcePageMessageProducer>()
                 .As<IStreamResourcePageMessageProducer>()
                 .SingleInstance();
         }

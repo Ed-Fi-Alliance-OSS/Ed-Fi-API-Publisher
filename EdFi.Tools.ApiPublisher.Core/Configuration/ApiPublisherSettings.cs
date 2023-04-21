@@ -85,8 +85,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
         public bool UseSourceDependencyMetadata { get; set; }
 
-        public bool UseKeySetPaging { get; set; }
+        public bool UseChangeVersionPaging { get; set; }
 
-        public int keySetPagingPartitionsize { get; set; }
+        public int ChangeVersionPagingWindowSize { get; set; }
     }
 }
