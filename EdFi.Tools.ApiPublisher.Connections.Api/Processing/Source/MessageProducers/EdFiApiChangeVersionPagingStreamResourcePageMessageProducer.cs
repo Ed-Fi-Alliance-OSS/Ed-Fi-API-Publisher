@@ -63,21 +63,20 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
         if (totalCount > 0)
         {
             // No of partitions =  item count / partition size
-            //var noOfPartitions = Math.Ceiling((decimal)totalCount / options.changeVersionPagingPartitionSize);
-            //int rangeSize = (int)Math.Ceiling(message.ChangeWindow.MaxChangeVersion / noOfPartitions);
+            // var noOfPartitions = Math.Ceiling((decimal)totalCount / options.changeVersionPagingPartitionSize);
+            // int rangeSize = (int)Math.Ceiling(message.ChangeWindow.MaxChangeVersion / noOfPartitions);
 
-            var noOfPartitions = Math.Ceiling((decimal)message.ChangeWindow.MaxChangeVersion 
+            var noOfPartitions = Math.Ceiling((decimal)(message.ChangeWindow.MaxChangeVersion - message.ChangeWindow.MinChangeVersion)
                             / options.ChangeVersionPagingWindowSize);
+
             int changeVersionWindow = 0;
             long changeVersionWindowStartValue = message.ChangeWindow.MinChangeVersion;
 
             while (changeVersionWindow < noOfPartitions)
             {
-                long changeVersionWindowEndValue = changeVersionWindowStartValue + options.ChangeVersionPagingWindowSize;
-                if (changeVersionWindowStartValue > 0)
-                {
-                    changeVersionWindowEndValue--;
-                }                
+                long changeVersionWindowEndValue = (changeVersionWindowStartValue > 0 ? 
+                    changeVersionWindowStartValue - 1 : changeVersionWindowStartValue) + options.ChangeVersionPagingWindowSize;
+               
                 if(changeVersionWindowEndValue > message.ChangeWindow.MaxChangeVersion)
                 {
                     changeVersionWindowEndValue = message.ChangeWindow.MaxChangeVersion;
@@ -96,9 +95,6 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                     changeWindow,
                     errorHandlingBlock,
                     cancellationToken);
-
-                _logger.Information($"Resource level change window: min-{changeWindow.MinChangeVersion}, " +
-                    $"max-{changeWindow.MaxChangeVersion} totalcount-{totalCountOnWindow}");
 
                 if (!totalCountOnWindowSuccess)
                 {

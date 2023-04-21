@@ -1,6 +1,6 @@
 {
   "options": {
-    "bearerTokenRefreshMinutes": 178,
+    "bearerTokenRefreshMinutes": 28,
     "retryStartingDelayMilliseconds": 100,
     "maxRetryAttempts": 10,
     "maxDegreeOfParallelismForResourceProcessing": 10,
@@ -10,7 +10,7 @@
     "streamingPageSize": 75,
     "includeDescriptors": false,
     "errorPublishingBatchSize": 25,
-    "useChangeVersionPaging": true,
+    "useChangeVersionPaging": false,
     "changeVersionPagingWindowSize": 25000
   },
     "authorizationFailureHandling": [
