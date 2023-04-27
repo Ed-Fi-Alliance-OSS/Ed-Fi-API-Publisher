@@ -86,7 +86,7 @@ public class EdFiApiAsSourceModule : Module
             .As<ISourceResourceItemProvider>()
             .SingleInstance();
 
-        // Register resource page message producer using a key set paging strategy
+        // Register resource page message producer using a ChangeVersion paging strategy
         if (options.UseChangeVersionPaging)
         {
             builder.RegisterType<EdFiApiChangeVersionPagingStreamResourcePageMessageProducer>()
