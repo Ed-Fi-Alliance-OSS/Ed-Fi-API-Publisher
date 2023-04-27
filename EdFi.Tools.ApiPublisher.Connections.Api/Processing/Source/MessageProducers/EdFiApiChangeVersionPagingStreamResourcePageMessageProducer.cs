@@ -62,10 +62,6 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
         
         if (totalCount > 0)
         {
-            // No of partitions =  item count / partition size
-            // var noOfPartitions = Math.Ceiling((decimal)totalCount / options.changeVersionPagingPartitionSize);
-            // int rangeSize = (int)Math.Ceiling(message.ChangeWindow.MaxChangeVersion / noOfPartitions);
-
             var noOfPartitions = Math.Ceiling((decimal)(message.ChangeWindow.MaxChangeVersion - message.ChangeWindow.MinChangeVersion)
                             / options.ChangeVersionPagingWindowSize);
 
@@ -74,10 +70,10 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
 
             while (changeVersionWindow < noOfPartitions)
             {
-                long changeVersionWindowEndValue = (changeVersionWindowStartValue > 0 ? 
+                long changeVersionWindowEndValue = (changeVersionWindowStartValue > 0 ?
                     changeVersionWindowStartValue - 1 : changeVersionWindowStartValue) + options.ChangeVersionPagingWindowSize;
                
-                if(changeVersionWindowEndValue > message.ChangeWindow.MaxChangeVersion)
+                if (changeVersionWindowEndValue > message.ChangeWindow.MaxChangeVersion)
                 {
                     changeVersionWindowEndValue = message.ChangeWindow.MaxChangeVersion;
                 }
