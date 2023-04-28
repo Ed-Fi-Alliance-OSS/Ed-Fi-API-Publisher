@@ -1,17 +1,18 @@
 {
-    "options": 
-    {
-        "bearerTokenRefreshMinutes": 28,
-        "retryStartingDelayMilliseconds": 100,
-        "maxRetryAttempts": 10,
-        "maxDegreeOfParallelismForResourceProcessing": 10,
-        "maxDegreeOfParallelismForPostResourceItem": 20,
-        "maxDegreeOfParallelismForStreamResourcePages": 5,
-        "streamingPagesWaitDurationSeconds": 10,
-        "streamingPageSize": 75,
-        "includeDescriptors": false,
-        "errorPublishingBatchSize": 25
-    },
+  "options": {
+    "bearerTokenRefreshMinutes": 28,
+    "retryStartingDelayMilliseconds": 100,
+    "maxRetryAttempts": 10,
+    "maxDegreeOfParallelismForResourceProcessing": 10,
+    "maxDegreeOfParallelismForPostResourceItem": 20,
+    "maxDegreeOfParallelismForStreamResourcePages": 5,
+    "streamingPagesWaitDurationSeconds": 10,
+    "streamingPageSize": 75,
+    "includeDescriptors": false,
+    "errorPublishingBatchSize": 25,
+    "useChangeVersionPaging": false,
+    "changeVersionPagingWindowSize": 25000
+  },
     "authorizationFailureHandling": [
         {
             "path": "/ed-fi/students",

@@ -248,6 +248,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.RemediationsScriptFile)} must be a local file path to an existing JavaScript module.");
             }
 
+            if (options.UseChangeVersionPaging && options.ChangeVersionPagingWindowSize < 1)
+            {
+                validationErrors.Add($"{nameof(options.ChangeVersionPagingWindowSize)} must be greater than 0.");
+            }
+
             if (validationErrors.Any())
             {
                 throw new Exception($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");
