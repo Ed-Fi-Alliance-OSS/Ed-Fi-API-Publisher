@@ -29,8 +29,8 @@ To demonstrate how the API Publisher works, this exercise copies all the data fr
 Before using the API Publisher on a target ODS, you must create and configure an API client with the appropriate permissions for publishing.
 
 Create and assign a claim set for the API Publisher by running the following database scripts:
-  * [Create-API-Publisher-Writer-Security-Metadata.sql](QuickStart/SqlServer/Create-API-Publisher-Writer-Security-Metadata.sql)
-  * [Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql](QuickStart/SqlServer/Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql)
+  * [Create-API-Publisher-Writer-Security-Metadata.sql](eng/Create-API-Publisher-Writer-Security-Metadata.sql)
+  * [Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql](eng/Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql)
 
 ### Build the API Publisher
 
@@ -97,15 +97,15 @@ Changes to primary keys (on the API resources that support it) in source API wil
 
 An additional limitation of the Ed-Fi API Publisher is the current lack of support for API Profiles (for defining resource/property level data policies for API clients). Create an issue to request Profiles support if this of interest to you.
 
-More technical details on some of these issues can be found [here](Documentation/Known-Issues-Details.md).
+More technical details on some of these issues can be found [here](docs/Known-Issues-Details.md).
 
 ## Next Steps
 
 When you're ready to look further, review these other topics:
 
-* [API Connection Management](Documentation/API-Connection-Management.md)
-* [API Publisher Configuration](Documentation/API-Publisher-Configuration.md)
-* [Considerations for API Hosts](Documentation/Considerations-for-API-Hosts.md)
+* [API Connection Management](docs/API-Connection-Management.md)
+* [API Publisher Configuration](docs/API-Publisher-Configuration.md)
+* [Considerations for API Hosts](docs/Considerations-for-API-Hosts.md)
 
 ## Legal Information
 
