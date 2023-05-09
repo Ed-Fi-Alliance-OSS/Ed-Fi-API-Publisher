@@ -75,7 +75,7 @@ param(
 
 $Env:MSBUILDDISABLENODEREUSE = "1"
 
-$solutionRoot = "$PSScriptRoot"
+$solutionRoot = "$PSScriptRoot/src"
 $maintainers = "Ed-Fi Alliance, LLC and contributors"
 Import-Module -Name ("$PSScriptRoot/eng/build-helpers.psm1") -Force
 $cliProject = "EdFi.Tools.ApiPublisher.Cli"
