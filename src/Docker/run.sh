@@ -12,6 +12,4 @@ envsubst < /app/logging.template.json > /app/logging.json
 envsubst < /app/configurationStoreSettings.template.json > /app/configurationStoreSettings.json
 envsubst < /app/plainTextNamedConnections.template.json > /app/plainTextNamedConnections.json
 
-# dotnet EdFiApiPublisher.dll --sourceUrl=https://api.ed-fi.org/v5.2/api/ --sourceKey=RvcohKz9zHI4 --sourceSecret=E1iEFusaNf81xzCxwHfbolkC --targetUrl=http://localhost:54746/ --targetKey=rfiT5McXOVR9hFvtbEKx3 --targetSecret=1yIRA0kvT6ENxtB9OGbcf --ignoreIsolation=true --maxDegreeOfParallelismForPostResourceItem=5 --maxDegreeOfParallelismForStreamResourcePages=3 --includeDescriptors=true --exclude=surveys
-
 tail -f /dev/null

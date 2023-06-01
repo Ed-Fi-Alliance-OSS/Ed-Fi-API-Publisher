@@ -14,7 +14,7 @@
     "WriteTo:File": {
       "Name": "File",
       "Args": {
-        "path": "../tmp/logs/Ed-Fi-API-PublisherSerilog.log",
+        "path": "$WRITE_TO_FILE_PATH",
         "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss,fff}] [{Level:u4}] [{ThreadId:00}] {SourceContext} - {Message} {Exception} {NewLine}"
       }
     }

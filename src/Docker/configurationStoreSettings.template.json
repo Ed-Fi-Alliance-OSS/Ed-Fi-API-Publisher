@@ -1,16 +1,16 @@
 {
   "configurationStore": {
-    "provider": "plainText",
+    "provider": "$PROVIDER",
     "sqlServer": {
-      "connectionString": "Server=(local);Database=EdFi_API_Publisher_Configuration;Trusted_Connection=True"
+      "connectionString": "Server=$SQLSERVER_SERVER;Database=$SQLSERVER_DATABASE;Trusted_Connection=True"
     },
     "postgreSql": {
-      "connectionString": "Host=localhost;Database=edfi_api_publisher_configuration",
+      "connectionString": "Host=$POSTGRESQL_HOST;Database=$POSTGRESQL_DATABASE",
       "encryptionPassword": ""
     },
     "awsParameterStore": {
-      "Profile": "default",
-      "Region": "us-east-1"
+      "Profile": "$AWS_PROFILE",
+      "Region": "$AWS_REGION"
     },
     "plainText": { }
   }
