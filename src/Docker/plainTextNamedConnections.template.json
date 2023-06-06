@@ -1,0 +1,16 @@
+{
+  "connections": [
+    {
+      "name": "$TARGET_NAME",
+      "url": "$TARGET_URL",
+      "key": "$TARGET_KEY",
+      "secret": "$TARGET_SECRET"
+    },
+    {
+      "name": "$SOURCE_NAME",
+      "url": "$SOURCE_URL",
+      "key": "$SOURCE_KEY",
+      "secret": "$SOURCE_SECRET"
+    }
+  ]
+}

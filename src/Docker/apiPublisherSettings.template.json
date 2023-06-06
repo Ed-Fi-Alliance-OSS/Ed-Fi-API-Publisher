@@ -1,0 +1,43 @@
+{
+  "options": {
+    "bearerTokenRefreshMinutes": $BEARER_TOKEN_REFRESH_MINUTES,
+    "retryStartingDelayMilliseconds": $RETRY_STARTING_DELAY_MILLISECONDS,
+    "maxRetryAttempts": $MAX_RETRY_ATTEMPTS,
+    "maxDegreeOfParallelismForResourceProcessing": $MAX_DEGREE_OF_PARALLELISM_FOR_RESOURCE_PROCESSING,
+    "maxDegreeOfParallelismForPostResourceItem": $MAX_DEGREE_OF_PARALLELISM_FOR_POST_RESOURCE_ITEM,
+    "maxDegreeOfParallelismForStreamResourcePages": $MAX_DEGREE_OF_PARALLELISM_FOR_STREAM_RESOURCE_PAGES,
+    "streamingPagesWaitDurationSeconds": $STREAMING_PAGES_WAIT_DURATION_SECONDS,
+    "streamingPageSize": $STREAMING_PAGE_SIZE,
+    "includeDescriptors": $INCLUDE_DESCRIPTORS,
+    "errorPublishingBatchSize": $ERROR_PUBLISHING_BATCH_SIZE,
+    "useChangeVersionPaging": $USE_CHANGE_VERSION_PAGING,
+    "changeVersionPagingWindowSize": $CHANGE_VERSION_PAGING_WINDOW_SIZE
+  },
+    "authorizationFailureHandling": [
+        {
+            "path": "/ed-fi/students",
+            "updatePrerequisitePaths": ["/ed-fi/studentSchoolAssociations"]
+        },
+        {
+            "path": "/ed-fi/staffs",
+            "updatePrerequisitePaths": [
+                "/ed-fi/staffEducationOrganizationEmploymentAssociations",
+                "/ed-fi/staffEducationOrganizationAssignmentAssociations"
+            ]
+        },
+        {
+            "path": "/ed-fi/parents",
+            "updatePrerequisitePaths": ["/ed-fi/studentParentAssociations"]
+        }
+    ],
+    "resourcesWithUpdatableKeys": [
+        "/ed-fi/classPeriods",
+        "/ed-fi/grades",
+        "/ed-fi/gradebookEntries",
+        "/ed-fi/locations",
+        "/ed-fi/sections",
+        "/ed-fi/sessions",
+        "/ed-fi/studentSchoolAssociations",
+        "/ed-fi/studentSectionAssociations"
+    ]
+}
