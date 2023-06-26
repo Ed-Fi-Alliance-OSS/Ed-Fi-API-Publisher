@@ -1,10 +1,7 @@
 # Ed-Fi API Publisher
 
-Made possible through funding provided by the Michael & Susan Dell Foundation and the efforts of:<br/>
-![](images/brought-to-you-by.png)
-
 ## Introduction
-The Ed-Fi API Publisher is a utility that can be used to move all data (or just changes) from one Ed-Fi ODS API instance to another instance of the _same_ version of Ed-Fi. It operates as a standard API client against both API endpoints (source and target) and thus it does not require any special network configuration, direct ODS database access or a particular database engine. From a data security/privacy perspective, it is also subject to all authorization performed by the Ed-Fi ODS API endpoints with which it communicates.
+The Ed-Fi API Publisher is a utility that can be used to move data and changes from one Ed-Fi ODS API instance to another instance of the _same_ version of Ed-Fi. It operates as a standard API client against both API endpoints (source and target) and thus it does not require any special network configuration, direct ODS database access or a particular database engine. From a data security/privacy perspective, it is also subject to all authorization performed by the Ed-Fi ODS API endpoints with which it communicates.
 
 Operationally, it can be used in a "Pull" model where it is deployed alongside a target (central) API and gathers data from multiple source APIs.
 <br/>
@@ -70,15 +67,13 @@ The following table shows the command-line arguments that will be used for publi
 | `--includeDescriptors`                           | `=` | `true`                            |
 | `--exclude`                                      | `=` | `surveys`                         |
 
-Run the Ed-Fi API Publisher from the folder containing all the binaries by executing the following command (be sure to substitute your own sandbox API client's key/secret):
+Run the Ed-Fi API Publisher from the folder containing all the binaries by executing the following command, substituting your own API client's key and secrets.  (Below development keys as shown in other Ed-Fi examples):
 ```
 .\EdFiApiPublisher.exe --sourceUrl=https://api.ed-fi.org/v5.2/api/ --sourceKey=RvcohKz9zHI4 --sourceSecret=E1iEFusaNf81xzCxwHfbolkC --targetUrl=http://localhost:54746/ --targetKey=minimal_sandbox_API_key --targetSecret=minimal_sandbox_API_secret --ignoreIsolation=true --maxDegreeOfParallelismForPostResourceItem=5 --maxDegreeOfParallelismForStreamResourcePages=3 --includeDescriptors=true --exclude=surveys
 ```
 > NOTE: The `--exclude` flag is used to prevent trying to move any survey data due to an issue with the security metadata (described in [ODS-4974](https://tracker.ed-fi.org/browse/ODS-4974)) in the Ed-Fi ODS API v5.2 release. If you remove this argument, the publishing operation will fail due to unsatisfied dependencies in the data.
 
 ## Known Limitations / Issues
-
-> NOTE: There are branches available for the Ed-Fi ODS API v5.1 and v5.2 that resolve all the issues described below. Additionally, an interim release of v5.3 with these fixes is planned. Contact Geoffrey McElhanon (geoffrey@mcelhanon.com) for more details.
 
 Currently the Ed-Fi ODS API has the following known issues related to Change Queries and the Ed-Fi API Publisher:
 
@@ -89,13 +84,13 @@ Currently the Ed-Fi ODS API has the following known issues related to Change Que
 
 (Feedback on the need for resolution to the Ed-Fi ODS API issues listed above should be provided to the Ed-Fi Alliance through [Ed-Fi Tracker](https://tracker.ed-fi.org/).)
 
-The Ed-Fi ODS API only exposes the "Id" of the resources that are deleted, however since the "Id" is not intended to be a global, portable identifier for the resource (Ed-Fi uses domain key values for that identity), and thus the _current implementation_ of the deletes resource is of limited value for API Publishing.
+The Ed-Fi ODS/API only exposes the "Id" of the resources that are deleted, however since the "Id" is not intended to be a global, portable identifier for the resource (Ed-Fi uses domain key values for that identity), and thus the _current implementation_ of the deletes resource is of limited value for API Publishing.
 
 Even with delete support added by exposing the primary key values, tracking and publishing deletions of Descriptors will still not be possible due to internal implementation details within the Ed-Fi ODS API through (at least) v5.3.
 
 Changes to primary keys (on the API resources that support it) in source API will currently result in stale copies of the "old" version of the resources (and all impacted dependencies) remaining in the target API. 
 
-An additional limitation of the Ed-Fi API Publisher is the current lack of support for API Profiles (for defining resource/property level data policies for API clients). Create an issue to request Profiles support if this of interest to you.
+An additional limitation of the Ed-Fi API Publisher is the current lack of support for API Profiles (for defining resource/property level data policies for API clients). Create a support case to request Profiles support if this of interest to you.
 
 More technical details on some of these issues can be found [here](docs/Known-Issues-Details.md).
 
@@ -107,9 +102,13 @@ When you're ready to look further, review these other topics:
 * [API Publisher Configuration](docs/API-Publisher-Configuration.md)
 * [Considerations for API Hosts](docs/Considerations-for-API-Hosts.md)
 
+## Support
+
+For support with the API Publisher, please use [Ed-Fi Support](https://support.ed-fi.org/) to open a support case and/or feature request.
+
 ## Legal Information
 
-Copyright (c) 2021 Ed-Fi Alliance, LLC and contributors.
+Copyright (c) 2023 Ed-Fi Alliance, LLC and contributors.
 
 Licensed under the [Apache License, Version 2.0](LICENSE) (the "License").
 
