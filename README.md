@@ -82,7 +82,7 @@ Currently the Ed-Fi ODS API has the following known issues related to Change Que
 * [Change Queries does not capture deletes on derived resources](https://tracker.ed-fi.org/browse/ODS-4087)
 * [Change Queries does not support primary key changes](https://tracker.ed-fi.org/browse/ODS-5005)
 
-(Feedback on the need for resolution to the Ed-Fi ODS API issues listed above should be provided to the Ed-Fi Alliance through [Ed-Fi Tracker](https://tracker.ed-fi.org/).)
+(Feedback on the need for resolution to the Ed-Fi ODS API issues listed above should be provided to the Ed-Fi Alliance through [Ed-Fi Support](https://support.ed-fi.org/).)
 
 The Ed-Fi ODS/API only exposes the "Id" of the resources that are deleted, however since the "Id" is not intended to be a global, portable identifier for the resource (Ed-Fi uses domain key values for that identity), and thus the _current implementation_ of the deletes resource is of limited value for API Publishing.
 
