@@ -87,6 +87,8 @@ Run the Ed-Fi API Publisher from the folder containing all the binaries by execu
 ```
 > NOTE: The `--exclude` flag is used to prevent trying to move any survey data due to an issue with the security metadata (described in [ODS-4974](https://tracker.ed-fi.org/browse/ODS-4974)) in the Ed-Fi ODS API v5.2 release. If you remove this argument, the publishing operation will fail due to unsatisfied dependencies in the data.
 
+For more documentation on API Publisher's parameters, please see the [API Publisher Configuration](docs/API-Publisher-Configuration.md) markdown file for other runtime options.
+
 ## Known Limitations / Issues
 
 Currently the Ed-Fi ODS API has the following known issues related to Change Queries and the Ed-Fi API Publisher:
