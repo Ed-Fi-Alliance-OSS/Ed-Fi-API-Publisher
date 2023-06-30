@@ -23,15 +23,29 @@ To demonstrate how the API Publisher works, this exercise copies all the data fr
 
 ### Configure Local Sandbox Environment
 
-Before using the API Publisher on a target ODS, you must create and configure an API client with the appropriate permissions for publishing.
+Before using the API Publisher on a target ODS, you must create and configure an API client with the appropriate permissions for publishing.  The source and destination ODS/API must be of the same version.
 
 Create and assign a claim set for the API Publisher by running the following database scripts:
   * [Create-API-Publisher-Writer-Security-Metadata.sql](eng/Create-API-Publisher-Writer-Security-Metadata.sql)
   * [Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql](eng/Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql)
 
-### Build the API Publisher
+### Use the API Publisher
 
-Build the API Publisher solution by running the following command from the repository's root directory:
+The API Publisher has three options to use the product.  The API Publisher requires [.NET Core 3.1](https://dotnet.microsoft.com/en-us/download/dotnet/3.1) to run:
+
+#### Option 1 - From binaries
+
+ 1. Download the latest published API Publisher package here:  [Ed-Fi API Publisher v1.0](https://dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_artifacts/feed/EdFi/NuGet/EdFi.ApiPublisher/overview/1.0.0).  Visit the page and click download.
+ 2. This will download a NuGet package to your computer.  Rename this file, `EdFi.ApiPublisher.1.0.0.nupkg`, to include .zip extension: `EdFi.ApiPublisher.1.0.0.zip`.
+ 3. The binary mentioned below is in the `EdFi.ApiPublisher.Win64` folder, as `EdFiApiPublisher.exe`.
+
+#### Option 2 - From Docker images
+
+The Docker image for the Ed-Fi API Publisher is available here: [Ed-Fi API Publisher v1.0 on Docker Hub](https://hub.docker.com/layers/edfialliance/ods-api-publisher/v1.0.0/images/sha256-4930ca34fbc71dee2fbbec09c904f980d86db536e0486f713fd03341ea5854d5?context=explore).  Use this to include in your Docker environment and alongside other components of the Ed-Fi stack.
+
+#### Option 3 - Build the API Publisher from source code
+
+If you would like to build the API Publisher from source, build the solution by running the following command from the repository's root directory:
 
 `dotnet build`
 
@@ -71,7 +85,9 @@ Run the Ed-Fi API Publisher from the folder containing all the binaries by execu
 ```
 .\EdFiApiPublisher.exe --sourceUrl=https://api.ed-fi.org/v5.2/api/ --sourceKey=RvcohKz9zHI4 --sourceSecret=E1iEFusaNf81xzCxwHfbolkC --targetUrl=http://localhost:54746/ --targetKey=minimal_sandbox_API_key --targetSecret=minimal_sandbox_API_secret --ignoreIsolation=true --maxDegreeOfParallelismForPostResourceItem=5 --maxDegreeOfParallelismForStreamResourcePages=3 --includeDescriptors=true --exclude=surveys
 ```
-> NOTE: The `--exclude` flag is used to prevent trying to move any survey data due to an issue with the security metadata (described in [ODS-4974](https://tracker.ed-fi.org/browse/ODS-4974)) in the Ed-Fi ODS API v5.2 release. If you remove this argument, the publishing operation will fail due to unsatisfied dependencies in the data.
+> NOTE for Ed-Fi ODS API v5.2 only: The `--exclude` flag is used to prevent trying to move any survey data due to an issue with the security metadata (described in [ODS-4974](https://tracker.ed-fi.org/browse/ODS-4974)) in the Ed-Fi ODS API v5.2 release. If you remove this argument, the publishing operation will fail due to unsatisfied dependencies in the data.  This has been fixed in future versions of the ODS/API platform.
+
+For more documentation on API Publisher's parameters, please see the [API Publisher Configuration](docs/API-Publisher-Configuration.md) markdown file for other runtime options.
 
 ## Known Limitations / Issues
 
