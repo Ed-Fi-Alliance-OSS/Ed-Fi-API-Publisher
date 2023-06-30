@@ -23,15 +23,29 @@ To demonstrate how the API Publisher works, this exercise copies all the data fr
 
 ### Configure Local Sandbox Environment
 
-Before using the API Publisher on a target ODS, you must create and configure an API client with the appropriate permissions for publishing.
+Before using the API Publisher on a target ODS, you must create and configure an API client with the appropriate permissions for publishing.  The source and destination ODS/API must be of the same version.
 
 Create and assign a claim set for the API Publisher by running the following database scripts:
   * [Create-API-Publisher-Writer-Security-Metadata.sql](eng/Create-API-Publisher-Writer-Security-Metadata.sql)
   * [Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql](eng/Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql)
 
-### Build the API Publisher
+### Use the API Publisher
 
-Build the API Publisher solution by running the following command from the repository's root directory:
+The API Publisher has three options to use the product:
+
+1. From binaries
+
+ 1. Download the latest published API Publisher package here:  [Ed-Fi API Publisher v1.0](https://dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_artifacts/feed/EdFi/NuGet/EdFi.ApiPublisher/overview/1.0.0).  Visit the page and click download.
+ 2. This will download a NuGet package to your computer.  Rename this file, `EdFi.ApiPublisher.1.0.0.nupkg`, to include .zip extension: `EdFi.ApiPublisher.1.0.0.zip`.
+ 3. The binary mentioned below is in the `EdFi.ApiPublisher.Win64` folder, as `EdFiApiPublisher.exe`.
+
+2. Docker image
+
+The Docker image for the Ed-Fi API Publisher is available here: [Ed-Fi API Publisher v1.0 on Docker Hub](https://hub.docker.com/layers/edfialliance/ods-api-publisher/v1.0.0/images/sha256-4930ca34fbc71dee2fbbec09c904f980d86db536e0486f713fd03341ea5854d5?context=explore).  Use this to include in your Docker environment and alongside other components of the Ed-Fi stack.
+
+3. Build the API Publisher
+
+If you would like to build the API Publisher from source, build the solution by running the following command from the repository's root directory:
 
 `dotnet build`
 
