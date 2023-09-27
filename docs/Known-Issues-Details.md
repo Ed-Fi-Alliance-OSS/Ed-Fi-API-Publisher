@@ -1,6 +1,6 @@
-# Known Limitations for Ed-Fi ODS/API 5.3 (Details)
+# Known Limitations for Ed-Fi ODS/API 5.1-5.3 (Details)
 
-Below are usage notes if using Ed-Fi ODS/API 5.3 only.  These issues have been resolved in the [Ed-Fi ODS / API 5.3-cqe](https://techdocs.ed-fi.org/display/EFTD/Change+Query+Enhancements) patch and also resolved in upstream versions [Ed-Fi ODS / API 6.1](https://techdocs.ed-fi.org/pages/viewpage.action?pageId=138642238).
+Below are usage notes if using Ed-Fi ODS/API 5.1-5.3 only.  These issues have been resolved in the [Ed-Fi ODS / API 5.3-cqe](https://techdocs.ed-fi.org/display/EFTD/Change+Query+Enhancements) patch and also resolved in upstream versions [Ed-Fi ODS / API 6.1](https://techdocs.ed-fi.org/pages/viewpage.action?pageId=138642238).
 
 ## Deletes Cannot Be Published (without a custom build of the ODS API)
 
