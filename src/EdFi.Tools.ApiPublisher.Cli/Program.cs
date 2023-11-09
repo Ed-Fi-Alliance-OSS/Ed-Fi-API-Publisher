@@ -32,7 +32,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             InitializeLogging();
 
             _logger.Information(
-                "Initializing the Ed-Fi API Publisher, designed and developed by Geoff McElhanon (geoff@edufied.com, Edufied LLC) in conjunction with Student1.");
+                "Initializing the Ed-Fi API Publisher.");
 
             var cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = cancellationTokenSource.Token;
