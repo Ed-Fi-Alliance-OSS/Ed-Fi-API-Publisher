@@ -84,7 +84,7 @@ $publishFddOutputDirectory = "$publishOutputPath/fdd"
 $publishScdOutputDirectory = "$publishOutputPath/scd"
 $testProjectName = "EdFi.Tools.ApiPublisher.Tests"
 
-function Clean {
+function DotNetClean {
     Invoke-Execute { dotnet clean $solutionRoot -c $Configuration --nologo -v minimal }
 }
 
@@ -213,7 +213,7 @@ function UnitTests {
 
 function Invoke-Build {
     Write-Host "Building Version $Version" -ForegroundColor Cyan
-    Invoke-Step { Clean }
+    Invoke-Step { DotNetClean }
     Invoke-Step { AssemblyInfo }
     Invoke-Step { Compile }
 }
