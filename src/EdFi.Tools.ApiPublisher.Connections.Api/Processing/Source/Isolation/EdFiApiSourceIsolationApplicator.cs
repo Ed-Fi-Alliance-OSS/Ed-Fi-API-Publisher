@@ -28,21 +28,26 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
     {
         var sourceApiClient = _sourceEdFiApiClientProvider.GetApiClient();
         var sourceApiConnectionDetails = sourceApiClient.ConnectionDetails;
-
-        string snapshotIdentifier =
+        if (sourceApiVersion.Major >= 7) {
+            sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Use-Snapshot", "true");
+        }
+        else
+        {
+            string snapshotIdentifier =
             await GetSourceSnapshotIdentifierAsync(sourceApiClient, sourceApiVersion).ConfigureAwait(false);
 
-        // Confirm that a snapshot exists or --ignoreIsolation=true has been provided
-        if (snapshotIdentifier == null)
-        {
-            string message =
-                $"Snapshot identifier could not be obtained from API at '{sourceApiConnectionDetails.Url}', and \"force\" option was not specified. Publishing cannot proceed due to lack of guaranteed isolation from ongoing changes at the source. Use --ignoreIsolation=true (or a corresponding configuration value) to force processing.";
+            // Confirm that a snapshot exists or --ignoreIsolation=true has been provided
+            if (snapshotIdentifier == null)
+            {
+                string message =
+                    $"Snapshot identifier could not be obtained from API at '{sourceApiConnectionDetails.Url}', and \"force\" option was not specified. Publishing cannot proceed due to lack of guaranteed isolation from ongoing changes at the source. Use --ignoreIsolation=true (or a corresponding configuration value) to force processing.";
 
-            throw new Exception(message);
-        }
+                throw new Exception(message);
+            }
 
-        // Configure source HTTP client to add the snapshot identifier header to every request against the source API
-        sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Snapshot-Identifier", snapshotIdentifier);
+            // Configure source HTTP client to add the snapshot identifier header to every request against the source API
+            sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Snapshot-Identifier", snapshotIdentifier);
+        }        
     }
 
     private async Task<string> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)
