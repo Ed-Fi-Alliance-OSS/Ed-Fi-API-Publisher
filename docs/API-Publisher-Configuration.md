@@ -58,10 +58,11 @@ To select or supply source and target connection information, the following conf
 | Connections:Target:SchoolYear<br/>`--targetSchoolYear`                             | (_Optional_) The SchoolYear to use with the target connection (corresponding to a year-specific ODS API deployment).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Connections:Target:TreatForbiddenPostAsWarning<br/>`--treatForbiddenPostAsWarning` | (_Optional_) A boolean value (true/false) indicating whether `403 Forbidden` responses from `POST` requests against the connection (as a target) should be treated as a warning, rather than a failure.<br/><br/>NOTE: This option can be used in scenarios where the target API may not grant the Ed-Fi API Publisher full CRUD permissions to all the dependencies of the specified resources to be written. In such a scenario, the dependent data must already exist in the target ODS or the resulting `409 Conflict` responses will cause publishing failure.                                                                                                                                                                         |
 
-## Considerations in relation to [key changes](https://techdocs.ed-fi.org/display/ODSAPIS3V71/Using+the+Changed+Record+Queries) and deletes
+## Considerations in relation to key changes and deletes
 
-Ed-Fi API Publisher will only process key changes and deletions if  specific Change Window is defined. To do so use the `--lastChangeVersionProcessed` value and set the
-`--useChangeVersionPaging` flag to true. Another option, if you want to keep the `--useChangeVersionPaging` false is defining a name for the source and target, using the
+Ed-Fi API Publisher will only process key changes and deletions if  specific Change Window is defined. To do so use the
+`--lastChangeVersionProcessed` value and set the `--useChangeVersionPaging` flag to true.
+Another option, if you want to keep the `--useChangeVersionPaging` false is defining a name for the source and target, using the
 `--sourceName` and `--targetName` values. More information about all these values [below](API-Publisher-Configuration.md#api-connections).
 
 ## Authorization Failure Handling
