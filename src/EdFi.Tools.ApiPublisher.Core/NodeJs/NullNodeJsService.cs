@@ -138,4 +138,9 @@ public class NullNodeJsService : INodeJSService
     {
         throw new NotImplementedException();
     }
+
+    ValueTask INodeJSService.MoveToNewProcessAsync()
+    {
+        throw new NotImplementedException();
+    }
 }
