@@ -31,7 +31,7 @@ For Ed-Fi ODS / API 5.1 through 5.3 only: create and assign a claim set for the 
 
 ### Use the API Publisher
 
-The API Publisher has three options to use the product.  The API Publisher requires [.NET Core 3.1](https://dotnet.microsoft.com/en-us/download/dotnet/3.1) to run:
+The API Publisher has three options to use the product.  The API Publisher requires [.NET 8.0](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) to run:
 
 #### Option 1 - From binaries
 
@@ -49,7 +49,7 @@ If you would like to build the API Publisher from source, build the solution by 
 
 `dotnet build`
 
-The API Publisher executable (`EdFiApiPublisher.exe`) will be located in the _.\EdFi.Tools.ApiPublisher.Cli\bin\Debug\netcoreapp3.1_ subfolder.
+The API Publisher executable (`EdFiApiPublisher.exe`) will be located in the _.\EdFi.Tools.ApiPublisher.Cli\bin\Debug\net8.0_ subfolder.
 
 ### Publish Data to Local Sandbox
 
