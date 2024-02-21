@@ -89,6 +89,8 @@ Run the Ed-Fi API Publisher from the folder containing all the binaries by execu
 
 For more documentation on API Publisher's parameters, please see the [API Publisher Configuration](docs/API-Publisher-Configuration.md) markdown file for other runtime options.
 
+For more information in relation to key changes and deletes, please see [Considerations in relation to key changes and deletes](docs/API-Publisher-Configuration.md#considerations-in-relation-to-key-changes-and-deletes)
+
 ## Known Limitations for Ed-Fi ODS / API 5.1 through 5.3
 
 Currently, Ed-Fi ODS / API 5.1 through 5.3 has the following known issues related to Change Queries and the Ed-Fi API Publisher.  These have been resolved in [Ed-Fi ODS / API 5.3-cqe patch](https://techdocs.ed-fi.org/display/EFTD/Change+Query+Enhancements) and [Ed-Fi ODS / API 6.1](https://techdocs.ed-fi.org/pages/viewpage.action?pageId=138642238).
