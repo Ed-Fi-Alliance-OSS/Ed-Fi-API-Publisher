@@ -3,6 +3,7 @@
 # The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 # See the LICENSE and NOTICES files in the project root for more information.
 
+
 # tag sdk:8.0 alpine
 FROM mcr.microsoft.com/dotnet/sdk@sha256:4b684e6c74ab8dff26ac54c79d8242b1dd05aba06c367de2b583bad79fd6399b AS build
 WORKDIR /source
@@ -34,7 +35,7 @@ FROM build AS publish
 RUN dotnet publish -c Release -o /app/EdFi.Tools.ApiPiblisher.Cli --no-build --nologo
 
 
-# Tag aspnet:8.0-alpine
+# Tag aspnet:8.0 alpine
 FROM mcr.microsoft.com/dotnet/aspnet@sha256:789045ecae51d62d07877994d567eff4442b7bbd4121867898ee7bf00b7241ea
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
