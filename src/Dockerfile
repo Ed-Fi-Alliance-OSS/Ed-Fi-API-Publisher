@@ -3,7 +3,7 @@
 # The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 # See the LICENSE and NOTICES files in the project root for more information.
 
-# Tag aspnet:6.0-alpine
+# Tag aspnet:8.0-alpine
 FROM mcr.microsoft.com/dotnet/aspnet@sha256:789045ecae51d62d07877994d567eff4442b7bbd4121867898ee7bf00b7241ea
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
