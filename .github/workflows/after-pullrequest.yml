@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Upload Test Results
-        uses: dorny/test-reporter@0d00bb14cb0cc2c9b8985df6e81dd333188224e1 # v1.5.0
+        uses: dorny/test-reporter@eaa763f6ffc21c7a37837f56cd5f9737f27fc6c8 # v1.8.0
         with:
           artifact: csharp-tests
           name: C# Unit Test Results
