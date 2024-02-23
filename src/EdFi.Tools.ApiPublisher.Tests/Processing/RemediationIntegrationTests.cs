@@ -875,6 +875,11 @@ public class RemediationIntegrationTests
             throw new NotImplementedException();
         }
 
+        ValueTask INodeJSService.MoveToNewProcessAsync()
+        {
+            throw new NotImplementedException();
+        }
+
         #endregion
     }
 }

@@ -28,7 +28,7 @@ jobs:
       api-pub-version: ${{ steps.versions.outputs.api-pub }}
 
     steps:
-      - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
         with:
           fetch-depth: 0
 
@@ -51,7 +51,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@607fce577a46308457984d59e4954e075820f10a # v3.0.3
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 8.0.x
 
       - name: Publish .NET Assemblies
         run: |
@@ -62,7 +62,7 @@ jobs:
               -Version $appVersion
 
       - name: Setup Nuget.exe
-        uses: nuget/setup-nuget@fd9fffd6ca4541cf4152a9565835ca1a88a6eb37 #v1.1.1
+        uses: nuget/setup-nuget@a21f25cd3998bf370fde17e3f1b4c12c175172f9  #v2.0.0
 
       - name: Create NuGet Packages
         if: success()
@@ -100,10 +100,10 @@ jobs:
     outputs:
       sbom-hash-code: ${{ steps.sbom-hash-code.outputs.sbom-hash-code }}
     steps:
-      - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Get Artifacts
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a #v3.0.2
+        uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 #v4.1.1
         with:
           name: ${{ env.PACKAGE_NAME }}-NuGet
 
@@ -134,7 +134,7 @@ jobs:
 
       - name: Upload SBOM
         if: success()
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
           name: ${{ env.PACKAGE_NAME }}-SBOM
           path: ./manifest
@@ -160,7 +160,7 @@ jobs:
       contents: write
     steps:
       - name: Download the SBOM
-        uses: slsa-framework/slsa-github-generator/.github/actions/secure-download-artifact@7f4fdb871876c23e455853d694197440c5a91506 #v1.5.0
+        uses: slsa-framework/slsa-github-generator/.github/actions/secure-download-artifact@07e64b653f10a80b6510f4568f685f8b7b9ea830  # v1.9.0
         with:
           name: "${{ env.PACKAGE_NAME }}-SBOM"
           path: ${{ env.MANIFEST_FILE }}
@@ -216,10 +216,10 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
 
       - name: Get Artifact
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a #v3.0.2
+        uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 #v4.1.1
         with:
           name: ${{ env.PACKAGE_NAME }}-NuGet
 

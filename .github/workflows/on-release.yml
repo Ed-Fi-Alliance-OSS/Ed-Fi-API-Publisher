@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the repo
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Delete other pre-releases and their tags
         shell: pwsh
@@ -52,4 +52,4 @@ jobs:
             $page += 1
           } While ($release_list.count -gt 0)
 
- # Manually doing promote pacakges to release on azure artifacts
+ # Manually doing promote packages to release on azure artifacts
