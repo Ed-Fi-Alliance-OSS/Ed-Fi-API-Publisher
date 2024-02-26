@@ -17,7 +17,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public NamedConnectionDetailsConfiguration Target { get; set; }
     }
 
-    public class NamedConnectionDetailsConfiguration : NamedConnectionDetailsBase, INamedConnectionDetails
+    public class NamedConnectionDetailsConfiguration : NamedConnectionDetailsBase
     {
         public string Url { get; set; }
         public string Key { get; set; }
