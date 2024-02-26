@@ -3,6 +3,7 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
     public class ConnectionConfiguration
@@ -12,7 +13,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
     
     public class Connections
     {
-        public NamedConnectionDetailsBase Source { get; set; }
-        public NamedConnectionDetailsBase Target { get; set; }
+        public NamedConnectionDetailsConfiguration Source { get; set; }
+        public NamedConnectionDetailsConfiguration Target { get; set; }
+    }
+
+    public class NamedConnectionDetailsConfiguration : NamedConnectionDetailsBase, INamedConnectionDetails
+    {
+        public string Url { get; set; }
+        public string Key { get; set; }
+        public string Secret { get; set; }
+        public override bool IsFullyDefined()
+        {
+            return (Url != null && Key != null && Secret != null);
+        }
     }
 }
