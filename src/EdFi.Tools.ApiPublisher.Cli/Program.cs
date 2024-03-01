@@ -36,6 +36,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
             var cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = cancellationTokenSource.Token;
+            var mainResponseCode = 1;
 
             try
             {
@@ -172,14 +173,16 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 _logger.Information($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
                 _logger.Information($"Processing complete.");
-
                 return 0;
             }
             catch (Exception ex)
             {
                 _logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
-
                 return -1;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
             }
 
             INamedConnectionDetails GetConnectionConfiguration(IConfigurationRoot initialConfiguration, IContainer rootContainer, string connectionSectionName)
