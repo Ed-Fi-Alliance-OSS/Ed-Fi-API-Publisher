@@ -36,7 +36,6 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
             var cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = cancellationTokenSource.Token;
-            var mainResponseCode = 1;
 
             try
             {
