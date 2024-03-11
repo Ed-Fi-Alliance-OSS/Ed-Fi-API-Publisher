@@ -353,7 +353,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 //     _logger.Debug(resourceListMessage);
                 // }
             }
-            
+
             // else
             // {
             //     // Was non-filtered list of resources to be published requested?
@@ -364,6 +364,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             //         _logger.Information(resourceListMessage);
             //     }
             // }
+
+            // Remove any #retry entries if they have no dependencies.
+            var retryKeys = postDependencyKeysByResourceKey.Keys.Where(k => k.EndsWith(Conventions.RetryKeySuffix)).ToArray();
+
+            foreach (string retryKey in retryKeys)
+            {
+                if (postDependencyKeysByResourceKey[retryKey].Length == 0)
+                {
+                    _logger.Debug($"Removing entry for '{retryKey}' since it has no dependencies.");
+                    postDependencyKeysByResourceKey.Remove(retryKey);
+                }
+            }
 
             _logger.Information($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusions and/or exclusions.");
             

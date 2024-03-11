@@ -112,7 +112,10 @@ namespace EdFi.Tools.ApiPublisher.Tests
             return true;
         }
 
-        public static IFakeHttpRequestHandler PostResource(this IFakeHttpRequestHandler fakeRequestHandler, string url, params HttpStatusCode[] responseCodes)
+        public static IFakeHttpRequestHandler PostResource(
+            this IFakeHttpRequestHandler fakeRequestHandler, 
+            string url, 
+            params HttpStatusCode[] responseCodes)
         {
             var mocker = A.CallTo(
                     () => fakeRequestHandler.Post(
