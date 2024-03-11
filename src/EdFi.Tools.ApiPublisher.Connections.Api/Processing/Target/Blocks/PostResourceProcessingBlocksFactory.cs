@@ -25,6 +25,8 @@ using Polly;
 using Polly.Contrib.WaitAndRetry;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 using Serilog.Events;
+using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 {
@@ -49,6 +51,22 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             _sourceConnectionDetails = sourceConnectionDetails;
             _sourceCapabilities = sourceCapabilities;
             _sourceResourceItemProvider = sourceResourceItemProvider;
+
+            // Ensure that the API connections are configured correctly with regards to Profiles
+            // If we have no Profile applied to the target... ensure that the source also has no profile specified (to prevent accidental data loss on POST)
+            if (string.IsNullOrEmpty(targetEdFiApiClientProvider.GetApiClient().ConnectionDetails.ProfileName))
+            {
+                // If the source is an API
+                if (sourceConnectionDetails is ApiConnectionDetails sourceApiConnectionDetails)
+                {
+                    // If the source API is not using a Profile, prevent processing by throwing an exception
+                    if (!string.IsNullOrEmpty(sourceApiConnectionDetails.ProfileName))
+                    {
+                        throw new Exception(
+                            "The source API connection has a ProfileName specified, but the target API connection does not. POST requests against a target API without the Profile-based context of the source data can lead to accidental data loss.");
+                    }
+                }
+            }
         }
 
         public (ITargetBlock<PostItemMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
@@ -122,6 +140,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 // Remove attributes not usable between API instances
                 postItemMessage.Item.Remove("id");
                 postItemMessage.Item.Remove("_etag");
+                postItemMessage.Item.Remove("_lastModifiedDate");
 
                 // For descriptors, also strip the surrogate id
                 if (postItemMessage.ResourceUrl.EndsWith("Descriptors"))
@@ -236,9 +255,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 requestBodyJson = postItemMessage.Item.ToString();
                             }
 
-                            var response = await targetEdFiApiClient.HttpClient.PostAsync(
+                            var response = await RequestHelpers.SendPostRequestAsync(
+                                targetEdFiApiClient,
+                                postItemMessage.ResourceUrl,
                                 $"{targetEdFiApiClient.DataManagementApiSegment}{postItemMessage.ResourceUrl}",
-                                new StringContent(requestBodyJson, Encoding.UTF8, "application/json"),
+                                requestBodyJson,
                                 ct);
 
                             var (hasMissingDependency, missingDependencyDetails) = await TryGetMissingDependencyDetailsAsync(response, postItemMessage);
@@ -651,9 +672,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             $"{resourceUrl} (source id: {sourceId}): Remediating request with POST request to '{remediationRequest.resource}' on target API: {remediationRequestBodyJson}");
                     }
 
-                    var remediationResponse = await targetEdFiApiClient.HttpClient.PostAsync(
+                    var remediationResponse = await RequestHelpers.SendPostRequestAsync(
+                        targetEdFiApiClient,
+                        remediationRequest.resource,
                         $"{targetEdFiApiClient.DataManagementApiSegment}{remediationRequest.resource}",
-                        new StringContent(remediationRequestBodyJson, Encoding.UTF8, "application/json"));
+                        remediationRequestBodyJson,
+                        CancellationToken.None);
 
                     if (remediationResponse.IsSuccessStatusCode)
                     {
