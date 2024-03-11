@@ -35,7 +35,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--sourceScope"] = "Connections:Source:Scope",
                     ["--sourceSchoolYear"] = "Connections:Source:SchoolYear",
                     ["--lastChangeVersionProcessed"] = "Connections:Source:LastChangeVersionProcessed",
-                    
+
+                    // Temporary argument -- until Ed-Fi ODS API corrects issues with Profiles enforcement
+                    ["--sourceProfileName"] = "Connections:Source:ProfileName",
+
                     // Target connection configuration
                     ["--targetName"] = "Connections:Target:Name",
                     ["--targetType"] = "Connections:Target:Type", // api | sqlite
@@ -46,6 +49,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--targetSecret"] = "Connections:Target:Secret",
                     ["--targetScope"] = "Connections:Target:Scope",
                     ["--targetSchoolYear"] = "Connections:Target:SchoolYear",
+
+                    // Temporary argument -- until Ed-Fi ODS API corrects issues with Profiles enforcement
+                    ["--targetProfileName"] = "Connections:Target:ProfileName",
 
                     // Target SqlLite connection configuration
                     ["--targetUrl"] = "Connections:Target:Url",

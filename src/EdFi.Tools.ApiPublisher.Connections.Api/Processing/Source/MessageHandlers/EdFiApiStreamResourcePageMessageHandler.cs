@@ -16,6 +16,7 @@ using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 using Serilog.Events;
+using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
 
@@ -91,9 +92,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             }
 
                             // Possible seam for getting a page of data (here, using Ed-Fi ODS API w/ offset/limit paging strategy)
-                            return edFiApiClient.HttpClient.GetAsync(
-                                $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}",
-                                ct);
+                            string requestUri =
+                                $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}";
+
+                            return RequestHelpers.SendGetRequestAsync(edFiApiClient, message.ResourceUrl, requestUri, ct);
                         },
                         new Context(),
                         CancellationToken.None);
