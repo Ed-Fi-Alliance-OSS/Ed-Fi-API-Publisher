@@ -119,6 +119,7 @@ When you're ready to look further, review these other topics:
 * [API Connection Management](docs/API-Connection-Management.md)
 * [API Publisher Configuration](docs/API-Publisher-Configuration.md)
 * [Considerations for API Hosts](docs/Considerations-for-API-Hosts.md)
+* [Considerations for Docker Configuration and Execution](docs/Considerations-docker-configuration-and-execution.md)
 
 ## Support
 
