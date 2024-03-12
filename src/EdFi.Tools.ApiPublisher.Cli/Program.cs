@@ -161,11 +161,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 var configurationStoreSection = finalConfiguration.GetSection("configurationStore");
 
                 var changeProcessorConfiguration = new ChangeProcessorConfiguration(
+                    options,
                     authorizationFailureHandling,
                     resourcesWithUpdatableKeys,
-                    moduleFactory,
-                    options,
-                    configurationStoreSection);
+                    configurationStoreSection,
+                    moduleFactory);
 
                 var changeProcessor = executionContainer.Resolve<ChangeProcessor>();
 
