@@ -114,6 +114,7 @@ An additional limitation of the Ed-Fi API Publisher is the current lack of suppo
 
 More technical details on some of these issues can be found [here](docs/Known-Issues-Details.md).
 
+
 ## Next Steps
 
 When you're ready to look further, review these other topics:
