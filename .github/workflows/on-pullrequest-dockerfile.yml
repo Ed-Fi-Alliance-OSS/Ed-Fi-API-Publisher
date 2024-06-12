@@ -17,6 +17,8 @@ on:
       - "src/*"
   workflow_dispatch:
 
+permissions: read-all
+
 env:
   DOCKER_FILE_DIR: src
   DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}

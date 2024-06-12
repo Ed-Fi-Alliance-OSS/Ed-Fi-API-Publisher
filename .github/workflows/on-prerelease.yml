@@ -9,6 +9,8 @@ on:
     types:
       - prereleased
 
+permissions: read-all
+
 env:
   ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }}
   AZURE_ARTIFACT_URL: "https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/nuget/v3/index.json"
@@ -95,7 +97,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: pack
     permissions:
-      actions: read
       contents: write
     outputs:
       sbom-hash-code: ${{ steps.sbom-hash-code.outputs.sbom-hash-code }}
@@ -156,7 +157,6 @@ jobs:
       - sbom-create
       - pack
     permissions:
-      actions: read
       contents: write
     steps:
       - name: Download the SBOM
@@ -199,7 +199,6 @@ jobs:
     name: Create Provenance
     needs: pack
     permissions:
-      actions: read
       id-token: write
       contents: write
     uses: Ed-Fi-Alliance-OSS/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.5.0
