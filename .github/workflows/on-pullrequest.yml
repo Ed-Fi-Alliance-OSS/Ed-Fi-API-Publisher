@@ -14,6 +14,8 @@ on:
       - ".github/**/*.yml"
   workflow_dispatch:
 
+permissions: read-all
+
 jobs:
   scan-actions-bidi:
     name: Scan Actions, scan all files for BIDI Trojan Attacks
@@ -24,6 +26,8 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
     defaults:
       run:
         shell: pwsh
