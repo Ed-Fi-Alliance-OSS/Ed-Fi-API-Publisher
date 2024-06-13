@@ -26,6 +26,8 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
     defaults:
       run:
         shell: pwsh
