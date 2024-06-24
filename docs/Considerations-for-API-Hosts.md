@@ -50,6 +50,10 @@ The host's process _should_ also perform the following steps:
 
 For APIs that have the API Profiles option enabled, the API Publisher includes parameters to indicate the profile with both the source and the Target.
 
-Keep in mind that the data to be consulted and published between the source and the target will depend on the definition of the profiles and the corresponding read and write accesses.
+Keep in mind that the data to be requested and published between the source and the target will depend on the definition of the profiles and the corresponding read and write access permissions.
 
-Therefore, it is recommended to review the documentation corresponding to API Profiles to adequately define each profile for source and target and avoid data loss in the process.
+Therefore, it is recommended to review the documentation corresponding to API Profiles to adequately define each profile for source and target and avoid data loss in the process. It's highly recommended to setup the exact same profile definition on both ends.
+
+Use [API configuration values](https://github.com/Ed-Fi-Alliance-OSS/Ed-Fi-API-Publisher/blob/main/docs/API-Publisher-Configuration.md#api-connections) like `--include` `--includeOnly` `--exclude` or `--excludeOnly` to indicate the data to be published.
+
+Take into account that Ed-Fi-API-Publisher won't allow you to provide a profile just on one end (source or target).
