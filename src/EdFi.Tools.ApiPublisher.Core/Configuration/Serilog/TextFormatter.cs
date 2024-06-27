@@ -5,6 +5,8 @@
 
 using Serilog.Events;
 using Serilog.Formatting;
+using SmartFormat;
+using SmartFormat.Core.Settings;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,28 +15,65 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Serilog;
 
 public class TextFormatter : ITextFormatter
 {
-    private const string ThreadId = "ThreadId";
-    private const string SourceContext = "SourceContext";
     private readonly string _format;
-    public TextFormatter(string format = "[{0:yyyy-MM-dd HH:mm:ss,fff}] [{1}] [{2:00}] {3} - {4} {5} {6}")
+    public TextFormatter(string format = "[{Timestamp:yyyy-MM-dd HH:mm:ss,fff}] [{Level}] [{ThreadId:00}] {SourceContext} - {Message} {Exception} {NewLine}")
     {
         _format = format;
     }
     public void Format(LogEvent logEvent, TextWriter output)
     {
-        var threadId = GetValueFromProperty(logEvent.Properties.GetValueOrDefault(ThreadId));
-        var sourceContext = GetValueFromProperty(logEvent.Properties.GetValueOrDefault(SourceContext));
-        var message = logEvent.MessageTemplate.Render(logEvent.Properties);
-
         try
         {
-            output.Write(_format, logEvent.Timestamp, GetShortFormatLevel(logEvent.Level), threadId, sourceContext, message, output.NewLine, logEvent.Exception?.Message, logEvent.Exception?.StackTrace);
-
+            var sf = Smart.CreateDefaultSmartFormat(new SmartSettings
+            {
+                StringFormatCompatibility = true
+            });
+            var logEventFormatValues = new LogEventFormatValues(logEvent);
+            var formatted = sf.Format(_format, logEventFormatValues);
+            output.Write(formatted);
         }
         catch (Exception ex)
         {
             output.Write($"Unable to render log message. Reason was {ex}");
         }
+    }
+}
+
+public class LogEventFormatValues
+{
+    private const string ThreadIdSerilogPropertyName = "ThreadId";
+    private const string SourceContextSerilogPropertyName = "SourceContext";
+    
+    public DateTime Timestamp => _logEvent.Timestamp.DateTime;
+    public string Level => GetShortFormatLevel(_logEvent.Level);
+    public string SourceContext => GetValueFromProperty(_logEvent.Properties.GetValueOrDefault(SourceContextSerilogPropertyName));
+    public string Message => _logEvent.MessageTemplate.Render(_logEvent.Properties);
+    public string Exception => $"{_logEvent.Exception?.Message} {_logEvent.Exception?.StackTrace}";
+    public string ThreadId => GetValueFromProperty(_logEvent.Properties.GetValueOrDefault(ThreadIdSerilogPropertyName));
+
+    public string NewLine => Environment.NewLine;
+
+    private readonly LogEvent _logEvent;
+
+    public LogEventFormatValues(LogEvent logEvent)
+    {
+        _logEvent = logEvent;
+    }
+
+    private string GetShortFormatLevel(LogEventLevel logEventLevel)
+    {
+        var value = logEventLevel switch
+        {
+            LogEventLevel.Verbose => "ALL",
+            LogEventLevel.Debug => "DEBUG",
+            LogEventLevel.Information => "INFO",
+            LogEventLevel.Warning => "WARN",
+            LogEventLevel.Error => "ERROR",
+            LogEventLevel.Fatal => "FATAL",
+            _ => throw new ArgumentException("Unexpected value for LogEvent.Level", nameof(logEventLevel))
+        };
+
+        return value.ToString();
     }
 
     private string GetValueFromProperty(LogEventPropertyValue logEventPropertyValue)
@@ -54,19 +93,4 @@ public class TextFormatter : ITextFormatter
         return result;
     }
 
-    private string GetShortFormatLevel(LogEventLevel logEventLevel)
-    {
-        var value = logEventLevel switch
-        {
-            LogEventLevel.Verbose => "ALL",
-            LogEventLevel.Debug => "DEBUG",
-            LogEventLevel.Information => "INFO",
-            LogEventLevel.Warning => "WARN",
-            LogEventLevel.Error => "ERROR",
-            LogEventLevel.Fatal => "FATAL",
-            _ => throw new ArgumentException("Unexpected value for LogEvent.Level", nameof(logEventLevel))
-        };
-
-        return value.ToString();
-    }
 }
