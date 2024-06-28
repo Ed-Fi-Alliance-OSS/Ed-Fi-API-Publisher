@@ -16,7 +16,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration.Serilog;
 public class TextFormatter : ITextFormatter
 {
     private readonly string _format;
-    public TextFormatter(string format = "[{Timestamp:yyyy-MM-dd HH:mm:ss,fff}] [{Level}] [{ThreadId:00}] {SourceContext} - {Message} {Exception} {NewLine}")
+    public const string DefaultFormat = "[{Timestamp:yyyy-MM-dd HH:mm:ss,fff}] [{Level}] [{ThreadId:00}] [{SourceContext}] - {Message} {Exception} {NewLine}";
+    public TextFormatter(string format = DefaultFormat)
     {
         _format = format;
     }
@@ -46,10 +47,10 @@ public class LogEventFormatValues
     
     public DateTime Timestamp => _logEvent.Timestamp.DateTime;
     public string Level => GetShortFormatLevel(_logEvent.Level);
-    public string SourceContext => GetValueFromProperty(_logEvent.Properties.GetValueOrDefault(SourceContextSerilogPropertyName));
+    public string SourceContext => GetStringValueFromProperty(_logEvent.Properties.GetValueOrDefault(SourceContextSerilogPropertyName));
     public string Message => _logEvent.MessageTemplate.Render(_logEvent.Properties);
     public string Exception => $"{_logEvent.Exception?.Message} {_logEvent.Exception?.StackTrace}";
-    public string ThreadId => GetValueFromProperty(_logEvent.Properties.GetValueOrDefault(ThreadIdSerilogPropertyName));
+    public double ThreadId => GetIntValueFromProperty((_logEvent.Properties.GetValueOrDefault(ThreadIdSerilogPropertyName)));
 
     public string NewLine => Environment.NewLine;
 
@@ -76,18 +77,27 @@ public class LogEventFormatValues
         return value.ToString();
     }
 
-    private string GetValueFromProperty(LogEventPropertyValue logEventPropertyValue)
+    private int GetIntValueFromProperty(LogEventPropertyValue logEventPropertyValue)
     {
-        string result = string.Empty;
+        int result = 0;
+        if (logEventPropertyValue is ScalarValue scalar && scalar.Value != null)
+        {
+            if (scalar.Value is int intValue)
+            {
+                result = intValue;
+            }
+        }
+        return result;
+    }
+
+    private string GetStringValueFromProperty(LogEventPropertyValue logEventPropertyValue)
+    {
+        string result = String.Empty;
         if (logEventPropertyValue is ScalarValue scalar && scalar.Value != null)
         {
             if (scalar.Value is string stringValue)
             {
                 result = stringValue;
-            }
-            else
-            {
-                result = scalar.Value.ToString();
             }
         }
         return result;
