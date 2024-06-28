@@ -8,7 +8,7 @@ API Publisher uses by default the following output template in the _logging.json
 This template uses the format provided by the **Serilog** library, you can find more details on how to create your specific format:
 [Formatting Output](https://github.com/serilog/serilog/wiki/Formatting-Output)
 
-The sinks available in API Publisher are Console, File, and Aws CloudWatch. Some of these sinks has compatibility with the default output template, but in some cases, that doesn't work like the Aws CloudWatch sink. If you run into this problem, we provided our TextFormatter which is similar to the default. Here we are going to see how to use it:
+The sinks available in API Publisher are Console, File, and Aws CloudWatch. Some of these sinks have compatibility with the default output template, but in some cases that doesn't work, for example the Aws CloudWatch sink. If you run into this problem, we provide our TextFormatter which is similar to the default. Here we are going to see how to use it:
 
 ## How to use it in the AWSCloudWatch:
 
@@ -50,7 +50,7 @@ In the _logging.json_ file
 
 ## Values accepted in the template format:
 
-1. You should defined each one between brackets, eg. ```{Level}```. 
+1. You should defined each one between braces, eg. ```{Level}```. 
 2. Some of them can be formatted using the .NET framework, eg. ```{Timestamp:dd-MM-yy}```  
 3. The following values are accepted by the implementation.
 
