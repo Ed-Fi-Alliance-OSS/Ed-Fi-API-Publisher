@@ -4,10 +4,8 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Core.Configuration.Serilog;
-using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities;
 using NUnit.Framework;
 using NUnit.Framework.Internal;
 using Serilog;
@@ -15,12 +13,9 @@ using Serilog.Events;
 using Serilog.Sinks.TestCorrelator;
 using Shouldly;
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Mime;
-using System.Threading;
 using ILogger = Serilog.ILogger;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Configuration.Serilog;
