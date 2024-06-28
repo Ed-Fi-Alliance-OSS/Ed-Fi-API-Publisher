@@ -16,6 +16,7 @@ using Serilog;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 using Serilog.Events;
+using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
 
@@ -59,9 +60,10 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                     _logger.Debug($"{resourceUrl}): Getting item count from source (attempt #{attempt})...");
                 }
 
-                return edFiApiClient.HttpClient.GetAsync(
-                    $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}",
-                    ct);
+                string requestUri =
+                    $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}";
+
+                return RequestHelpers.SendGetRequestAsync(edFiApiClient, resourceUrl, requestUri, ct);
             }, new Context(), cancellationToken);
 
         string responseContent = null;

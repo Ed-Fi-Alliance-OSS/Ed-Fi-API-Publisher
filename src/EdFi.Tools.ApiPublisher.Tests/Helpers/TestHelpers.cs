@@ -5,21 +5,44 @@
 
 using System;
 using System.IO;
+using System.Net;
 using System.Reflection;
 using System.Threading.Tasks;
+using Autofac.Features.Indexed;
 using Bogus;
+using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
+using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
+using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
+using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Isolation;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Versioning;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Dependencies;
+using EdFi.Tools.ApiPublisher.Core.Finalization;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
+using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using EdFi.Tools.ApiPublisher.Tests.Processing;
 using FakeItEasy;
 using Serilog;
+using Jering.Javascript.NodeJS;
+using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 {
     public class TestHelpers
     {
+        public const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
+        // public const string AnyResourcePattern = "/ed-fi/\\w+";
+
         public static Faker<GenericResource<FakeKey>> GetGenericResourceFaker()
         {
             var keyValueFaker = GetKeyValueFaker();
@@ -83,7 +106,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             string[] exclude = null,
             string[] excludeOnly = null,
             bool ignoreIsolation = false,
-            int? schoolYear = null)
+            int? schoolYear = null,
+            string profileName = null)
         {
             return new ApiConnectionDetails
             {
@@ -108,10 +132,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 {
                     { "TestTarget", lastVersionProcessedToTarget },
                 },
+                ProfileName = profileName,
             };
         }
 
-        public static ApiConnectionDetails GetTargetApiConnectionDetails(int? schoolYear = null)
+        public static ApiConnectionDetails GetTargetApiConnectionDetails(int? schoolYear = null, string profileName = null)
         {
             return new ApiConnectionDetails
             {
@@ -132,6 +157,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 LastChangeVersionsProcessed = null,
                 TreatForbiddenPostAsWarning = true,
                 LastChangeVersionProcessedByTargetName = {},
+
+                ProfileName = profileName,
             };
         }
 
@@ -213,6 +240,121 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 .OAuthToken()
                 .ApiVersionMetadata()
                 .Dependencies();
+        }
+
+
+
+        public static ChangeProcessorConfiguration CreateChangeProcessorConfiguration(
+            Options options,
+            Func<string> javascriptModuleFactory = null,
+            string[] resourcesWithUpdatableKeys = null)
+        {
+            return new(
+                options,
+                Configuration.GetAuthorizationFailureHandling(),
+                resourcesWithUpdatableKeys ?? Array.Empty<string>(),
+                A.Fake<IConfigurationSection>(),
+                javascriptModuleFactory
+            );
+        }
+
+        public static ChangeProcessor CreateChangeProcessorWithDefaultDependencies(
+            Options options,
+            ApiConnectionDetails sourceApiConnectionDetails,
+            IFakeHttpRequestHandler fakeSourceRequestHandler,
+            ApiConnectionDetails targetApiConnectionDetails,
+            IFakeHttpRequestHandler fakeTargetRequestHandler,
+            INodeJSService nodeJsService = null)
+        {
+            EdFiApiClient SourceApiClientFactory() =>
+                new EdFiApiClient(
+                    "TestSource",
+                    sourceApiConnectionDetails,
+                    bearerTokenRefreshMinutes: 27,
+                    ignoreSslErrors: true,
+                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeSourceRequestHandler));
+
+            EdFiApiClient TargetApiClientFactory() =>
+                new EdFiApiClient(
+                    "TestTarget",
+                    targetApiConnectionDetails,
+                    bearerTokenRefreshMinutes: 27,
+                    ignoreSslErrors: true,
+                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeTargetRequestHandler));
+
+            var sourceEdFiApiClientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(SourceApiClientFactory));
+            var targetEdFiApiClientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory));
+
+            var resourceDependencyMetadataProvider = new EdFiApiGraphMLDependencyMetadataProvider(targetEdFiApiClientProvider);
+            var resourceDependencyProvider = new ResourceDependencyProvider(resourceDependencyMetadataProvider);
+            var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
+            var errorPublisher = A.Fake<IErrorPublisher>();
+
+            nodeJsService ??= A.Fake<INodeJSService>();
+
+            var sourceEdFiVersionMetadataProvider = new SourceEdFiApiVersionMetadataProvider(sourceEdFiApiClientProvider);
+            var targetEdFiVersionMetadataProvider = new TargetEdFiApiVersionMetadataProvider(targetEdFiApiClientProvider);
+
+            var edFiVersionsChecker = new EdFiVersionsChecker(sourceEdFiVersionMetadataProvider, targetEdFiVersionMetadataProvider);
+
+            var sourceCurrentChangeVersionProvider = new EdFiApiSourceCurrentChangeVersionProvider(sourceEdFiApiClientProvider);
+            var sourceIsolationApplicator = new EdFiApiSourceIsolationApplicator(sourceEdFiApiClientProvider);
+            var dataSourceCapabilities = new EdFiApiSourceCapabilities(sourceEdFiApiClientProvider);
+            var publishErrorsBlocksFactory = new PublishErrorsBlocksFactory(errorPublisher);
+
+            var streamingResourceProcessor = new StreamingResourceProcessor(
+                new StreamResourceBlockFactory(
+                    new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(
+                        new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider))),
+                new StreamResourcePagesBlockFactory(new EdFiApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider)),
+                sourceApiConnectionDetails);
+
+            var stageInitiators = A.Fake<IIndex<PublishingStage, IPublishingStageInitiator>>();
+
+            A.CallTo(() => stageInitiators[PublishingStage.KeyChanges])
+                .Returns(
+                    new KeyChangePublishingStageInitiator(
+                        streamingResourceProcessor,
+                        new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider)));
+
+            A.CallTo(() => stageInitiators[PublishingStage.Upserts])
+                .Returns(
+                    new UpsertPublishingStageInitiator(
+                        streamingResourceProcessor,
+                        new PostResourceProcessingBlocksFactory(
+                            nodeJsService,
+                            targetEdFiApiClientProvider,
+                            sourceApiConnectionDetails,
+                            dataSourceCapabilities,
+                            new ApiSourceResourceItemProvider(sourceEdFiApiClientProvider, options))));
+
+            A.CallTo(() => stageInitiators[PublishingStage.Deletes])
+                .Returns(
+                    new DeletePublishingStageInitiator(
+                        streamingResourceProcessor,
+                        new DeleteResourceProcessingBlocksFactory(targetEdFiApiClientProvider)));
+
+            return new ChangeProcessor(
+                resourceDependencyProvider,
+                changeVersionProcessedWriter,
+                errorPublisher,
+                edFiVersionsChecker,
+                sourceCurrentChangeVersionProvider,
+                sourceApiConnectionDetails,
+                targetApiConnectionDetails,
+                sourceIsolationApplicator,
+                dataSourceCapabilities,
+                publishErrorsBlocksFactory,
+                stageInitiators,
+                Array.Empty<IFinalizationActivity>());
+        }
+    }
+
+    public static class IFakeTargetRequestHandlerExtensions
+    {
+        public static void EveryDataManagementPostReturns200Ok(this IFakeHttpRequestHandler fakeHttpRequestHandler)
+        {
+            fakeHttpRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}{TestHelpers.AnyResourcePattern}", HttpStatusCode.OK);
         }
     }
 }

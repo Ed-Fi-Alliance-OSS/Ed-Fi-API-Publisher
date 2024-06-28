@@ -59,6 +59,8 @@ public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnecti
 
     public bool? TreatForbiddenPostAsWarning { get; set; }
 
+    public string ProfileName { get; set; }
+
     public override bool IsFullyDefined()
     {
         return (Url != null && Key != null && Secret != null);
