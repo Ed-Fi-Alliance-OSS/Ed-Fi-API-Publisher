@@ -18,7 +18,7 @@ This process must perform the following steps:
 
 * Backup up the current EdFi_Ods database (or equivalent).
 * Generate a "snapshot identifier" as a string-based value that can be incorporated into a database name.
-* Restore the ODS database using following naming convention: *{Ed-Fi ODS database name}_SS{snapshotIdentifier}*.
+* Restore the ODS database using following naming convention: _{Ed-Fi ODS database name}_SS{snapshotIdentifier}_.
 * Insert a new record into the `changes.Snapshot` table with the new snapshot identifier and the current date/time.
 
 The host's process _should_ also perform the following steps:
@@ -45,3 +45,15 @@ The host's process _should_ also perform the following steps:
 * Create an API client (key and secret) in the Admin app/database to be used by the Ed-Fi API Publisher to write data _on behalf of_ a particular source API.
 * Associate the Application with the "Ed-Fi API Publisher - Writer" claim set.
 * Provide the key, secret and your API's base URL to the party responsible for configuring the Ed-Fi API Publisher's connections. The API's base URL includes everything up to, but not including, the _/data/v3_ portion.
+
+# Profiles
+
+For APIs that have the API Profiles option enabled, the API Publisher includes parameters to indicate the profile with both the source and the Target.
+
+Keep in mind that the data to be requested and published between the source and the target will depend on the definition of the profiles and the corresponding read and write access permissions.
+
+Therefore, it is recommended to review the documentation corresponding to API Profiles to adequately define each profile for source and target and avoid data loss in the process. It's highly recommended to setup the exact same profile definition on both ends.
+
+Use [API configuration values](https://github.com/Ed-Fi-Alliance-OSS/Ed-Fi-API-Publisher/blob/main/docs/API-Publisher-Configuration.md#api-connections) like `--include` `--includeOnly` `--exclude` or `--excludeOnly` to indicate the data to be published.
+
+Take into account that Ed-Fi-API-Publisher won't allow you to provide a profile just on one end (source or target).
