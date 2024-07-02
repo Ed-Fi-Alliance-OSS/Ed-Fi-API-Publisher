@@ -15,3 +15,7 @@ Configure the AWS log storage parameters in the configuration file.
 Export AWS credentials to consume AWS parameters store inside the container
 
 ![](../images/docker/setup-aws-credentials.png)
+
+## Looking for a different output format?
+The default sink for AWSCloudWatch publish the log as a JsonFormat, if you want to use a different one, check the following link:
+[How to use the TextFormatter class](Use-TextFormatter-Serilog.md).
