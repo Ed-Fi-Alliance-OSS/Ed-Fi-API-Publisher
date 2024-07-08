@@ -7,7 +7,7 @@
 FROM mcr.microsoft.com/dotnet/aspnet@sha256:95f27052830db1c7a00e55f098ebda507204757907919f506a468387f7d856a4
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
-ENV VERSION="1.0.0"
+ARG VERSION=latest
 
 # Alpine image does not contain Globalization Cultures library so we need to install ICU library to get fopr LINQ expression to work
 # Disable the globaliztion invariant mode (set in base image)
@@ -22,7 +22,7 @@ COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnect
 COPY ./Docker/run.sh /app/run.sh
 
 RUN apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 postgresql13-client=~13 icu=~74 curl=~8 && \
-    wget -O /app/ApiPublisher.zip https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.ApiPublisher/versions/${VERSION}/content && \
+    wget -nv -O /app/ApiPublisher.zip https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.ApiPublisher/versions/${VERSION}/content && \
     unzip /app/ApiPublisher.zip 'EdFi.ApiPublisher/**' -d /app/ && \
     mv /app/EdFi.ApiPublisher/* /app/ && \
     rmdir /app/EdFi.ApiPublisher && \
