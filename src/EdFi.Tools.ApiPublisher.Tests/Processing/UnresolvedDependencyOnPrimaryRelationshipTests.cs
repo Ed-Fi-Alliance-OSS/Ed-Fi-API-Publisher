@@ -124,7 +124,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-            }
+				await Task.Yield();
+			}
 
             protected override async Task ActAsync()
             {

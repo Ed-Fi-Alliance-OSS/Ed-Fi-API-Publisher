@@ -227,7 +227,8 @@ public class RemediationIntegrationTests
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler,
                 nodeJsService);
-        }
+			await Task.Yield();
+		}
 
         protected override async Task ActAsync()
         {
@@ -494,7 +495,8 @@ public class RemediationIntegrationTests
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler,
                 nodeJsService);
-        }
+			await Task.Yield();
+		}
 
         protected override async Task ActAsync()
         {

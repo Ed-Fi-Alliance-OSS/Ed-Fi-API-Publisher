@@ -91,7 +91,8 @@ public class ProfileApplicationTests
                 _fakeSourceRequestHandler,
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler);
-        }
+			await Task.Yield();
+		}
 
         protected override async Task ActAsync()
         {
@@ -264,6 +265,7 @@ public class ProfileApplicationTests
                         targetApiConnectionDetails,
                         _fakeTargetRequestHandler))
                 .Message.ShouldBe("The source API connection has a ProfileName specified, but the target API connection does not. POST requests against a target API without the Profile-based context of the source data can lead to accidental data loss.");
-        }
+			await Task.Yield();
+		}
     }
 }

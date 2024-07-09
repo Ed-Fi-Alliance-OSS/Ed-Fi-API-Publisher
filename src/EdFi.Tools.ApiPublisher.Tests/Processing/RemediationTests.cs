@@ -137,7 +137,8 @@ public class RemediationTests
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler,
                 nodeJsService);
-        }
+			await Task.Yield();
+		}
 
         protected override async Task ActAsync()
         {
