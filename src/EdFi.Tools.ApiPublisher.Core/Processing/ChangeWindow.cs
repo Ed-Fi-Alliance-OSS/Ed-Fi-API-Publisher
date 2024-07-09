@@ -7,7 +7,7 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-    public class ChangeWindow
+	public class ChangeWindow
     {
         private long _minChangeVersion;
         private long _maxChangeVersion;

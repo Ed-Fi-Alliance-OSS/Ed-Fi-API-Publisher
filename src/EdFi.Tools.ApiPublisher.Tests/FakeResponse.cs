@@ -3,17 +3,14 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Collections;
-using System.Collections.Generic;
+using Newtonsoft.Json;
 using System.Net;
 using System.Net.Http;
 using System.Text;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
-    public static class FakeResponse
+	public static class FakeResponse
     {
         public static HttpResponseMessage OK(string content) =>
             new HttpResponseMessage(HttpStatusCode.OK)

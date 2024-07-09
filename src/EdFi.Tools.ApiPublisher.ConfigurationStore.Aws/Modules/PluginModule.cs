@@ -9,7 +9,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws.Modules
 {
-    public class PluginModule : Module
+	public class PluginModule : Module
     {
         protected override void Load(ContainerBuilder builder)
         {

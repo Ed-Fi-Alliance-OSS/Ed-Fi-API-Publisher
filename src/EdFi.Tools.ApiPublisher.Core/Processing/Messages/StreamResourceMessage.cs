@@ -6,11 +6,10 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 {
-    public class StreamResourceMessage
+	public class StreamResourceMessage
     {
         // ----------------------------
         // Resource-specific context

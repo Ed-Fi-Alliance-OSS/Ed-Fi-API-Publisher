@@ -3,12 +3,12 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-    public interface IChangeVersionProcessedWriter
+	public interface IChangeVersionProcessedWriter
     {
         Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,

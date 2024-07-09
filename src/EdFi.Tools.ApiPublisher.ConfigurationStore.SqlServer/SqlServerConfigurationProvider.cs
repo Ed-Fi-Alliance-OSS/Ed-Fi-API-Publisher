@@ -3,15 +3,15 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
 {
-    public class SqlServerConfigurationProvider : ConfigurationProvider
+	public class SqlServerConfigurationProvider : ConfigurationProvider
     {
         private readonly SqlServerConfigurationSource _sqlServerConfigurationSource;
 

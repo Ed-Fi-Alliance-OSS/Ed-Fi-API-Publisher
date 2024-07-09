@@ -3,14 +3,14 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using Npgsql;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using Npgsql;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
-    public class PostgreSqlConfigurationValuesProvider
+	public class PostgreSqlConfigurationValuesProvider
     {
         public IDictionary<string, string> GetConfigurationValues(
             string connectionString, 

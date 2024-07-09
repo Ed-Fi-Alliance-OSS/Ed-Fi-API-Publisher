@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Extensions
 {
-    public static class StringExtensions
+	public static class StringExtensions
     {
         public static string EnsureSuffixApplied(this string text, string suffix)
         {

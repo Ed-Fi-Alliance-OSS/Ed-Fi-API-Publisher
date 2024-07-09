@@ -6,11 +6,10 @@
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Microsoft.Extensions.Configuration;
 using Serilog;
-using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext
 {
-    public class PlaintextChangeVersionProcessedWriter : IChangeVersionProcessedWriter
+	public class PlaintextChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
         private readonly ILogger _logger = Log.Logger.ForContext(typeof(PlaintextChangeVersionProcessedWriter));
         

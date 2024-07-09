@@ -5,7 +5,7 @@
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
-    public class PostgresConfigurationStore
+	public class PostgresConfigurationStore
     {
         public PostgresConfiguration PostgreSql { get; set; }
     }

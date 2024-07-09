@@ -6,7 +6,7 @@
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-    public class ConnectionConfiguration
+	public class ConnectionConfiguration
     {
         public Connections Connections { get; set; }
     }

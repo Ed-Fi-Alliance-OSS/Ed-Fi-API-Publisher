@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
-    public class PostgreSqlConfigurationSource : IConfigurationSource
+	public class PostgreSqlConfigurationSource : IConfigurationSource
     {
         public string ConfigurationKeyPrefix { get; }
         public string ConnectionString { get; }

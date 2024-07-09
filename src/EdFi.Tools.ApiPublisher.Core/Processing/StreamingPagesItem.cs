@@ -3,13 +3,12 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
-using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-    public class StreamingPagesItem
+	public class StreamingPagesItem
     {
         public string[] DependencyPaths { get; set; }
         public ISourceBlock<ErrorItemMessage> CompletionBlock { get; set; }
