@@ -3,15 +3,15 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
-using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Serilog;
+using System;
+using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-    public class PublishErrorsBlocksFactory
+	public class PublishErrorsBlocksFactory
     {
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(PublishErrorsBlocksFactory));
         private IErrorPublisher _errorPublisher;

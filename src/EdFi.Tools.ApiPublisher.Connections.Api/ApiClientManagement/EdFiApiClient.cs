@@ -3,22 +3,22 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using Serilog;
-using Serilog.Events;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Web;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json.Linq;
+using Serilog;
+using Serilog.Events;
 using System.Diagnostics;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Runtime.Versioning;
+using System.Text;
+using System.Web;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
-    public class EdFiApiClient : IDisposable
+	public class EdFiApiClient : IDisposable
     {
         private readonly string _name;
         private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClient));

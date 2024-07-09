@@ -3,6 +3,16 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Tests.Helpers;
+using FakeItEasy;
+using Jering.Javascript.NodeJS;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using NUnit.Framework;
+using Serilog;
+using Shouldly;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,16 +21,6 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Processing;
-using EdFi.Tools.ApiPublisher.Tests.Helpers;
-using FakeItEasy;
-using Jering.Javascript.NodeJS;
-using Serilog;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using NUnit.Framework;
-using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing;
 

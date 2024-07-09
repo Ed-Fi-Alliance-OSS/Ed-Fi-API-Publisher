@@ -10,7 +10,7 @@ using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
 {
-    public class EdFiApiConnectionsConfigurationBuilderEnhancer : IConfigurationBuilderEnhancer
+	public class EdFiApiConnectionsConfigurationBuilderEnhancer : IConfigurationBuilderEnhancer
     {
         private readonly ILogger _logger = Log.Logger.ForContext(typeof(EdFiApiConnectionsConfigurationBuilderEnhancer));
         private readonly INamedApiConnectionDetailsReader _namedApiConnectionDetailsReader;

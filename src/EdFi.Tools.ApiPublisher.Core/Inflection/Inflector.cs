@@ -12,10 +12,10 @@ using static System.Text.RegularExpressions.Regex;
 
 namespace EdFi.Common.Inflection
 {
-    // Done: GKM - Unify this with the instance in EdFi.Ods.CodeGen.
-    // In the meantime, duplicate any changes made to this file in the corresponding class.
+	// Done: GKM - Unify this with the instance in EdFi.Ods.CodeGen.
+	// In the meantime, duplicate any changes made to this file in the corresponding class.
 
-    /*
+	/*
      * SubSonic - http://subsonicproject.com
      *
      * The contents of this file are subject to the New BSD
@@ -29,10 +29,10 @@ namespace EdFi.Common.Inflection
      * rights and limitations under the License.
     */
 
-    /// <summary>
-    ///     Summary for the Inflector class
-    /// </summary>
-    public static class Inflector
+	/// <summary>
+	///     Summary for the Inflector class
+	/// </summary>
+	public static class Inflector
     {
         private static readonly List<InflectorRule> _plurals = new List<InflectorRule>();
         private static readonly List<InflectorRule> _singulars = new List<InflectorRule>();

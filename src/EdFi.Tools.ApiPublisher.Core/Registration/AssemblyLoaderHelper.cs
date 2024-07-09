@@ -3,6 +3,8 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Tools.ApiPublisher.Core.Extensions;
+using Serilog;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -10,12 +12,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
-using Serilog;
 
 namespace EdFi.Ods.Api.Helpers
 {
-    public static class AssemblyLoaderHelper
+	public static class AssemblyLoaderHelper
     {
         private static readonly ILogger _logger = Log.ForContext(typeof(AssemblyLoaderHelper));
         private const string AssemblyMetadataSearchString = "assemblyMetadata.json";

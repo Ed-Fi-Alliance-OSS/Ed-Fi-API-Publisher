@@ -5,7 +5,7 @@
 
 namespace EdFi.Tools.ApiPublisher.Core.Helpers
 {
-    public static class VersionExtensions
+	public static class VersionExtensions
     {
         public static bool IsAtLeast(this Version apiVersion, int majorVersion, int minorVersion)
         {

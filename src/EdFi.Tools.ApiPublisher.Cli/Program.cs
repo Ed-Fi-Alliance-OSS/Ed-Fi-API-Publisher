@@ -23,7 +23,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {
-    internal class Program
+	internal class Program
     {
         private static readonly ILogger _logger = Log.ForContext(typeof(Program));
 

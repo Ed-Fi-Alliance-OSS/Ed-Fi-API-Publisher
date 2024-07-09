@@ -3,11 +3,11 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Net.Http.Headers;
-using System.Xml.Linq;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using Serilog;
+using System.Net.Http.Headers;
+using System.Xml.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 

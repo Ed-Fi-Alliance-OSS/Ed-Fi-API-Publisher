@@ -7,7 +7,7 @@ using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
 {
-    public class GetItemForKeyChangeMessage
+	public class GetItemForKeyChangeMessage
     {
         /// <summary>
         /// Gets or sets the relative URL for the resource whose key is to be changed.
