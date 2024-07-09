@@ -21,8 +21,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public string Method { get; set; }
         
         public string ResourceUrl { get; set; }
-        
-        public string? Id { get; set; }
+
+#nullable enable
+		public string? Id { get; set; }
 
         //[JsonIgnore]
         public JObject? Body { get; set; }
