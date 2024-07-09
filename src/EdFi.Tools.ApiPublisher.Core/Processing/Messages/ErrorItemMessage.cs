@@ -3,13 +3,13 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using Newtonsoft.Json.Linq;
 using System;
 using System.Net;
-using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 {
-    public class ErrorItemMessage
+	public class ErrorItemMessage
     {
         public ErrorItemMessage()
         {
@@ -21,8 +21,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public string Method { get; set; }
         
         public string ResourceUrl { get; set; }
-        
-        public string? Id { get; set; }
+
+#nullable enable
+		public string? Id { get; set; }
 
         //[JsonIgnore]
         public JObject? Body { get; set; }

@@ -3,19 +3,19 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using Newtonsoft.Json;
+using Serilog;
 using System.Threading;
 using System.Threading.Tasks;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using Serilog;
-using Newtonsoft.Json;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-    /// <summary>
-    /// Publishes errors without the original request content (due to security considerations) by logging
-    /// the JSON serialized representations of the <see cref="ErrorItemMessage" />.
-    /// </summary>
-    public class SerilogErrorPublisher : IErrorPublisher
+	/// <summary>
+	/// Publishes errors without the original request content (due to security considerations) by logging
+	/// the JSON serialized representations of the <see cref="ErrorItemMessage" />.
+	/// </summary>
+	public class SerilogErrorPublisher : IErrorPublisher
     {
         private readonly ILogger _logger = Log.Logger.ForContext(typeof(SerilogErrorPublisher));
 

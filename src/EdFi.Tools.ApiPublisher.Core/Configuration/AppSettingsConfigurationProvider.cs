@@ -3,12 +3,12 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
 using Microsoft.Extensions.Configuration;
+using System;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-    public class AppSettingsConfigurationProvider : IAppSettingsConfigurationProvider
+	public class AppSettingsConfigurationProvider : IAppSettingsConfigurationProvider
     {
         private readonly Lazy<IConfiguration> _configuration;
         

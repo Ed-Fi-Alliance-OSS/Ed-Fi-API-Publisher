@@ -7,7 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext
 {
-    internal class PlainTextNamedConnectionConfiguration
+	internal class PlainTextNamedConnectionConfiguration
     {
         public ApiConnectionDetails[] Connections { get; set; }
     }

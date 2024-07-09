@@ -3,10 +3,10 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using System;
 using System.Threading.Tasks;
 using System.Xml.Linq;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Core.Dependencies;
 

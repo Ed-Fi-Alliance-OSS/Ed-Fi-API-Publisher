@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 
 namespace EdFi.Common.Inflection
 {
-    public static class CompositeTermInflector
+	public static class CompositeTermInflector
     {
         private static readonly HashSet<string> IgnoredSuffixes = new HashSet<string>();
 

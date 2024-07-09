@@ -4,12 +4,11 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext
 {
-    public class PlainTextJsonFileNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
+	public class PlainTextJsonFileNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {
         public ApiConnectionDetails GetNamedApiConnectionDetails(
             string apiConnectionName,

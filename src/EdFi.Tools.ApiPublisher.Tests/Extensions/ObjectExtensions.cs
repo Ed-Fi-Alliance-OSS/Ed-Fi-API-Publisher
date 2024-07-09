@@ -15,7 +15,7 @@ using System.Web;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Extensions
 {
-    public static class ObjectExtensions
+	public static class ObjectExtensions
     {
         private static readonly ILogger _logger = Log.ForContext(typeof(ObjectExtensions));
 

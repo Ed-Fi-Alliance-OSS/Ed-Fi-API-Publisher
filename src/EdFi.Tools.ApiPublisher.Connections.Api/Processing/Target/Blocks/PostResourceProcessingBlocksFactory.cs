@@ -3,14 +3,10 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Collections.Concurrent;
-using System.Net;
-using System.Text;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
+using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -19,18 +15,21 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Jering.Javascript.NodeJS;
-using Serilog;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
-using JsonSerializer = System.Text.Json.JsonSerializer;
+using Serilog;
 using Serilog.Events;
-using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
-using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
+using System.Collections.Concurrent;
+using System.Net;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks.Dataflow;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 {
-    public class PostResourceProcessingBlocksFactory : IProcessingBlocksFactory<PostItemMessage>
+	public class PostResourceProcessingBlocksFactory : IProcessingBlocksFactory<PostItemMessage>
     {
         private readonly ILogger _logger = Log.ForContext(typeof(PostResourceProcessingBlocksFactory));
         private readonly INodeJSService _nodeJsService;

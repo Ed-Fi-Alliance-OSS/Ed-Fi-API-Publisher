@@ -7,7 +7,7 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.Core.Helpers
 {
-    public class Version : IEquatable<Version>
+	public class Version : IEquatable<Version>
     {
         public Version(string versionText)
         {

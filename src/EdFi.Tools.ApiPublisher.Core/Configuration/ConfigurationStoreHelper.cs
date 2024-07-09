@@ -5,7 +5,7 @@
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-    public static class ConfigurationStoreHelper
+	public static class ConfigurationStoreHelper
     {
         public static string Key(string apiConnectionName)
         {

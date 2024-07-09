@@ -8,7 +8,7 @@ using System.Reflection;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Resources
 {
-    public static class TestData
+	public static class TestData
     {
         public static class Dependencies
         {

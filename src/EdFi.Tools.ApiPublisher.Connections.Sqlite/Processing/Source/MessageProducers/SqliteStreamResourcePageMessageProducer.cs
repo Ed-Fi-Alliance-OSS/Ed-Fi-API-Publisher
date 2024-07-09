@@ -3,15 +3,15 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Data;
-using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using Serilog;
 using Microsoft.Data.Sqlite;
+using Serilog;
+using System.Data;
+using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Source.MessageProducers;
 

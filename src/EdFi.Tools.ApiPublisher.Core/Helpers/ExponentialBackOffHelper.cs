@@ -9,7 +9,7 @@ using System.Threading;
 
 namespace EdFi.Tools.ApiPublisher.Core.Helpers
 {
-    public static class ExponentialBackOffHelper
+	public static class ExponentialBackOffHelper
     {
         private static readonly ILogger _logger = Log.ForContext(typeof(ExponentialBackOffHelper));
         

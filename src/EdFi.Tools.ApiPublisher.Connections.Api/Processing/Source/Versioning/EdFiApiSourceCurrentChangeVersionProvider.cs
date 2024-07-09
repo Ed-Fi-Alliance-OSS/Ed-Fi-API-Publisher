@@ -5,8 +5,8 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
-using Serilog;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Versioning;
 

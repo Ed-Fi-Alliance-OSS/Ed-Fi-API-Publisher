@@ -3,11 +3,6 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
-using System.IO;
-using System.Net;
-using System.Reflection;
-using System.Threading.Tasks;
 using Autofac.Features.Indexed;
 using Bogus;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
@@ -30,15 +25,16 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Models;
-using EdFi.Tools.ApiPublisher.Tests.Processing;
 using FakeItEasy;
-using Serilog;
 using Jering.Javascript.NodeJS;
 using Microsoft.Extensions.Configuration;
+using Serilog;
+using System;
+using System.Net;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 {
-    public class TestHelpers
+	public class TestHelpers
     {
         public const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
         // public const string AnyResourcePattern = "/ed-fi/\\w+";

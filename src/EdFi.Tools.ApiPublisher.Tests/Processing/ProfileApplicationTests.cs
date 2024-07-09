@@ -3,12 +3,6 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
-using System.Linq;
-using System.Net.Http;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
@@ -16,6 +10,12 @@ using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using NUnit.Framework;
 using Shouldly;
+using System;
+using System.Linq;
+using System.Net.Http;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing;
 
@@ -91,7 +91,8 @@ public class ProfileApplicationTests
                 _fakeSourceRequestHandler,
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler);
-        }
+			await Task.Yield();
+		}
 
         protected override async Task ActAsync()
         {
@@ -264,6 +265,7 @@ public class ProfileApplicationTests
                         targetApiConnectionDetails,
                         _fakeTargetRequestHandler))
                 .Message.ShouldBe("The source API connection has a ProfileName specified, but the target API connection does not. POST requests against a target API without the Profile-based context of the source data can lead to accidental data loss.");
-        }
+			await Task.Yield();
+		}
     }
 }
