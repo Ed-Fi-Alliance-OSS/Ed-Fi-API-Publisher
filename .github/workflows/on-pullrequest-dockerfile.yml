@@ -50,7 +50,7 @@ jobs:
             PACKAGE="2d9cb68f-2115-4791-a207-c6ae35d71e8d"
   
             VERSIONS=$(curl https://feeds.dev.azure.com/ed-fi-alliance/$FEED/_apis/Packaging/Feeds/EdFi/Packages/$PACKAGE)
-            LATEST=$(echo $VERSIONS | jq '[.versions[] | select(.views[].name == "Release") | .version | select(startswith("1."))][0]')
+            LATEST=$(echo $VERSIONS | jq '.versions[] | select(.isLatest == true) | .version')
             echo "latest version: $LATEST"
             echo "VERSION=$LATEST" >> $GITHUB_OUTPUT
 
