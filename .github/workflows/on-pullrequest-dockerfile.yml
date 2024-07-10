@@ -35,8 +35,7 @@ jobs:
       matrix:
         dockerfile:
           [
-            { name: "publisher:pre", path: "src/Dockerfile", type: "published" },
-            { name: "development:pre", path: "src/dev.Dockerfile", type: "local" },
+            { name: "development", path: "src/dev.Dockerfile", type: "local" }
           ]
     steps:
       - name: Checkout code
