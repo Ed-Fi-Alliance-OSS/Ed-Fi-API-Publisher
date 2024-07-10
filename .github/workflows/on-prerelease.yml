@@ -113,7 +113,8 @@ jobs:
         shell: pwsh
         run: |
           $packageName = "${{ env.PACKAGE_NAME }}"
-
+          $version = "${{ needs.pack.outputs.data-import-version }}"
+          
           $url = "https://github.com/microsoft/sbom-tool/releases/latest/download/sbom-tool-linux-x64"
           $out = "$($env:RUNNER_TEMP)/sbom-tool"
           Invoke-RestMethod -Uri $url -OutFile $out
@@ -122,16 +123,16 @@ jobs:
           Get-ChildItem -Include "$packageName.*.nupkg" -Recurse | ForEach-Object { $_.FullName } > buildfilelist.txt
           New-Item -Path manifest -Type Directory
 
-          $version = "${{ needs.pack.outputs.api-pub-version }}"
+          dotnet tool install --global Microsoft.Sbom.DotNetTool
 
-          &$out generate `
+          sbom-tool generate `
               -b ./ `
               -bl ./buildfilelist.txt `
               -bc "./src/EdFi.Tools.ApiPublisher.Cli" `
               -pn "$packageName" `
               -pv $version `
               -nsb https://ed-fi.org `
-              -m manifest `
+              -m ./ `
               -ps "Ed-Fi Alliance"
 
       - name: Upload SBOM
@@ -139,7 +140,7 @@ jobs:
         uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
           name: ${{ env.PACKAGE_NAME }}-SBOM
-          path: ./manifest
+          path: ${{ env.MANIFEST_FILE }}
           if-no-files-found: error
           retention-days: 30
 
@@ -148,7 +149,7 @@ jobs:
         shell: bash
         run: |
           # sha256sum returns "<hashcode>  <name of file". Split that and return only the <hashcode>.
-          sbom_hash=$(sha256sum ./manifest/${{ env.MANIFEST_FILE }} | awk '{split($0,a); print a[1]}')
+          sbom_hash=$(sha256sum ./${{ env.MANIFEST_FILE }} | awk '{split($0,a); print a[1]}')
           echo "sbom-hash-code=$sbom_hash" >> $GITHUB_OUTPUT
 
   sbom-attach:
