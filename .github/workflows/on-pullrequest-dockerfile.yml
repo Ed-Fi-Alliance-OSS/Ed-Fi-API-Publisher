@@ -35,8 +35,8 @@ jobs:
       matrix:
         dockerfile:
           [
-            { name: "publisher", path: "src/Dockerfile", type: "published" },
-            { name: "development", path: "src/dev.Dockerfile", type: "local" },
+            { name: "publisher:pre", path: "src/Dockerfile", type: "published" },
+            { name: "development:pre", path: "src/dev.Dockerfile", type: "local" },
           ]
     steps:
       - name: Checkout code
@@ -73,7 +73,7 @@ jobs:
           cd $folder
           dockerfile=$(echo ${{matrix.dockerfile.path}} | awk -F"/" '{print $NF}')
 
-          docker build -f $dockerfile -t "${{ matrix.dockerfile.name }}:${{ steps.versions.outputs.VERSION }}" --build-arg="VERSION=${{ steps.versions.outputs.VERSION }}" .
+          docker build -f $dockerfile -t ${{ matrix.dockerfile.name }} --build-arg="VERSION=${{ steps.versions.outputs.VERSION }}" .
 
       - name: Analyze
         uses: docker/scout-action@67eb1afe777307506aaecb9acd9a0e0389cb99ae # v1.5.0
