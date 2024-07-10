@@ -5,7 +5,7 @@
 
 
 # tag sdk:8.0 alpine
-FROM mcr.microsoft.com/dotnet/sdk@sha256:91cb46b0ee207d0df53e2e38f2e4013fe2668ab52dcca13c971afbbef94c83ef
+FROM mcr.microsoft.com/dotnet/sdk@sha256:91cb46b0ee207d0df53e2e38f2e4013fe2668ab52dcca13c971afbbef94c83ef AS build
 WORKDIR /source
 
 COPY ./EdFi.Tools.ApiPublisher.Cli/ EdFi.Tools.ApiPublisher.Cli/
@@ -36,8 +36,16 @@ RUN dotnet publish -c Release -o /app/EdFi.Tools.ApiPiblisher.Cli --no-build --n
 
 
 # Tag aspnet:8.0 alpine
-FROM mcr.microsoft.com/dotnet/aspnet@sha256:ba398f8c6a0469436cc115bfbd278002baf4ce9423b6d8a9e904da6adc31a23d
+FROM mcr.microsoft.com/dotnet/aspnet@sha256:ba398f8c6a0469436cc115bfbd278002baf4ce9423b6d8a9e904da6adc31a23d AS runtimeBase
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
+
+RUN apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 icu=~74 curl=~8 && \
+    dos2unix /app/*.json && \
+    dos2unix /app/*.sh && \
+    chmod 700 /app/*.sh -- ** && \
+    rm -f /app/*.pdb && \
+    rm -f /app/*.exe
+FROM runtimebase AS setup
 
 # Alpine image does not contain Globalization Cultures library so we need to install ICU library to get fopr LINQ expression to work
 # Disable the globaliztion invariant mode (set in base image)
@@ -51,12 +59,5 @@ COPY ./Docker/configurationStoreSettings.template.json /app/configurationStoreSe
 COPY ./Docker/logging.template.json /app/logging.template.json
 COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnections.template.json
 COPY ./Docker/run.sh /app/run.sh
-
-RUN apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 icu=~74 curl=~8 && \
-    dos2unix /app/*.json && \
-    dos2unix /app/*.sh && \
-    chmod 700 /app/*.sh -- ** && \
-    rm -f /app/*.pdb && \
-    rm -f /app/*.exe
 
 ENTRYPOINT [ "/app/run.sh" ]
