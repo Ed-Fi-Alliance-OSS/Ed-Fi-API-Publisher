@@ -89,4 +89,3 @@ jobs:
         uses: github/codeql-action/upload-sarif@cf7e9f23492505046de9a37830c3711dd0f25bb3 #codeql-bundle-v2.16.2
         with:
           sarif_file: sarif-${{ matrix.dockerfile.name }}.output.json
-
