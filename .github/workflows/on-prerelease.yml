@@ -162,7 +162,7 @@ jobs:
       contents: write
     steps:
       - name: Download the SBOM
-        uses: slsa-framework/slsa-github-generator/.github/actions/secure-download-artifact@main
+        uses: Ed-Fi-Alliance-OSS/slsa-github-generator/.github/actions/secure-download-artifact@main
         with:
           name: "${{ env.PACKAGE_NAME }}-SBOM"
           path: ${{ env.MANIFEST_FILE }}
