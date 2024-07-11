@@ -5,7 +5,7 @@
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
 {
-    public class ChangeKeyMessage
+	public class ChangeKeyMessage
     {
         /// <summary>
         /// Gets or sets the relative URL for the resource whose key is to be changed.

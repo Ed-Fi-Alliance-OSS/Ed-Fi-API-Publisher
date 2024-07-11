@@ -3,18 +3,18 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
-using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Npgsql;
+using System;
+using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
-    public class PostgreSqlConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
+	public class PostgreSqlConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,

@@ -3,19 +3,19 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Collections.Concurrent;
-using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using Serilog;
 using Microsoft.Data.Sqlite;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Serilog;
 using Serilog.Events;
+using System.Collections.Concurrent;
+using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Blocks;
 

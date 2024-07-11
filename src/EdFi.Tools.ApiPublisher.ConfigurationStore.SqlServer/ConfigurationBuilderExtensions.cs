@@ -8,7 +8,7 @@ using EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer;
 // ReSharper disable once CheckNamespace
 namespace Microsoft.Extensions.Configuration
 {
-    public static class ConfigurationBuilderExtensions
+	public static class ConfigurationBuilderExtensions
     {
         public static IConfigurationBuilder AddConfigurationStoreForSqlServer(
             this IConfigurationBuilder builder,

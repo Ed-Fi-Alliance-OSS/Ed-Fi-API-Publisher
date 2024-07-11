@@ -3,21 +3,21 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
+using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using Serilog;
+using Serilog.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
-using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
-using Serilog;
-using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-    public class StreamResourceBlockFactory
+	public class StreamResourceBlockFactory
     {
         private readonly ILogger _logger = Log.ForContext(typeof(StreamResourceBlockFactory));
         private readonly IStreamResourcePageMessageProducer _streamResourcePageMessageProducer;

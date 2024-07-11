@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload Packages as Artifacts
         if: success()
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
           name: "${{ env.PACKAGE_NAME }}-NuGet"
           path: ./*.nupkg
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Get Artifacts
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a #v3.0.2
+        uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 #v4.1.1
         with:
           name: ${{ env.PACKAGE_NAME }}-NuGet
 
@@ -113,7 +113,8 @@ jobs:
         shell: pwsh
         run: |
           $packageName = "${{ env.PACKAGE_NAME }}"
-
+          $version = "${{ needs.pack.outputs.data-import-version }}"
+          
           $url = "https://github.com/microsoft/sbom-tool/releases/latest/download/sbom-tool-linux-x64"
           $out = "$($env:RUNNER_TEMP)/sbom-tool"
           Invoke-RestMethod -Uri $url -OutFile $out
@@ -122,24 +123,24 @@ jobs:
           Get-ChildItem -Include "$packageName.*.nupkg" -Recurse | ForEach-Object { $_.FullName } > buildfilelist.txt
           New-Item -Path manifest -Type Directory
 
-          $version = "${{ needs.pack.outputs.api-pub-version }}"
+          dotnet tool install --global Microsoft.Sbom.DotNetTool
 
-          &$out generate `
+          sbom-tool generate `
               -b ./ `
               -bl ./buildfilelist.txt `
               -bc "./src/EdFi.Tools.ApiPublisher.Cli" `
               -pn "$packageName" `
               -pv $version `
               -nsb https://ed-fi.org `
-              -m manifest `
+              -m ./ `
               -ps "Ed-Fi Alliance"
 
       - name: Upload SBOM
         if: success()
-        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
           name: ${{ env.PACKAGE_NAME }}-SBOM
-          path: ./manifest
+          path: ${{ env.MANIFEST_FILE }}
           if-no-files-found: error
           retention-days: 30
 
@@ -148,7 +149,7 @@ jobs:
         shell: bash
         run: |
           # sha256sum returns "<hashcode>  <name of file". Split that and return only the <hashcode>.
-          sbom_hash=$(sha256sum ./manifest/${{ env.MANIFEST_FILE }} | awk '{split($0,a); print a[1]}')
+          sbom_hash=$(sha256sum ./${{ env.MANIFEST_FILE }} | awk '{split($0,a); print a[1]}')
           echo "sbom-hash-code=$sbom_hash" >> $GITHUB_OUTPUT
 
   sbom-attach:
@@ -162,7 +163,7 @@ jobs:
       contents: write
     steps:
       - name: Download the SBOM
-        uses: slsa-framework/slsa-github-generator/.github/actions/secure-download-artifact@7f4fdb871876c23e455853d694197440c5a91506  # v1.5.0
+        uses: Ed-Fi-Alliance-OSS/slsa-github-generator/.github/actions/secure-download-artifact@main
         with:
           name: "${{ env.PACKAGE_NAME }}-SBOM"
           path: ${{ env.MANIFEST_FILE }}
@@ -223,7 +224,7 @@ jobs:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
 
       - name: Get Artifact
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a #v3.0.2
+        uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 #v4.1.1
         with:
           name: ${{ env.PACKAGE_NAME }}-NuGet
 

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
-    public class PostgreSqlConfigurationProvider : ConfigurationProvider
+	public class PostgreSqlConfigurationProvider : ConfigurationProvider
     {
         private readonly PostgreSqlConfigurationSource _postgreSqlConfigurationSource;
 

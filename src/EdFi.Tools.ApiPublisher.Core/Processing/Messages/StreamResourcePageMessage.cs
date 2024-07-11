@@ -6,15 +6,13 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using EdFi.Tools.ApiPublisher.Core.ApiClientManagement;
-using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 {
-    /// <summary>
-    /// Represents details needed for obtaining a page of JSON data from the source connection.
-    /// </summary>
-    public class StreamResourcePageMessage<TProcessDataMessage>
+	/// <summary>
+	/// Represents details needed for obtaining a page of JSON data from the source connection.
+	/// </summary>
+	public class StreamResourcePageMessage<TProcessDataMessage>
     {
         // ----------------------------
         // Resource-specific context

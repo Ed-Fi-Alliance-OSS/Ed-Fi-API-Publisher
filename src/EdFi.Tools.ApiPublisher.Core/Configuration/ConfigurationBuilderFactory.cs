@@ -3,13 +3,13 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
-using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-    public class ConfigurationBuilderFactory 
+	public class ConfigurationBuilderFactory 
     {
         /// <summary>
         /// Creates a configuration builder incorporating settings files, environment variables and command-line arguments.

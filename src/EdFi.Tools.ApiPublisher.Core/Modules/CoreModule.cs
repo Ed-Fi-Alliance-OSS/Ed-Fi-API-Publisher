@@ -14,7 +14,7 @@ using EdFi.Tools.ApiPublisher.Core.Versioning;
 
 namespace EdFi.Tools.ApiPublisher.Core.Modules
 {
-    public class CoreModule : Module
+	public class CoreModule : Module
     {
         protected override void Load(ContainerBuilder builder)
         {

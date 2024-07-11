@@ -3,14 +3,14 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
-using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using System;
+using System.Text.RegularExpressions;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Serialization
 {
-    public class Iso8601UtcDateOnlyConverter : IsoDateTimeConverter
+	public class Iso8601UtcDateOnlyConverter : IsoDateTimeConverter
     {
         // All valid US English time formats will contain either a time separator ':' or an AM/PM designator
         private readonly Regex _timePortionRegex = new Regex(":|am|pm", RegexOptions.Compiled | RegexOptions.IgnoreCase);

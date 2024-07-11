@@ -7,7 +7,6 @@ using Autofac;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers;
 using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
-using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
 

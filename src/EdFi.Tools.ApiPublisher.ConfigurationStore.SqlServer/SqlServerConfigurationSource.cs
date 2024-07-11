@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
 {
-    public class SqlServerConfigurationSource : IConfigurationSource
+	public class SqlServerConfigurationSource : IConfigurationSource
     {
         public string ConfigurationKey { get; }
         public string ConnectionString { get; }

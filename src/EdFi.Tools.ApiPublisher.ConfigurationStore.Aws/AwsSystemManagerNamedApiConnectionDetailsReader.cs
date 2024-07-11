@@ -9,7 +9,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
 {
-    public class AwsSystemManagerNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
+	public class AwsSystemManagerNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {
         public ApiConnectionDetails GetNamedApiConnectionDetails(
             string apiConnectionName,

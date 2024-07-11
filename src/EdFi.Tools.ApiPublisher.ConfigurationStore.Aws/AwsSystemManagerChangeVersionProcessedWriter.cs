@@ -3,20 +3,20 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
-using System.Threading.Tasks;
 using Amazon.SimpleSystemsManagement;
 using Amazon.SimpleSystemsManagement.Model;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using Serilog;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
+using System;
+using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
 {
-    public class AwsSystemManagerChangeVersionProcessedWriter : IChangeVersionProcessedWriter
+	public class AwsSystemManagerChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
         private readonly ILogger _logger = Log.ForContext(typeof(AwsSystemManagerChangeVersionProcessedWriter));
         

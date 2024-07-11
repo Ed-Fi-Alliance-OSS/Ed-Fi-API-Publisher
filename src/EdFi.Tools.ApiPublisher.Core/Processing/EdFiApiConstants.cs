@@ -5,7 +5,7 @@
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-    public static class EdFiApiConstants
+	public static class EdFiApiConstants
     {
         /// <summary>
         /// Gets the path suffix to the "deletes" child resource under each of the data management API's resources.

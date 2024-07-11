@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
-    public class HttpClientHandlerFakeBridge : HttpClientHandler
+	public class HttpClientHandlerFakeBridge : HttpClientHandler
     {
         private readonly IFakeHttpRequestHandler _handler;
 

@@ -3,13 +3,12 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Collections.Concurrent;
-using System.Net.Http.Headers;
-using System.Text;
 using EdFi.Common.Inflection;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using Microsoft.Extensions.Primitives;
-using Newtonsoft.Json;
+using System.Collections.Concurrent;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 

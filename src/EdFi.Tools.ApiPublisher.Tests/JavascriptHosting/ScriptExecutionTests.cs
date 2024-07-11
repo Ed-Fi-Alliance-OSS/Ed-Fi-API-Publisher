@@ -4,14 +4,14 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 #nullable enable
-using System.Threading.Tasks;
 using Jering.Javascript.NodeJS;
 using NUnit.Framework;
 using Shouldly;
+using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.JavascriptHosting
 {
-    [TestFixture]
+	[TestFixture]
     public class ScriptExecutionTests
     {
         class Result

@@ -7,7 +7,6 @@ using Autofac;
 using EdFi.Tools.ApiPublisher.Connections.Api.Modules;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Plugin;
-using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api;

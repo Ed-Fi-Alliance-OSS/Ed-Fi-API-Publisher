@@ -3,10 +3,6 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System.Net;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
@@ -17,6 +13,10 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Shouldly;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing;
@@ -137,7 +137,8 @@ public class RemediationTests
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler,
                 nodeJsService);
-        }
+			await Task.Yield();
+		}
 
         protected override async Task ActAsync()
         {

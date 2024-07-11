@@ -17,12 +17,27 @@ jobs:
   report-test-results:
     name: Report Test Results
     runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion != 'skipped'
+
+    permissions:
+      checks: write
+      pull-requests: write
+      # actions: read
+      # only needed for private repository
+      # contents: read
+      # issues: read
+
     steps:
-      - name: Upload Test Results
-        uses: dorny/test-reporter@eaa763f6ffc21c7a37837f56cd5f9737f27fc6c8 # v1.8.0
+      - name: Download and Extract Artifacts
+        uses: dawidd6/action-download-artifact@71072fbb1229e1317f1a8de6b04206afb461bd67 # v3.1.2
         with:
-          artifact: csharp-tests
-          name: C# Unit Test Results
-          path: "**/*.trx"
-          reporter: dotnet-trx
-          fail-on-error: false
+          run_id: ${{ github.event.workflow_run.id }}
+          path: artifacts
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@f355d34d53ad4e7f506f699478db2dd71da9de5f # v2.15.1
+        with:
+          commit: ${{ github.event.workflow_run.head_sha }}
+          event_file: artifacts/Event File/event.json
+          event_name: ${{ github.event.workflow_run.event }}
+          files: "artifacts/**/*.trx"
