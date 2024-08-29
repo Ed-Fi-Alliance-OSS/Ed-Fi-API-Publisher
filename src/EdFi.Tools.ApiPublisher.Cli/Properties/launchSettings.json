@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "EdFi.Tools.ApiPublisher.Cli": {
+      "commandName": "Project",
+      "commandLineArgs": ".\\EdFiApiPublisher.exe --sourceName=AzureDavid --targetName=dockerDavid --sourceUrl=https://api.ed-fi.org/v7.1/api/ --sourceKey=RvcohKz9zHI4 --sourceSecret=E1iEFusaNf81xzCxwHfbolkC --targetUrl=https://localhost/api/ --targetKey=DbXHLFvuRgSK --targetSecret=KpMOlOoD9FzdKiIM2qrMnfBK --ignoreIsolation=true --maxDegreeOfParallelismForPostResourceItem=1 --maxDegreeOfParallelismForStreamResourcePages=1 --includeDescriptors=true --ignoreSslErrors=true --includeOnly=/ed-fi/people --useChangeVersionPaging=true"
+    }
+  }
+}

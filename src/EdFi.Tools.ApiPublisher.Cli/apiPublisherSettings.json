@@ -14,7 +14,8 @@
         "changeVersionPagingWindowSize": 25000,
         "enableRateLimit": false,
         "rateLimitNumberExecutions": 100,
-        "rateLimitTimeLimitMinutes": 1
+        "rateLimitTimeLimitMinutes": 1,
+        "useReversePaging": false
     },
     "authorizationFailureHandling": [
         {
