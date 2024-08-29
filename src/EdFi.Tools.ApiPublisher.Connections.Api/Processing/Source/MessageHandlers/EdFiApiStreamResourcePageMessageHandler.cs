@@ -177,18 +177,25 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         break;
                     }
 
-                    // Perform limit/offset final page check (for need for possible continuation)
-                    if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
+                    if (!options.useReversePaging)
                     {
-                        if (_logger.IsEnabled(LogEventLevel.Debug))
+                        // Perform limit/offset final page check (for need for possible continuation)
+                        if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
                         {
-                            _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
+                            if (_logger.IsEnabled(LogEventLevel.Debug))
+                            {
+                                _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
+                            }
+
+                            // Looks like there could be more data
+                            offset += limit;
+
+                            continue;
                         }
-
-                        // Looks like there could be more data
-                        offset += limit;
-
-                        continue;
+                    }
+                    else
+                    {
+                        break;
                     }
 
                 }
@@ -205,7 +212,24 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
                     }
                 }
+
                 break;
+
+                //// Perform limit/offset final page check (for need for possible continuation)
+                //if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
+                //{
+                //    if (_logger.IsEnabled(LogEventLevel.Debug))
+                //    {
+                //        _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
+                //    }
+
+                //    // Looks like there could be more data
+                //    offset += limit;
+
+                //    continue;
+                //}
+
+                //break;
             }
             while (true);
 
