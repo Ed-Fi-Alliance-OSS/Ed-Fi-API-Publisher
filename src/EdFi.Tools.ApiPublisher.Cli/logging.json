@@ -1,7 +1,7 @@
 {
   "Serilog": {
     "MinimumLevel": {
-      "Default": "Information"
+      "Default": "Debug"
     },
     "Using": [ "Serilog.Sinks.Console", "Serilog.Sinks.File" ],
     "WriteTo:Console": {

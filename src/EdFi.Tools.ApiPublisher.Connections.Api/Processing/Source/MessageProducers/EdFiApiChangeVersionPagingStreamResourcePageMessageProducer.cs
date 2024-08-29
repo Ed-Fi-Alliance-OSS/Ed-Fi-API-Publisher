@@ -97,8 +97,19 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                     continue;
                 }
 
-                int offsetOnWindow = 0;
-                while (offsetOnWindow < totalCountOnWindow)
+                //int offsetOnWindow = 0;
+
+                /// APIPUB-68
+                bool isLastOne = false;
+                long offsetOnWindow = totalCountOnWindow - limit;
+                if (offsetOnWindow < 0)
+                {
+                    offsetOnWindow = 0;
+                    isLastOne = true;
+                }
+
+                int limitOnWindow = totalCountOnWindow < limit ? (int)totalCountOnWindow : limit;
+                while ((offsetOnWindow > 0 || isLastOne == true) && totalCountOnWindow > 0)
                 {
                     var pageMessage = new StreamResourcePageMessage<TProcessDataMessage>
                     {
@@ -107,7 +118,7 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                         PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
 
                         // Page-strategy specific context
-                        Limit = limit,
+                        Limit = limitOnWindow,
                         Offset = offsetOnWindow,
 
                         // Global processing context                   
@@ -118,7 +129,15 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                     };
 
                     pageMessages.Add(pageMessage);
-                    offsetOnWindow += limit;
+                    offsetOnWindow -= limit;
+                    if (isLastOne)
+                        break;
+                    if (offsetOnWindow < 0)
+                    {
+                        limitOnWindow = limit + (int)offsetOnWindow;
+                        offsetOnWindow = 0;
+                        isLastOne = true;
+                    }
                 }
                 changeVersionWindow++;
 
