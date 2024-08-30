@@ -72,9 +72,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--whatIf"] = "Options:WhatIf",
                     ["--useChangeVersionPaging"] = "Options:UseChangeVersionPaging",
                     ["--changeVersionPagingWindowSize"] = "Options:ChangeVersionPagingWindowSize",
+					["--enableRateLimit"] = "Options:EnableRateLimit",
+					["--rateLimitNumberExecutions"] = "Options:RateLimitNumberExecutions",
+					["--rateLimitTimeLimitMinutes"] = "Options:RateLimitTimeLimitMinutes",
 
-                    // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
-                    ["--include"] = "Connections:Source:Include",
+					// Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
+					["--include"] = "Connections:Source:Include",
                     ["--includeOnly"] = "Connections:Source:IncludeOnly",
                     ["--exclude"] = "Connections:Source:Exclude",
                     ["--excludeOnly"] = "Connections:Source:ExcludeOnly",

@@ -18,6 +18,8 @@ using Jering.Javascript.NodeJS;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Polly.RateLimiting;
+using Polly.Retry;
 using Serilog;
 using Serilog.Events;
 using System.Collections.Concurrent;
@@ -155,8 +157,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     options.MaxRetryAttempts);
 
                 int attempts = 0;
-
-                var apiResponse = await Policy.Handle<Exception>()
+				// Rate Limit
+				bool isRateLimitingEnabled = options.EnableRateLimit;
+				var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+					options.RateLimitNumberExecutions,
+					TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+				);
+                var retryPolicy = Policy.Handle<Exception>()
                     .OrResult<HttpResponseMessage>(
                         r =>
 
@@ -221,10 +228,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 _logger.Warning(
                                     $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}");
                             }
-                        })
-                    .ExecuteAsync(
-                        async (ctx, ct) =>
-                        {
+						});
+				IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+				var apiResponse = await policy.ExecuteAsync(
+				async (ctx, ct) =>
+				{
                             attempts++;
 
                             if (_logger.IsEnabled(LogEventLevel.Debug))
@@ -402,7 +410,21 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 // Success - no errors to publish
                 return Enumerable.Empty<ErrorItemMessage>();
             }
-            catch (Exception ex)
+			catch (RateLimiterRejectedException ex)
+			{
+				// Handle RateLimiterRejectedException,
+				// that can optionally contain information about when to retry.
+				if (ex.RetryAfter.HasValue)
+				{
+					_logger.Warning($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+				}
+				else
+				{
+					_logger.Warning($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please try again later.");
+				}
+				throw;
+			}
+			catch (Exception ex)
             {
                 _logger.Error(
                     $"{postItemMessage.ResourceUrl} (source id: {id}): An unhandled exception occurred in the PostResource block: {ex}");

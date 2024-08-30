@@ -14,6 +14,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Polly.RateLimiting;
+using Polly.Retry;
 using Serilog;
 using Serilog.Events;
 using System.Net;
@@ -84,8 +86,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             options.MaxRetryAttempts);
 
                         int attempts = 0;
-                        
-                        var apiResponse = await Policy
+						// Rate Limit
+						bool isRateLimitingEnabled = options.EnableRateLimit;
+						var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+							options.RateLimitNumberExecutions,
+							TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+						);
+
+                        var retryPolicy = Policy
                             .Handle<Exception>()
                             .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                             .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
@@ -99,9 +107,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                     _logger.Warning(
                                         $"{message.ResourceUrl} (source id: {sourceId}): GET by key on resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                                 }
-                            })
-                            .ExecuteAsync((ctx, ct) =>
-                            {
+                            });
+
+						IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+						
+                        var apiResponse = await policy.ExecuteAsync((ctx, ct) =>
+						{
                                 attempts++;
 
                                 if (attempts > 1)
@@ -223,7 +234,21 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                         };
                     }
-                    catch (Exception ex)
+					catch (RateLimiterRejectedException ex)
+					{
+						// Handle RateLimiterRejectedException,
+						// that can optionally contain information about when to retry.
+						if (ex.RetryAfter.HasValue)
+						{
+							_logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+						}
+						else
+						{
+							_logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
+						}
+                        throw;
+					}
+					catch (Exception ex)
                     {
                         _logger.Error($"{message.ResourceUrl} (source id: {sourceId}): An unhandled exception occurred in the block created by '{nameof(CreateGetItemForKeyChangeBlock)}': {ex}");
                         throw;
@@ -274,10 +299,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         options.MaxRetryAttempts);
 
                     int attempt = 0;
-
-                    var apiResponse = await Policy
+					// Rate Limit
+					bool isRateLimitingEnabled = options.EnableRateLimit;
+					var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+						options.RateLimitNumberExecutions,
+						TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+					);
+                    var retryPolicy = Policy
                         .Handle<Exception>()
-                        .OrResult<HttpResponseMessage>(r => 
+                        .OrResult<HttpResponseMessage>(r =>
                             r.StatusCode == HttpStatusCode.Conflict || r.StatusCode.IsPotentiallyTransientFailure())
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                         {
@@ -290,8 +320,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 _logger.Warning(
                                     $"{msg.ResourceUrl} (source id: {id}): Select by key on target resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                             }
-                        })
-                        .ExecuteAsync((ctx, ct) =>
+                        });
+
+					IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+					
+                    var apiResponse = await policy.ExecuteAsync((ctx, ct) =>
                         {
                             attempt++;
 
@@ -346,7 +379,21 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // Success - no errors to publish
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
-                catch (Exception ex)
+				catch (RateLimiterRejectedException ex)
+				{
+					// Handle RateLimiterRejectedException,
+					// that can optionally contain information about when to retry.
+					if (ex.RetryAfter.HasValue)
+					{
+						_logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+					}
+					else
+					{
+						_logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please try again later.");
+					}
+					throw;
+				}
+				catch (Exception ex)
                 {
                     _logger.Error($"{msg.ResourceUrl} (source id: {sourceId}): An unhandled exception occurred in the ChangeResourceKey block: {ex}");
                     throw;

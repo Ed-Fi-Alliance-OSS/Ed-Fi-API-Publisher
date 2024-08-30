@@ -14,9 +14,12 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Polly.RateLimiting;
+using System.Threading.RateLimiting;
 using Serilog;
 using Serilog.Events;
 using System.Threading.Tasks.Dataflow;
+using Polly.Retry;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
 
@@ -67,8 +70,14 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     options.MaxRetryAttempts);
 
                 int attempts = 0;
+				// Rate Limit
+                bool isRateLimitingEnabled = options.EnableRateLimit; 
+				var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+                    options.RateLimitNumberExecutions, 
+                    TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+                );
 
-                var apiResponse = await Policy
+                var retryPolicy = Policy
                     .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                     .WaitAndRetryAsync(
                         delay,
@@ -76,110 +85,126 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         {
                             _logger.Warning(
                                 $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
-                        })
-                    .ExecuteAsync(
-                        (ctx, ct) =>
-                        {
-                            attempts++;
-
-                            if (attempts > 1)
+                        });
+				IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+                try { 
+				    var apiResponse = await policy.ExecuteAsync(
+                            (ctx, ct) =>
                             {
-                                if (_logger.IsEnabled(LogEventLevel.Debug))
+                                attempts++;
+
+                                if (attempts > 1)
                                 {
-                                    _logger.Debug(
-                                        $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} from source attempt #{attempts}.");
+                                    if (_logger.IsEnabled(LogEventLevel.Debug))
+                                    {
+                                        _logger.Debug(
+                                            $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} from source attempt #{attempts}.");
+                                    }
                                 }
-                            }
 
-                            // Possible seam for getting a page of data (here, using Ed-Fi ODS API w/ offset/limit paging strategy)
-                            string requestUri =
-                                $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}";
+                                // Possible seam for getting a page of data (here, using Ed-Fi ODS API w/ offset/limit paging strategy)
+                                string requestUri =
+                                    $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}";
 
-                            return RequestHelpers.SendGetRequestAsync(edFiApiClient, message.ResourceUrl, requestUri, ct);
-                        },
-                        new Context(),
-                        CancellationToken.None);
+                                return RequestHelpers.SendGetRequestAsync(edFiApiClient, message.ResourceUrl, requestUri, ct);
+                            },
+                            new Context(),
+                            CancellationToken.None);
 
-                // Detect null content and provide a better error message (which happens only during unit testing if mocked requests aren't properly defined)
-                if (apiResponse.Content == null)
-                {
-                    throw new NullReferenceException(
-                        $"Content of response for '{edFiApiClient.HttpClient.BaseAddress}{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}' was null.");
-                }
-
-                string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                // Failure
-                if (!apiResponse.IsSuccessStatusCode)
-                {
-                    var error = new ErrorItemMessage
+                    // Detect null content and provide a better error message (which happens only during unit testing if mocked requests aren't properly defined)
+                    if (apiResponse.Content == null)
                     {
-                        Method = HttpMethod.Get.ToString(),
-                        ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
-                        Id = null,
-                        Body = null,
-                        ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = responseContent
-                    };
-
-                    // Publish the failure
-                    errorHandlingBlock.Post(error);
-
-                    _logger.Error($"{message.ResourceUrl}: GET page items failed with response status '{apiResponse.StatusCode}'.");
-
-                    break;
-                }
-
-                // Success
-                if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
-                {
-                    _logger.Information(
-                        $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} attempt #{attempts} returned {apiResponse.StatusCode}.");
-                }
-
-                // Transform the page content to item actions
-                try
-                {
-                    transformedMessages.AddRange( message.CreateProcessDataMessages(message, responseContent));
-                }
-                catch (JsonReaderException ex)
-                {
-                    // An error occurred while parsing the JSON
-                    var error = new ErrorItemMessage
-                    {
-                        Method = HttpMethod.Get.ToString(),
-                        ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
-                        Id = null,
-                        Body = null,
-                        ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = responseContent,
-                        Exception = ex,
-                    };
-
-                    // Publish the failure
-                    errorHandlingBlock.Post(error);
-
-                    _logger.Error(
-                        $"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}");
-
-                    break;
-                }
-
-                // Perform limit/offset final page check (for need for possible continuation)
-                if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
-                {
-                    if (_logger.IsEnabled(LogEventLevel.Debug))
-                    {
-                        _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
+                        throw new NullReferenceException(
+                            $"Content of response for '{edFiApiClient.HttpClient.BaseAddress}{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}' was null.");
                     }
 
-                    // Looks like there could be more data
-                    offset += limit;
+                    string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                    continue;
-                }
+                    // Failure
+                    if (!apiResponse.IsSuccessStatusCode)
+                    {
+                        var error = new ErrorItemMessage
+                        {
+                            Method = HttpMethod.Get.ToString(),
+                            ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
+                            Id = null,
+                            Body = null,
+                            ResponseStatus = apiResponse.StatusCode,
+                            ResponseContent = responseContent
+                        };
 
-                break;
+                        // Publish the failure
+                        errorHandlingBlock.Post(error);
+
+                        _logger.Error($"{message.ResourceUrl}: GET page items failed with response status '{apiResponse.StatusCode}'.");
+
+                        break;
+                    }
+
+                    // Success
+                    if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
+                    {
+                        _logger.Information(
+                            $"{message.ResourceUrl}: GET page items {offset} to {offset + limit - 1} attempt #{attempts} returned {apiResponse.StatusCode}.");
+                    }
+
+                    // Transform the page content to item actions
+                    try
+                    {
+                        transformedMessages.AddRange( message.CreateProcessDataMessages(message, responseContent));
+                    }
+                    catch (JsonReaderException ex)
+                    {
+                        // An error occurred while parsing the JSON
+                        var error = new ErrorItemMessage
+                        {
+                            Method = HttpMethod.Get.ToString(),
+                            ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
+                            Id = null,
+                            Body = null,
+                            ResponseStatus = apiResponse.StatusCode,
+                            ResponseContent = responseContent,
+                            Exception = ex,
+                        };
+
+                        // Publish the failure
+                        errorHandlingBlock.Post(error);
+
+                        _logger.Error(
+                            $"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}");
+
+                        break;
+                    }
+
+                    // Perform limit/offset final page check (for need for possible continuation)
+                    if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
+                    {
+                        if (_logger.IsEnabled(LogEventLevel.Debug))
+                        {
+                            _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
+                        }
+
+                        // Looks like there could be more data
+                        offset += limit;
+
+                        continue;
+                    }
+
+				}
+				catch (RateLimiterRejectedException ex)
+				{
+					// Handle RateLimiterRejectedException,
+					// that can optionally contain information about when to retry.
+					if (ex.RetryAfter.HasValue)
+					{
+						_logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+					}
+					else
+					{
+						_logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
+					}
+				}
+				break;
             }
             while (true);
 

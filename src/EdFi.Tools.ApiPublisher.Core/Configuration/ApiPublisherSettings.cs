@@ -88,5 +88,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public bool UseChangeVersionPaging { get; set; }
 
         public int ChangeVersionPagingWindowSize { get; set; }
-    }
+
+        public bool EnableRateLimit { get; set; } = false;
+
+        public int RateLimitNumberExecutions { get; set; } = 100;
+
+		public int RateLimitTimeLimitMinutes { get; set; } = 1;
+	}
 }
