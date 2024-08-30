@@ -75,6 +75,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--enableRateLimit"] = "Options:EnableRateLimit",
                     ["--rateLimitNumberExecutions"] = "Options:RateLimitNumberExecutions",
                     ["--rateLimitTimeLimitMinutes"] = "Options:RateLimitTimeLimitMinutes",
+                    ["--useReversePaging"] = "Options:UseReversePaging",
 
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
                     ["--include"] = "Connections:Source:Include",

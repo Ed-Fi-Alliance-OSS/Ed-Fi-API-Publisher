@@ -1,8 +1,7 @@
 {
   "profiles": {
     "EdFi.Tools.ApiPublisher.Cli": {
-      "commandName": "Project",
-      "commandLineArgs": ".\\EdFiApiPublisher.exe --sourceName=AzureDavid --targetName=dockerDavid --sourceUrl=https://tools-apipub01.southcentralus.cloudapp.azure.com/WebApi/ --sourceKey=rVzVM8ibVA4v --sourceSecret=hARh1t7SuP3WValGrx68s0YE --targetUrl=https://localhost/api/ --targetKey=Wa9SzHlESvI9 --targetSecret=hWrndZ8qBxZy6XLoUi0o8TcY --ignoreIsolation=true --maxDegreeOfParallelismForPostResourceItem=1 --maxDegreeOfParallelismForStreamResourcePages=1 --includeDescriptors=true --ignoreSslErrors=true --useChangeVersionPaging=true --exclude=/ed-fi/studentParentAssociations"
+      "commandName": "Project"
     }
   }
 }
