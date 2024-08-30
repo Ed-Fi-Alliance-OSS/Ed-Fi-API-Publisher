@@ -88,5 +88,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public bool UseChangeVersionPaging { get; set; }
 
         public int ChangeVersionPagingWindowSize { get; set; }
+
+        public bool useReversePaging { get; set; } = false;
     }
 }

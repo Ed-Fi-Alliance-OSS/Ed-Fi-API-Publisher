@@ -165,23 +165,28 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     break;
                 }
 
-                break;
+                if (!options.useReversePaging)
+                {
+                    // Perform limit/offset final page check (for need for possible continuation)
+                    if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
+                    {
+                        if (_logger.IsEnabled(LogEventLevel.Debug))
+                        {
+                            _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
+                        }
 
-                //// Perform limit/offset final page check (for need for possible continuation)
-                //if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
-                //{
-                //    if (_logger.IsEnabled(LogEventLevel.Debug))
-                //    {
-                //        _logger.Debug($"{message.ResourceUrl}: Final page was full. Attempting to retrieve more data.");
-                //    }
+                        // Looks like there could be more data
+                        offset += limit;
 
-                //    // Looks like there could be more data
-                //    offset += limit;
+                        continue;
+                    }
 
-                //    continue;
-                //}
-
-                //break;
+                    break;
+                }
+                else
+                {
+                    break;
+                }
             }
             while (true);
 

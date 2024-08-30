@@ -11,7 +11,8 @@
     "includeDescriptors": false,
     "errorPublishingBatchSize": 25,
     "useChangeVersionPaging": false,
-    "changeVersionPagingWindowSize": 25000
+    "changeVersionPagingWindowSize": 25000,
+    "useReversePaging": false
   },
     "authorizationFailureHandling": [
         {

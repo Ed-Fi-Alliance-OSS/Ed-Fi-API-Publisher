@@ -13,12 +13,12 @@ using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
 
-public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStreamResourcePageMessageProducer
+public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer : IStreamResourcePageMessageProducer
 {
     private readonly ISourceTotalCountProvider _sourceTotalCountProvider;
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer));
 
-    public EdFiApiChangeVersionPagingStreamResourcePageMessageProducer(ISourceTotalCountProvider sourceTotalCountProvider)
+    public EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer(ISourceTotalCountProvider sourceTotalCountProvider)
     {
         _sourceTotalCountProvider = sourceTotalCountProvider;
     }
@@ -36,7 +36,7 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                 $"{message.ResourceUrl}: Retrieving total count of items in change versions {message.ChangeWindow.MinChangeVersion} to {message.ChangeWindow.MaxChangeVersion}.");
         }
         else
-        {
+        {           
             _logger.Information($"{message.ResourceUrl}: Retrieving total count of items.");
         }
 
@@ -59,7 +59,7 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
         int limit = message.PageSize;
 
         var pageMessages = new List<StreamResourcePageMessage<TProcessDataMessage>>();
-
+        
         if (totalCount > 0)
         {
             var noOfPartitions = Math.Ceiling((decimal)(message.ChangeWindow.MaxChangeVersion - message.ChangeWindow.MinChangeVersion)
@@ -72,7 +72,7 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
             {
                 long changeVersionWindowEndValue = (changeVersionWindowStartValue > 0 ?
                     changeVersionWindowStartValue - 1 : changeVersionWindowStartValue) + options.ChangeVersionPagingWindowSize;
-
+               
                 if (changeVersionWindowEndValue > message.ChangeWindow.MaxChangeVersion)
                 {
                     changeVersionWindowEndValue = message.ChangeWindow.MaxChangeVersion;
@@ -97,8 +97,16 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                     continue;
                 }
 
-                int offsetOnWindow = 0;
-                while (offsetOnWindow < totalCountOnWindow)
+                bool isLastOne = false;
+                long offsetOnWindow = totalCountOnWindow - limit;
+                if (offsetOnWindow < 0)
+                {
+                    offsetOnWindow = 0;
+                    isLastOne = true;
+                }
+
+                int limitOnWindow = totalCountOnWindow < limit ? (int)totalCountOnWindow : limit;
+                while ((offsetOnWindow > 0 || isLastOne == true) && totalCountOnWindow > 0)
                 {
                     var pageMessage = new StreamResourcePageMessage<TProcessDataMessage>
                     {
@@ -107,7 +115,7 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                         PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
 
                         // Page-strategy specific context
-                        Limit = limit,
+                        Limit = limitOnWindow,
                         Offset = offsetOnWindow,
 
                         // Global processing context                   
@@ -118,7 +126,15 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                     };
 
                     pageMessages.Add(pageMessage);
-                    offsetOnWindow += limit;
+                    offsetOnWindow -= limit;
+                    if (isLastOne)
+                        break;
+                    if (offsetOnWindow < 0)
+                    {
+                        limitOnWindow = limit + (int)offsetOnWindow;
+                        offsetOnWindow = 0;
+                        isLastOne = true;
+                    }
                 }
                 changeVersionWindow++;
 

@@ -72,6 +72,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--whatIf"] = "Options:WhatIf",
                     ["--useChangeVersionPaging"] = "Options:UseChangeVersionPaging",
                     ["--changeVersionPagingWindowSize"] = "Options:ChangeVersionPagingWindowSize",
+                    ["--useReversePaging"] = "Options:UseReversePaging",
 
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
                     ["--include"] = "Connections:Source:Include",
