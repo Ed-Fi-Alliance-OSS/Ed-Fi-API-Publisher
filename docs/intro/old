@@ -1,0 +1,8 @@
+
+For more documentation on API Publisher's parameters, please see the [API Publisher Configuration](docs/API-Publisher-Configuration.md) markdown file for other runtime options.
+
+For more information in relation to key changes and deletes, please see [Considerations in relation to key changes and deletes](docs/API-Publisher-Configuration.md#considerations-in-relation-to-key-changes-and-deletes)
+
+---
+
+More technical details on some of these issues can be found [here](docs/Known-Issues-Details.md).
