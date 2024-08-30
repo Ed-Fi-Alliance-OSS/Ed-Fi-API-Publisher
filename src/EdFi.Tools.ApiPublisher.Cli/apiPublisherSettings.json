@@ -7,7 +7,7 @@
     "maxDegreeOfParallelismForPostResourceItem": 15,
     "maxDegreeOfParallelismForStreamResourcePages": 5,
     "streamingPagesWaitDurationSeconds": 10,
-    "streamingPageSize": 400,
+    "streamingPageSize": 500,
     "includeDescriptors": false,
     "errorPublishingBatchSize": 25,
     "useChangeVersionPaging": false,
