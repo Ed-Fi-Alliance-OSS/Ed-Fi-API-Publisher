@@ -2,14 +2,6 @@
 
 To demonstrate how the API Publisher works, this exercise copies all the data from [the sample hosted Ed-Fi ODS API](https://api.ed-fi.org) to a local sandbox Ed-Fi ODS API using the API client for the "minimal" template. (The database scripts are written for SQL Server.)
 
-### Configure Local Sandbox Environment
-
-Before using the API Publisher on a target ODS, you must create and configure an API client with the appropriate permissions for publishing.  The source and destination ODS/API must be of the same version.
-
-For Ed-Fi ODS / API 5.1 through 5.3 only: create and assign a claim set for the API Publisher by running the following database scripts:
-  * [Create-API-Publisher-Writer-Security-Metadata.sql](eng/Create-API-Publisher-Writer-Security-Metadata.sql)
-  * [Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql](eng/Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql)
-
 ### Use the API Publisher
 
 The API Publisher has three options to use the product.  The API Publisher requires [.NET 8.0](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) to run:

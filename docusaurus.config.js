@@ -15,7 +15,7 @@ const config = {
   url: 'https://ed-fi-api-publisher.github.io',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/API-Publisher/',
+  baseUrl: '/Ed-Fi-API-Publisher/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
@@ -46,7 +46,7 @@ const config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/ed-fi-alliance-oss/project-tanager/tree/gh-pages-poc/pages/docs/',
+            'https://github.com/ed-fi-alliance-oss/Ed-Fi-API-Publisher/tree/gh-pages/pages/docs/',
         },
         theme: {
           customCss: './src/css/custom.css',

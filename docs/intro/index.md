@@ -19,29 +19,6 @@ However, it can also be used in a "Publishing" model where it is installed along
 
 If a source API supports the "Change Queries" feature, the Ed-Fi API Publisher will perform a full publishing of the source data on the first run, and then will only publish changed data to the target on subsequent runs. The change versions that have been published to a particular target are maintained in a configuration store automatically for each source/target combination.
 
-## Next Steps
-
-When you're ready to look further, review these other topics:
-
-* [API Connection Management](docs/API-Connection-Management.md)
-* [API Publisher Configuration](docs/API-Publisher-Configuration.md)
-* [Considerations for API Hosts](docs/Considerations-for-API-Hosts.md)
-* [Considerations for Docker Configuration and Execution](docs/Considerations-docker-configuration-and-execution.md)
-* [How to use the TextFormatter class](docs/Use-TextFormatter-Serilog.md).
-
 ## Support
 
 For support with the API Publisher, please use [Ed-Fi Support](https://support.ed-fi.org/) to open a support case and/or feature request.
-
-## Legal Information
-
-Copyright (c) 2024 Ed-Fi Alliance, LLC and contributors.
-
-Licensed under the [Apache License, Version 2.0](LICENSE) (the "License").
-
-Unless required by applicable law or agreed to in writing, software distributed
-under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-See [NOTICES](NOTICES.md) for additional copyright and license notifications.

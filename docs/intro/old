@@ -3,6 +3,40 @@ For more documentation on API Publisher's parameters, please see the [API Publis
 
 For more information in relation to key changes and deletes, please see [Considerations in relation to key changes and deletes](docs/API-Publisher-Configuration.md#considerations-in-relation-to-key-changes-and-deletes)
 
+## Next Steps
+
+When you're ready to look further, review these other topics:
+
+* [API Connection Management](docs/API-Connection-Management.md)
+* [API Publisher Configuration](docs/API-Publisher-Configuration.md)
+* [Considerations for API Hosts](docs/Considerations-for-API-Hosts.md)
+* [Considerations for Docker Configuration and Execution](docs/Considerations-docker-configuration-and-execution.md)
+* [How to use the TextFormatter class](docs/Use-TextFormatter-Serilog.md).
+
 ---
 
 More technical details on some of these issues can be found [here](docs/Known-Issues-Details.md).
+
+--
+
+### Configure Local Sandbox Environment
+
+Before using the API Publisher on a target ODS, you must create and configure an API client with the appropriate permissions for publishing.  The source and destination ODS/API must be of the same version.
+
+For Ed-Fi ODS / API 5.1 through 5.3 only: create and assign a claim set for the API Publisher by running the following database scripts:
+  * [Create-API-Publisher-Writer-Security-Metadata.sql](eng/Create-API-Publisher-Writer-Security-Metadata.sql)
+  * [Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql](eng/Configure-Minimal-Sandbox-Client-as-API-Publisher-Writer.sql)
+---
+
+## Legal Information
+
+Copyright (c) 2024 Ed-Fi Alliance, LLC and contributors.
+
+Licensed under the [Apache License, Version 2.0](LICENSE) (the "License").
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+See [NOTICES](NOTICES.md) for additional copyright and license notifications.
