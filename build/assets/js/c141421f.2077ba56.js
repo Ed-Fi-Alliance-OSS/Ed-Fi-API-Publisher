@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunked_fi_api_publisher=self.webpackChunked_fi_api_publisher||[]).push([[957],{936:e=>{e.exports=JSON.parse('{"name":"docusaurus-theme-search-algolia","id":"default"}')}}]);

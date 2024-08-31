@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/"
+                       xmlns:moz="http://www.mozilla.org/2006/browser/search/">
+  <ShortName>Ed-Fi API Publisher</ShortName>
+  <Description>Search Ed-Fi API Publisher</Description>
+  <InputEncoding>UTF-8</InputEncoding>
+  <Image width="16" height="16" type="image/x-icon">https://ed-fi-api-publisher.github.io/Ed-Fi-API-Publisher/img/tech-congress-favicon.png</Image>
+  <Url type="text/html" method="get" template="https://ed-fi-api-publisher.github.io/Ed-Fi-API-Publisher/search?q={searchTerms}"/>
+  <Url type="application/opensearchdescription+xml" rel="self" template="https://ed-fi-api-publisher.github.io/Ed-Fi-API-Publisher/opensearch.xml" />
+  <moz:SearchForm>https://ed-fi-api-publisher.github.io/Ed-Fi-API-Publisher/</moz:SearchForm>
+</OpenSearchDescription>
