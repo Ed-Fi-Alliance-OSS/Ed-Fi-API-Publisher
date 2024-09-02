@@ -260,7 +260,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             IFakeHttpRequestHandler fakeSourceRequestHandler,
             ApiConnectionDetails targetApiConnectionDetails,
             IFakeHttpRequestHandler fakeTargetRequestHandler,
-            INodeJSService nodeJsService = null)
+            INodeJSService nodeJsService = null,
+            bool withReversePaging = false)
         {
             EdFiApiClient SourceApiClientFactory() =>
                 new EdFiApiClient(
@@ -300,8 +301,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
             var streamingResourceProcessor = new StreamingResourceProcessor(
                 new StreamResourceBlockFactory(
-                    new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(
-                        new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider))),
+                    (withReversePaging) ? 
+                        new EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer(
+                            new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider)) :
+                        new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(
+                            new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider))
+                    ),
                 new StreamResourcePagesBlockFactory(new EdFiApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider)),
                 sourceApiConnectionDetails);
 
