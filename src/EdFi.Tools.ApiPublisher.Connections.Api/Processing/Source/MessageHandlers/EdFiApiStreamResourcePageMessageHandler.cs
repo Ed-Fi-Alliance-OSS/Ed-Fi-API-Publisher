@@ -177,7 +177,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         break;
                     }
 
-                    if (!options.useReversePaging)
+                    if (!options.UseReversePaging)
                     {
                         // Perform limit/offset final page check (for need for possible continuation)
                         if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)

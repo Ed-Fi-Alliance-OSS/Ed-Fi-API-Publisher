@@ -55,7 +55,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _options = TestHelpers.GetOptions();
                     _options.IncludeDescriptors = false; // Shorten test execution time
                     _options.UseChangeVersionPaging = true;
-                    _options.useReversePaging = true;
+                    _options.UseReversePaging = true;
                     _options.StreamingPageSize = _pageSize;
                     _options.ChangeVersionPagingWindowSize = 40;
 
@@ -161,7 +161,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _options = TestHelpers.GetOptions();
                     _options.IncludeDescriptors = false; // Shorten test execution time
                     _options.UseChangeVersionPaging = true;
-                    _options.useReversePaging = true;
+                    _options.UseReversePaging = true;
                     _options.StreamingPageSize = _pageSize;
                     _options.ChangeVersionPagingWindowSize = 40;
 
@@ -256,7 +256,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _options = TestHelpers.GetOptions();
                     _options.IncludeDescriptors = false; // Shorten test execution time
                     _options.UseChangeVersionPaging = true;
-                    _options.useReversePaging = true;
+                    _options.UseReversePaging = true;
                     _options.StreamingPageSize = _pageSize;
                     _options.ChangeVersionPagingWindowSize = 40;
 

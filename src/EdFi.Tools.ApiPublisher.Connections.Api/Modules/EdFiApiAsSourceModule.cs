@@ -85,7 +85,7 @@ public class EdFiApiAsSourceModule : Module
         // Register resource page message producer using a ChangeVersion paging strategy
         if (options.UseChangeVersionPaging)
         {
-            if (options.useReversePaging)
+            if (options.UseReversePaging)
             {
                 builder.RegisterType<EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer>()
                 .As<IStreamResourcePageMessageProducer>()

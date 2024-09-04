@@ -95,6 +95,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
         public int RateLimitTimeLimitMinutes { get; set; } = 1;
 
-        public bool useReversePaging { get; set; } = false;
+        public bool UseReversePaging { get; set; } = false;
     }
 }
