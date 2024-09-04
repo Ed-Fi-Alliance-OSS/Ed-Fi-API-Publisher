@@ -70,10 +70,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     options.MaxRetryAttempts);
 
                 int attempts = 0;
-				// Rate Limit
-                bool isRateLimitingEnabled = options.EnableRateLimit; 
-				var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
-                    options.RateLimitNumberExecutions, 
+                // Rate Limit
+                bool isRateLimitingEnabled = options.EnableRateLimit;
+                var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+                    options.RateLimitNumberExecutions,
                     TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
                 );
 
@@ -86,9 +86,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             _logger.Warning(
                                 $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                         });
-				IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
-                try { 
-				    var apiResponse = await policy.ExecuteAsync(
+                IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+                try
+                {
+                    var apiResponse = await policy.ExecuteAsync(
                             (ctx, ct) =>
                             {
                                 attempts++;
@@ -151,7 +152,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     // Transform the page content to item actions
                     try
                     {
-                        transformedMessages.AddRange( message.CreateProcessDataMessages(message, responseContent));
+                        transformedMessages.AddRange(message.CreateProcessDataMessages(message, responseContent));
                     }
                     catch (JsonReaderException ex)
                     {
@@ -190,21 +191,21 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         continue;
                     }
 
-				}
-				catch (RateLimiterRejectedException ex)
-				{
-					// Handle RateLimiterRejectedException,
-					// that can optionally contain information about when to retry.
-					if (ex.RetryAfter.HasValue)
-					{
-						_logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
-					}
-					else
-					{
-						_logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
-					}
-				}
-				break;
+                }
+                catch (RateLimiterRejectedException ex)
+                {
+                    // Handle RateLimiterRejectedException,
+                    // that can optionally contain information about when to retry.
+                    if (ex.RetryAfter.HasValue)
+                    {
+                        _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+                    }
+                    else
+                    {
+                        _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                    }
+                }
+                break;
             }
             while (true);
 
@@ -224,7 +225,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
             // Publish the failure
             errorHandlingBlock.Post(error);
-            
+
             return Array.Empty<TProcessDataMessage>();
         }
     }

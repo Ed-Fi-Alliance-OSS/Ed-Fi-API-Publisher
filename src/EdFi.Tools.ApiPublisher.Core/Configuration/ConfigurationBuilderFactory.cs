@@ -9,7 +9,7 @@ using System.Collections.Generic;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-	public class ConfigurationBuilderFactory 
+    public class ConfigurationBuilderFactory
     {
         /// <summary>
         /// Creates a configuration builder incorporating settings files, environment variables and command-line arguments.
@@ -72,12 +72,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--whatIf"] = "Options:WhatIf",
                     ["--useChangeVersionPaging"] = "Options:UseChangeVersionPaging",
                     ["--changeVersionPagingWindowSize"] = "Options:ChangeVersionPagingWindowSize",
-					["--enableRateLimit"] = "Options:EnableRateLimit",
-					["--rateLimitNumberExecutions"] = "Options:RateLimitNumberExecutions",
-					["--rateLimitTimeLimitMinutes"] = "Options:RateLimitTimeLimitMinutes",
+                    ["--enableRateLimit"] = "Options:EnableRateLimit",
+                    ["--rateLimitNumberExecutions"] = "Options:RateLimitNumberExecutions",
+                    ["--rateLimitTimeLimitMinutes"] = "Options:RateLimitTimeLimitMinutes",
 
-					// Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
-					["--include"] = "Connections:Source:Include",
+                    // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
+                    ["--include"] = "Connections:Source:Include",
                     ["--includeOnly"] = "Connections:Source:IncludeOnly",
                     ["--exclude"] = "Connections:Source:Exclude",
                     ["--excludeOnly"] = "Connections:Source:ExcludeOnly",
@@ -86,14 +86,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--resources"] = "Connections:Source:Resources",
                     ["--excludeResources"] = "Connections:Source:ExcludeResources",
                     ["--skipResources"] = "Connections:Source:SkipResources",
-                    
+
                     ["--treatForbiddenPostAsWarning"] = "Connections:Target:TreatForbiddenPostAsWarning",
                     ["--ignoreIsolation"] = "Connections:Source:IgnoreIsolation",
 
                     // PostgreSQL configuration store
                     ["--configurationStoreProvider"] = "ConfigurationStore:Provider",
                     ["--postgreSqlEncryptionPassword"] = "ConfigurationStore:PostgreSql:EncryptionPassword",
-                    
+
                     // Path to the folder containing for JavaScript extension for special handling and retries
                     ["--remediationsScriptFile"] = "Options:RemediationsScriptFile",
                 });

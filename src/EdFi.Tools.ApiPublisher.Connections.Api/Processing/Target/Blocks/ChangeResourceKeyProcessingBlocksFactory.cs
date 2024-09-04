@@ -24,12 +24,12 @@ using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 {
-	/// <summary>
-	/// Builds a pipeline that processes key changes against a target Ed-Fi ODS API.
-	/// </summary>
-	/// <remarks>Receives a <see cref="GetItemForKeyChangeMessage" />, transforms to a <see cref="ChangeKeyMessage" /> before
-	/// producing <see cref="ErrorItemMessage" /> instances as output. </remarks>
-	public class ChangeResourceKeyProcessingBlocksFactory : IProcessingBlocksFactory<GetItemForKeyChangeMessage>
+    /// <summary>
+    /// Builds a pipeline that processes key changes against a target Ed-Fi ODS API.
+    /// </summary>
+    /// <remarks>Receives a <see cref="GetItemForKeyChangeMessage" />, transforms to a <see cref="ChangeKeyMessage" /> before
+    /// producing <see cref="ErrorItemMessage" /> instances as output. </remarks>
+    public class ChangeResourceKeyProcessingBlocksFactory : IProcessingBlocksFactory<GetItemForKeyChangeMessage>
     {
         private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
 
@@ -39,7 +39,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         {
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
         }
-        
+
         public (ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
@@ -49,7 +49,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     createBlocksRequest.Options,
                     createBlocksRequest.ErrorHandlingBlock);
 
-            TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> changeKeyResourceBlock 
+            TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> changeKeyResourceBlock
                 = CreateChangeKeyBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options);
 
             getItemForKeyChangeBlock.LinkTo(changeKeyResourceBlock, new DataflowLinkOptions { PropagateCompletion = true });
@@ -58,8 +58,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         }
 
         private TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> CreateGetItemForKeyChangeBlock(
-            EdFiApiClient targetApiClient, 
-            Options options, 
+            EdFiApiClient targetApiClient,
+            Options options,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
             var getItemForKeyChangeBlock = new TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage>(
@@ -70,7 +70,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     {
                         return Enumerable.Empty<ChangeKeyMessage>();
                     }
-                    
+
                     string sourceId = message.SourceId;
 
                     try
@@ -80,18 +80,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             .Select(p => $"{p.Name}={WebUtility.UrlEncode(GetQueryStringValue(p))}");
 
                         string queryString = String.Join("&", keyValueParms);
-                    
+
                         var delay = Backoff.ExponentialBackoff(
                             TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
                             options.MaxRetryAttempts);
 
                         int attempts = 0;
-						// Rate Limit
-						bool isRateLimitingEnabled = options.EnableRateLimit;
-						var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
-							options.RateLimitNumberExecutions,
-							TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
-						);
+                        // Rate Limit
+                        bool isRateLimitingEnabled = options.EnableRateLimit;
+                        var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+                            options.RateLimitNumberExecutions,
+                            TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+                        );
 
                         var retryPolicy = Policy
                             .Handle<Exception>()
@@ -109,31 +109,31 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 }
                             });
 
-						IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
-						
+                        IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+
                         var apiResponse = await policy.ExecuteAsync((ctx, ct) =>
-						{
-                                attempts++;
+                        {
+                            attempts++;
 
-                                if (attempts > 1)
+                            if (attempts > 1)
+                            {
+                                if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
-                                    if (_logger.IsEnabled(LogEventLevel.Debug))
-                                    {
-                                        _logger.Debug($"{message.ResourceUrl} (source id: {message.SourceId}): GET by key on target attempt #{attempts} ({queryString}).");
-                                    }
+                                    _logger.Debug($"{message.ResourceUrl} (source id: {message.SourceId}): GET by key on target attempt #{attempts} ({queryString}).");
                                 }
+                            }
 
-                                return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{message.ResourceUrl}?{queryString}", ct);
-                            }, new Context(), CancellationToken.None);
+                            return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{message.ResourceUrl}?{queryString}", ct);
+                        }, new Context(), CancellationToken.None);
 
                         // Detect null content and provide a better error message (which happens during unit testing if mocked requests aren't properly defined)
                         if (apiResponse.Content == null)
                         {
                             throw new NullReferenceException($"Content of response for '{targetApiClient.HttpClient.BaseAddress}{message.ResourceUrl}?{queryString}' was null.");
                         }
-                        
+
                         string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        
+
                         // Failure
                         if (!apiResponse.IsSuccessStatusCode)
                         {
@@ -152,7 +152,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                             // Publish the failure
                             errorHandlingBlock.Post(error);
-                        
+
                             // No key changes to process
                             return Enumerable.Empty<ChangeKeyMessage>();
                         }
@@ -168,7 +168,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             _logger.Debug($"{message.ResourceUrl} (source id: {sourceId}): GET by key returned {apiResponse.StatusCode}");
                         }
-                        
+
                         var getByKeyResults = JArray.Parse(responseContent);
 
                         // If the item whose key is to be changed cannot be found...
@@ -178,16 +178,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 _logger.Warning($"{message.ResourceUrl} (source id: {sourceId}): GET by key for key change returned no results on target API ({queryString}).");
                             }
-                            
+
                             // No key changes to process
                             return Enumerable.Empty<ChangeKeyMessage>();
                         }
-                        
+
                         // Get the resource item
                         var existingResourceItem = getByKeyResults[0] as JObject;
 
                         // Remove the id and etag properties
-                        string targetId = existingResourceItem["id"].Value<string>(); 
+                        string targetId = existingResourceItem["id"].Value<string>();
                         existingResourceItem.Property("id")?.Remove();
                         existingResourceItem.Property("_etag")?.Remove();
 
@@ -196,11 +196,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             .Concat(
                                 existingResourceItem.Properties()
                                     .Where(p => p.Value.Type == JTokenType.Object && p.Name.EndsWith("Reference"))
-                                    .SelectMany(reference => {
+                                    .SelectMany(reference =>
+                                    {
                                         // Remove the link from the reference while we're here
                                         var referenceAsJObject = reference.Value as JObject;
                                         referenceAsJObject.Property("link")?.Remove();
-            
+
                                         // Return the reference's properties as potential keyChange value updates
                                         return referenceAsJObject.Properties();
                                     })
@@ -212,13 +213,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             var newValueProperty = newKeyValues.Property(candidateProperty.Name);
 
-                            if (newValueProperty != null) 
+                            if (newValueProperty != null)
                             {
                                 if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
                                     _logger.Debug($"{message.ResourceUrl} (source id: {message.SourceId}): Assigning new value for '{candidateProperty.Name}' as '{newValueProperty.Value}'...");
                                 }
-                                
+
                                 candidateProperty.Value = newValueProperty.Value;
                             }
                         }
@@ -234,21 +235,21 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                         };
                     }
-					catch (RateLimiterRejectedException ex)
-					{
-						// Handle RateLimiterRejectedException,
-						// that can optionally contain information about when to retry.
-						if (ex.RetryAfter.HasValue)
-						{
-							_logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
-						}
-						else
-						{
-							_logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
-						}
+                    catch (RateLimiterRejectedException ex)
+                    {
+                        // Handle RateLimiterRejectedException,
+                        // that can optionally contain information about when to retry.
+                        if (ex.RetryAfter.HasValue)
+                        {
+                            _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+                        }
+                        else
+                        {
+                            _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                        }
                         throw;
-					}
-					catch (Exception ex)
+                    }
+                    catch (Exception ex)
                     {
                         _logger.Error($"{message.ResourceUrl} (source id: {sourceId}): An unhandled exception occurred in the block created by '{nameof(CreateGetItemForKeyChangeBlock)}': {ex}");
                         throw;
@@ -257,7 +258,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 {
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
                 });
-            
+
             return getItemForKeyChangeBlock;
 
             string GetQueryStringValue(JProperty property)
@@ -273,7 +274,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             return dateValue.ToString("yyyy-MM-dd");
                         }
-                        
+
                         return JsonConvert.SerializeObject(property.Value).Trim('"');
                     case JTokenType.TimeSpan:
                         return JsonConvert.SerializeObject(property.Value).Trim('"');
@@ -282,7 +283,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 }
             }
         }
-        
+
         private TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> CreateChangeKeyBlock(
             EdFiApiClient targetApiClient, Options options)
         {
@@ -299,12 +300,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         options.MaxRetryAttempts);
 
                     int attempt = 0;
-					// Rate Limit
-					bool isRateLimitingEnabled = options.EnableRateLimit;
-					var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
-						options.RateLimitNumberExecutions,
-						TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
-					);
+                    // Rate Limit
+                    bool isRateLimitingEnabled = options.EnableRateLimit;
+                    var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+                        options.RateLimitNumberExecutions,
+                        TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+                    );
                     var retryPolicy = Policy
                         .Handle<Exception>()
                         .OrResult<HttpResponseMessage>(r =>
@@ -322,8 +323,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                         });
 
-					IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
-					
+                    IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+
                     var apiResponse = await policy.ExecuteAsync((ctx, ct) =>
                         {
                             attempt++;
@@ -335,18 +336,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                     _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): PUT request to update key (attempt #{attempt}.");
                                 }
                             }
-                                
+
                             return targetApiClient.HttpClient.PutAsync(
                                 $"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}/{id}",
-                                new StringContent(msg.Body, Encoding.UTF8, "application/json"), 
+                                new StringContent(msg.Body, Encoding.UTF8, "application/json"),
                                 ct);
                         }, new Context(), CancellationToken.None);
-                    
+
                     // Failure
                     if (!apiResponse.IsSuccessStatusCode)
                     {
                         string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-                                
+
                         _logger.Error(
                             $"{msg.ResourceUrl} (source id: {sourceId}): PUT returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
 
@@ -361,9 +362,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             ResponseContent = responseContent
                         };
 
-                        return new[] {error};
+                        return new[] { error };
                     }
-                    
+
                     // Success
                     if (_logger.IsEnabled(LogEventLevel.Information) && attempt > 1)
                     {
@@ -375,25 +376,25 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     {
                         _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): PUT returned {apiResponse.StatusCode}");
                     }
-                    
+
                     // Success - no errors to publish
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
-				catch (RateLimiterRejectedException ex)
-				{
-					// Handle RateLimiterRejectedException,
-					// that can optionally contain information about when to retry.
-					if (ex.RetryAfter.HasValue)
-					{
-						_logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
-					}
-					else
-					{
-						_logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please try again later.");
-					}
-					throw;
-				}
-				catch (Exception ex)
+                catch (RateLimiterRejectedException ex)
+                {
+                    // Handle RateLimiterRejectedException,
+                    // that can optionally contain information about when to retry.
+                    if (ex.RetryAfter.HasValue)
+                    {
+                        _logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+                    }
+                    else
+                    {
+                        _logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                    }
+                    throw;
+                }
+                catch (Exception ex)
                 {
                     _logger.Error($"{msg.ResourceUrl} (source id: {sourceId}): An unhandled exception occurred in the ChangeResourceKey block: {ex}");
                     throw;
@@ -460,12 +461,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // TODO: GKM - Should we add a flag for specifying that publishing without proper key change support from source API is ok?
                     _logger.Warning($"Source API's '{EdFiApiConstants.KeyChangesPathSuffix}' response does not include the domain key values. Publishing of key changes to the target API cannot be performed.");
                     _logger.Debug("Attempting to gracefully cancel key change processing due to lack of support for key values from the source API.");
-                
+
                     message.CancellationSource.Cancel();
-                
+
                     return null;
                 }
-            
+
                 return new GetItemForKeyChangeMessage
                 {
                     ResourceUrl = message.ResourceUrl.TrimSuffix(EdFiApiConstants.KeyChangesPathSuffix),

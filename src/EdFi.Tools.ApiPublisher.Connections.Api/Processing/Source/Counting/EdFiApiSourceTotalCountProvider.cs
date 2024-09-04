@@ -25,18 +25,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
 public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
 {
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
-    
+
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceTotalCountProvider));
 
     public EdFiApiSourceTotalCountProvider(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
     }
-    
+
     public async Task<(bool, long)> TryGetTotalCountAsync(string resourceUrl, Options options, ChangeWindow changeWindow, ITargetBlock<ErrorItemMessage> errorHandlingBlock, CancellationToken cancellationToken)
     {
         var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
-        
+
         // Source-specific: Ed-Fi ODS API
         string changeWindowQueryStringParameters = ApiRequestHelper.GetChangeWindowQueryStringParameters(changeWindow);
 
@@ -45,12 +45,12 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
             options.MaxRetryAttempts);
 
         int attempt = 0;
-		// Rate Limit
-		bool isRateLimitingEnabled = options.EnableRateLimit;
-		var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
-			options.RateLimitNumberExecutions,
-			TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
-		);
+        // Rate Limit
+        bool isRateLimitingEnabled = options.EnableRateLimit;
+        var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+            options.RateLimitNumberExecutions,
+            TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+        );
 
         var retryPolicy = Policy
             .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
@@ -59,7 +59,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 _logger.Warning(
                     $"{resourceUrl}: Getting item count from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
             });
-		IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+        IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
         try
         {
             var apiResponse = await policy
@@ -135,21 +135,21 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 return (false, 0);
             }
         }
-		catch (RateLimiterRejectedException ex)
-		{
-			// Handle RateLimiterRejectedException,
-			// that can optionally contain information about when to retry.
-			if (ex.RetryAfter.HasValue)
-			{
-				_logger.Warning($"{edFiApiClient.DataManagementApiSegment}{resourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
-			}
-			else
-			{
-				_logger.Warning($"{edFiApiClient.DataManagementApiSegment}{resourceUrl}: Rate limit exceeded. Please try again later.");
-			}
-			return (false, 0);
-		}
-	}
+        catch (RateLimiterRejectedException ex)
+        {
+            // Handle RateLimiterRejectedException,
+            // that can optionally contain information about when to retry.
+            if (ex.RetryAfter.HasValue)
+            {
+                _logger.Warning($"{edFiApiClient.DataManagementApiSegment}{resourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+            }
+            else
+            {
+                _logger.Warning($"{edFiApiClient.DataManagementApiSegment}{resourceUrl}: Rate limit exceeded. Please try again later.");
+            }
+            return (false, 0);
+        }
+    }
 
     private async Task HandleResourceCountRequestErrorAsync(
         string resourceUrl,
