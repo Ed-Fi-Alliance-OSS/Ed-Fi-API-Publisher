@@ -9,12 +9,12 @@ using System.Threading;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-	public class ApiPublisherSettings
+    public class ApiPublisherSettings
     {
         public Options Options { get; set; }
 
         public AuthorizationFailureHandling[] AuthorizationFailureHandling { get; set; }
-        
+
         public string[] ResourcesWithUpdatableKeys { get; set; }
     }
 
@@ -27,15 +27,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
     public class Options
     {
         private readonly ILogger _logger = Log.Logger;
-        
+
         public int BearerTokenRefreshMinutes { get; set; } = 12;
-        
+
         public int RetryStartingDelayMilliseconds { get; set; } = 250;
-        
+
         public int MaxRetryAttempts { get; set; } = 5;
 
         public int MaxDegreeOfParallelismForResourceProcessing { get; set; } = 10;
-        
+
         private int _maxDegreeOfParallelismForPostResourceItem = 20;
 
         public int MaxDegreeOfParallelismForPostResourceItem
@@ -50,7 +50,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
                     return;
                 }
-                
+
                 // Limit setting to the number of threads available
                 ThreadPool.GetMaxThreads(out int workerThreadCount, out int completionPortThreadCount);
 
@@ -59,7 +59,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 int practicalMaxParallelization = Math.Min(200, workerThreadCount);
 
                 _maxDegreeOfParallelismForPostResourceItem = Math.Min(value, practicalMaxParallelization);
-                
+
                 if (value > _maxDegreeOfParallelismForPostResourceItem)
                 {
                     _logger.Warning($"Attempted max parallelism of '{value}' for posting resources is too large. Setting has been adjusted to '{_maxDegreeOfParallelismForPostResourceItem}'.");
@@ -88,5 +88,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public bool UseChangeVersionPaging { get; set; }
 
         public int ChangeVersionPagingWindowSize { get; set; }
+
+        public bool EnableRateLimit { get; set; } = false;
+
+        public int RateLimitNumberExecutions { get; set; } = 100;
+
+        public int RateLimitTimeLimitMinutes { get; set; } = 1;
     }
 }

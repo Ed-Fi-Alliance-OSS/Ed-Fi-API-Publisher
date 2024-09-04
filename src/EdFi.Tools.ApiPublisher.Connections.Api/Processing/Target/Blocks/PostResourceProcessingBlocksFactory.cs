@@ -18,6 +18,8 @@ using Jering.Javascript.NodeJS;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Polly.RateLimiting;
+using Polly.Retry;
 using Serilog;
 using Serilog.Events;
 using System.Collections.Concurrent;
@@ -29,7 +31,7 @@ using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 {
-	public class PostResourceProcessingBlocksFactory : IProcessingBlocksFactory<PostItemMessage>
+    public class PostResourceProcessingBlocksFactory : IProcessingBlocksFactory<PostItemMessage>
     {
         private readonly ILogger _logger = Log.ForContext(typeof(PostResourceProcessingBlocksFactory));
         private readonly INodeJSService _nodeJsService;
@@ -74,7 +76,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             var knownUnremediatedRequests = new HashSet<(string resourceUrl, HttpStatusCode statusCode)>();
 
             var options = createBlocksRequest.Options;
-            
+
             var targetEdFiApiClient = _targetEdFiApiClientProvider.GetApiClient();
 
             var javaScriptModuleFactory = createBlocksRequest.JavaScriptModuleFactory;
@@ -97,12 +99,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             }
 
             var postResourceBlock = new TransformManyBlock<PostItemMessage, ErrorItemMessage>(
-                async msg => 
+                async msg =>
                     await HandlePostItemMessage(
-                        ignoredResourceByUrl, 
-                        msg, 
-                        options, 
-                        javaScriptModuleFactory, 
+                        ignoredResourceByUrl,
+                        msg,
+                        options,
+                        javaScriptModuleFactory,
                         targetEdFiApiClient,
                         knownUnremediatedRequests,
                         missingDependencyByResourcePath),
@@ -155,8 +157,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     options.MaxRetryAttempts);
 
                 int attempts = 0;
-
-                var apiResponse = await Policy.Handle<Exception>()
+                // Rate Limit
+                bool isRateLimitingEnabled = options.EnableRateLimit;
+                var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+                    options.RateLimitNumberExecutions,
+                    TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+                );
+                var retryPolicy = Policy.Handle<Exception>()
                     .OrResult<HttpResponseMessage>(
                         r =>
 
@@ -221,87 +228,88 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 _logger.Warning(
                                     $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}");
                             }
-                        })
-                    .ExecuteAsync(
-                        async (ctx, ct) =>
+                        });
+                IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+                var apiResponse = await policy.ExecuteAsync(
+                async (ctx, ct) =>
+                {
+                    attempts++;
+
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
+                    {
+                        if (attempts > 1)
                         {
-                            attempts++;
+                            _logger.Debug($"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts}.");
+                        }
+                        else
+                        {
+                            _logger.Debug($"{postItemMessage.ResourceUrl} (source id: {id}): Sending POST request.");
+                        }
+                    }
 
-                            if (_logger.IsEnabled(LogEventLevel.Debug))
-                            {
-                                if (attempts > 1)
-                                {
-                                    _logger.Debug($"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts}.");
-                                }
-                                else
-                                {
-                                    _logger.Debug($"{postItemMessage.ResourceUrl} (source id: {id}): Sending POST request.");
-                                }
-                            }
+                    // Prepare request body
+                    string requestBodyJson;
 
-                            // Prepare request body
-                            string requestBodyJson;
+                    if (ctx.TryGetValue("ModifiedRequestBody", out dynamic modifiedRequestBody))
+                    {
+                        _logger.Information(
+                            $"{postItemMessage.ResourceUrl} (source id: {id}): Applying modified request body from remediation plan...");
 
-                            if (ctx.TryGetValue("ModifiedRequestBody", out dynamic modifiedRequestBody))
-                            {
-                                _logger.Information(
-                                    $"{postItemMessage.ResourceUrl} (source id: {id}): Applying modified request body from remediation plan...");
+                        requestBodyJson = JsonSerializer.Serialize(modifiedRequestBody);
+                    }
+                    else
+                    {
+                        requestBodyJson = postItemMessage.Item.ToString();
+                    }
 
-                                requestBodyJson = JsonSerializer.Serialize(modifiedRequestBody);
-                            }
-                            else
-                            {
-                                requestBodyJson = postItemMessage.Item.ToString();
-                            }
+                    var response = await RequestHelpers.SendPostRequestAsync(
+                        targetEdFiApiClient,
+                        postItemMessage.ResourceUrl,
+                        $"{targetEdFiApiClient.DataManagementApiSegment}{postItemMessage.ResourceUrl}",
+                        requestBodyJson,
+                        ct);
 
-                            var response = await RequestHelpers.SendPostRequestAsync(
-                                targetEdFiApiClient,
-                                postItemMessage.ResourceUrl,
-                                $"{targetEdFiApiClient.DataManagementApiSegment}{postItemMessage.ResourceUrl}",
-                                requestBodyJson,
-                                ct);
+                    var (hasMissingDependency, missingDependencyDetails) = await TryGetMissingDependencyDetailsAsync(response, postItemMessage);
 
-                            var (hasMissingDependency, missingDependencyDetails) = await TryGetMissingDependencyDetailsAsync(response, postItemMessage);
-                            
-                            if (hasMissingDependency)
-                            {
-                                if (!_sourceCapabilities.SupportsGetItemById)
-                                {
-                                    _logger.Warning(
-                                        $"{postItemMessage.ResourceUrl}: Reference '{missingDependencyDetails!.ReferenceName}' to resource '{missingDependencyDetails.ReferencedResourceName}' could not be automatically resolved because the source connection does not support retrieving items by id.");
+                    if (hasMissingDependency)
+                    {
+                        if (!_sourceCapabilities.SupportsGetItemById)
+                        {
+                            _logger.Warning(
+                                $"{postItemMessage.ResourceUrl}: Reference '{missingDependencyDetails!.ReferenceName}' to resource '{missingDependencyDetails.ReferencedResourceName}' could not be automatically resolved because the source connection does not support retrieving items by id.");
 
-                                    return response;
-                                }
-
-                                _logger.Information(
-                                    $"{postItemMessage.ResourceUrl}: Attempting to retrieve missing '{missingDependencyDetails.ReferencedResourceName}' reference based on 'authorizationFailureHandling' metadata in apiPublisherSettings.json.");
-
-                                var (missingDependencyItemRetrieved, missingItemJson) = await _sourceResourceItemProvider.TryGetResourceItemAsync(missingDependencyDetails.SourceDependencyItemUrl);
-                                    
-                                if (missingDependencyItemRetrieved)
-                                {
-                                    var missingItem = JObject.Parse(missingItemJson!);
-
-                                    var postDependencyItemMessage = new PostItemMessage
-                                    {
-                                        ResourceUrl = missingDependencyDetails.DependencyResourceUrl,
-                                        Item = missingItem,
-                                        PostAuthorizationFailureRetry = postItemMessage.PostAuthorizationFailureRetry, // TODO: Is this appropriate to copy?
-                                    };
-                                    
-                                    await HandlePostItemMessage(
-                                        ignoredResourceByUrl,
-                                        postDependencyItemMessage!,
-                                        options,
-                                        javaScriptModuleFactory,
-                                        targetEdFiApiClient,
-                                        knownUnremediatedRequests,
-                                        missingDependencyByResourcePath);
-                                }
-                            }
-                            
                             return response;
-                        },
+                        }
+
+                        _logger.Information(
+                            $"{postItemMessage.ResourceUrl}: Attempting to retrieve missing '{missingDependencyDetails.ReferencedResourceName}' reference based on 'authorizationFailureHandling' metadata in apiPublisherSettings.json.");
+
+                        var (missingDependencyItemRetrieved, missingItemJson) = await _sourceResourceItemProvider.TryGetResourceItemAsync(missingDependencyDetails.SourceDependencyItemUrl);
+
+                        if (missingDependencyItemRetrieved)
+                        {
+                            var missingItem = JObject.Parse(missingItemJson!);
+
+                            var postDependencyItemMessage = new PostItemMessage
+                            {
+                                ResourceUrl = missingDependencyDetails.DependencyResourceUrl,
+                                Item = missingItem,
+                                PostAuthorizationFailureRetry = postItemMessage.PostAuthorizationFailureRetry, // TODO: Is this appropriate to copy?
+                            };
+
+                            await HandlePostItemMessage(
+                                ignoredResourceByUrl,
+                                postDependencyItemMessage!,
+                                options,
+                                javaScriptModuleFactory,
+                                targetEdFiApiClient,
+                                knownUnremediatedRequests,
+                                missingDependencyByResourcePath);
+                        }
+                    }
+
+                    return response;
+                },
                         new Context(),
                         CancellationToken.None);
 
@@ -401,6 +409,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                 // Success - no errors to publish
                 return Enumerable.Empty<ErrorItemMessage>();
+            }
+            catch (RateLimiterRejectedException ex)
+            {
+                // Handle RateLimiterRejectedException,
+                // that can optionally contain information about when to retry.
+                if (ex.RetryAfter.HasValue)
+                {
+                    _logger.Warning($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+                }
+                else
+                {
+                    _logger.Warning($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                }
+                throw;
             }
             catch (Exception ex)
             {
@@ -546,7 +568,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             /// The relative resource URL of the resource being processed for which a missing dependency was identified.
             /// </summary>
             public string DependentResourceUrl { get; set; }
-            
+
             /// <summary>
             /// The property name of the reference which is the missing dependency.
             /// </summary>
@@ -567,7 +589,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             /// </summary>
             public string DependencyResourceUrl { get; set; }
         }
-        
+
         public IEnumerable<PostItemMessage> CreateProcessDataMessages(StreamResourcePageMessage<PostItemMessage> message, string json)
         {
             JArray items = JArray.Parse(json);

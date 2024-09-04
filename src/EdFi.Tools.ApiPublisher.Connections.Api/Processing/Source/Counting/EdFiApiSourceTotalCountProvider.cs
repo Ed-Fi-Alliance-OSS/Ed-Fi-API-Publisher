@@ -13,6 +13,8 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Polly.RateLimiting;
+using Polly.Retry;
 using Serilog;
 using Serilog.Events;
 using System.Net;
@@ -23,18 +25,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
 public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
 {
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
-    
+
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceTotalCountProvider));
 
     public EdFiApiSourceTotalCountProvider(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
     }
-    
+
     public async Task<(bool, long)> TryGetTotalCountAsync(string resourceUrl, Options options, ChangeWindow changeWindow, ITargetBlock<ErrorItemMessage> errorHandlingBlock, CancellationToken cancellationToken)
     {
         var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
-        
+
         // Source-specific: Ed-Fi ODS API
         string changeWindowQueryStringParameters = ApiRequestHelper.GetChangeWindowQueryStringParameters(changeWindow);
 
@@ -43,83 +45,108 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
             options.MaxRetryAttempts);
 
         int attempt = 0;
+        // Rate Limit
+        bool isRateLimitingEnabled = options.EnableRateLimit;
+        var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+            options.RateLimitNumberExecutions,
+            TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
+        );
 
-        var apiResponse = await Policy
+        var retryPolicy = Policy
             .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
             .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
             {
                 _logger.Warning(
                     $"{resourceUrl}: Getting item count from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
-            })
-            .ExecuteAsync((ctx, ct) =>
-            {
-                attempt++;
-                
-                if (_logger.IsEnabled(LogEventLevel.Debug))
-                {
-                    _logger.Debug($"{resourceUrl}): Getting item count from source (attempt #{attempt})...");
-                }
-
-                string requestUri =
-                    $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}";
-
-                return RequestHelpers.SendGetRequestAsync(edFiApiClient, resourceUrl, requestUri, ct);
-            }, new Context(), cancellationToken);
-
-        string responseContent = null;
-
-        if (!apiResponse.IsSuccessStatusCode)
-        {
-            _logger.Error(
-                $"{resourceUrl}: Count request returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
-
-            await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
-                .ConfigureAwait(false);
-
-            // Allow processing to continue with no additional work on this resource
-            return (false, 0); // Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
-        }
-
-        // Try to get the count header from the response
-        if (!apiResponse.Headers.TryGetValues("total-count", out IEnumerable<string> headerValues))
-        {
-            _logger.Warning(
-                $"{resourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing, but overall processing will fail.");
-
-            // Publish an error for the resource. Feature is not supported.
-            await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
-                .ConfigureAwait(false);
-
-            // Allow processing to continue as best it can with no additional work on this resource
-            return (false, 0); // Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
-        }
-
-        string totalCountHeaderValue = headerValues.First();
-
-        _logger.Debug($"{resourceUrl}: Total count header value = {totalCountHeaderValue}");
-
+            });
+        IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
         try
         {
-            long totalCount = long.Parse(totalCountHeaderValue);
-
-            return (true, totalCount);
-        }
-        catch (Exception)
-        {
-            // Publish an error for the resource to allow processing to continue, but to force failure.
-            _logger.Error(
-                $"{resourceUrl}: Unable to convert Total-Count header value of '{totalCountHeaderValue}'  returned by the source API to an integer.");
-
-            errorHandlingBlock.Post(
-                new ErrorItemMessage
+            var apiResponse = await policy
+                .ExecuteAsync((ctx, ct) =>
                 {
-                    ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
-                    Method = HttpMethod.Get.ToString(),
-                    ResponseStatus = apiResponse.StatusCode,
-                    ResponseContent = $"Total-Count: {totalCountHeaderValue}",
-                });
+                    attempt++;
 
-            // Allow processing to continue without performing additional work on this resource.
+                    if (_logger.IsEnabled(LogEventLevel.Debug))
+                    {
+                        _logger.Debug($"{resourceUrl}): Getting item count from source (attempt #{attempt})...");
+                    }
+
+                    string requestUri =
+                        $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}";
+
+                    return RequestHelpers.SendGetRequestAsync(edFiApiClient, resourceUrl, requestUri, ct);
+                }, new Context(), cancellationToken);
+
+            string responseContent = null;
+
+            if (!apiResponse.IsSuccessStatusCode)
+            {
+                _logger.Error(
+                    $"{resourceUrl}: Count request returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+
+                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
+                    .ConfigureAwait(false);
+
+                // Allow processing to continue with no additional work on this resource
+                return (false, 0); // Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+            }
+
+            // Try to get the count header from the response
+            if (!apiResponse.Headers.TryGetValues("total-count", out IEnumerable<string> headerValues))
+            {
+                _logger.Warning(
+                    $"{resourceUrl}: Unable to obtain total count because Total-Count header was not returned by the source API -- skipping item processing, but overall processing will fail.");
+
+                // Publish an error for the resource. Feature is not supported.
+                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
+                    .ConfigureAwait(false);
+
+                // Allow processing to continue as best it can with no additional work on this resource
+                return (false, 0); // Enumerable.Empty<StreamResourcePageMessage<TItemActionMessage>>();
+            }
+
+            string totalCountHeaderValue = headerValues.First();
+
+            _logger.Debug($"{resourceUrl}: Total count header value = {totalCountHeaderValue}");
+
+            try
+            {
+                long totalCount = long.Parse(totalCountHeaderValue);
+
+                return (true, totalCount);
+            }
+            catch (Exception)
+            {
+                // Publish an error for the resource to allow processing to continue, but to force failure.
+                _logger.Error(
+                    $"{resourceUrl}: Unable to convert Total-Count header value of '{totalCountHeaderValue}'  returned by the source API to an integer.");
+
+                errorHandlingBlock.Post(
+                    new ErrorItemMessage
+                    {
+                        ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
+                        Method = HttpMethod.Get.ToString(),
+                        ResponseStatus = apiResponse.StatusCode,
+                        ResponseContent = $"Total-Count: {totalCountHeaderValue}",
+                    });
+
+                // Allow processing to continue without performing additional work on this resource.
+                return (false, 0);
+            }
+        }
+        catch (RateLimiterRejectedException ex)
+        {
+            // Handle RateLimiterRejectedException,
+            // that can optionally contain information about when to retry.
+            if (ex.RetryAfter.HasValue)
+            {
+                _logger.Warning($"{edFiApiClient.DataManagementApiSegment}{resourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
+            }
+            else
+            {
+                _logger.Warning($"{edFiApiClient.DataManagementApiSegment}{resourceUrl}: Rate limit exceeded. Please try again later.");
+            }
             return (false, 0);
         }
     }
