@@ -47,12 +47,12 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         int attempt = 0;
 		// Rate Limit
 		bool isRateLimitingEnabled = options.EnableRateLimit;
-		var retryPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
+		var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
 			options.RateLimitNumberExecutions,
 			TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
 		);
 
-        var rateLimiterPolicy = Policy
+        var retryPolicy = Policy
             .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
             .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
             {
