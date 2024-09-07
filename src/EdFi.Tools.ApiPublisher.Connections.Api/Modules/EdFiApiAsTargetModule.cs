@@ -37,6 +37,7 @@ public class EdFiApiAsTargetModule : Module
         var connectionsConfiguration = _finalConfiguration.GetSection("Connections");
         var targetConnectionConfiguration = connectionsConfiguration.GetSection("Target");
         var targetApiConnectionDetails = targetConnectionConfiguration.Get<ApiConnectionDetails>();
+        var rateLimiter = new PollyRateLimiter<HttpResponseMessage>(options);
 
         builder.RegisterInstance(targetApiConnectionDetails).As<ITargetConnectionDetails>();
         
@@ -71,14 +72,17 @@ public class EdFiApiAsTargetModule : Module
         // Target Data Processing
         builder.RegisterType<ChangeResourceKeyProcessingBlocksFactory>()
             .As<IProcessingBlocksFactory<GetItemForKeyChangeMessage>>()
+            .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
 
         builder.RegisterType<PostResourceProcessingBlocksFactory>()
             .As<IProcessingBlocksFactory<PostItemMessage>>()
+            .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
 
         builder.RegisterType<DeleteResourceProcessingBlocksFactory>()
             .As<IProcessingBlocksFactory<GetItemForDeletionMessage>>()
+            .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
         
         // Register the processing stage initiators

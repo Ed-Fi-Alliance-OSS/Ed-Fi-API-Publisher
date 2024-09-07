@@ -14,6 +14,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Polly.RateLimit;
 using Polly.RateLimiting;
 using Polly.Retry;
 using Serilog;
@@ -32,12 +33,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
     public class ChangeResourceKeyProcessingBlocksFactory : IProcessingBlocksFactory<GetItemForKeyChangeMessage>
     {
         private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
-
+        private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(ChangeResourceKeyProcessingBlocksFactory));
 
-        public ChangeResourceKeyProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider)
+        public ChangeResourceKeyProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter = null)
         {
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
+            _rateLimiter = rateLimiter;
         }
 
         public (ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
@@ -88,11 +90,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         int attempts = 0;
                         // Rate Limit
                         bool isRateLimitingEnabled = options.EnableRateLimit;
-                        var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
-                            options.RateLimitNumberExecutions,
-                            TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
-                        );
-
+                        
                         var retryPolicy = Policy
                             .Handle<Exception>()
                             .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
@@ -109,7 +107,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 }
                             });
 
-                        IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+                        IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
 
                         var apiResponse = await policy.ExecuteAsync((ctx, ct) =>
                         {
@@ -235,18 +233,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                         };
                     }
-                    catch (RateLimiterRejectedException ex)
+                    catch (RateLimitRejectedException)
                     {
-                        // Handle RateLimiterRejectedException,
-                        // that can optionally contain information about when to retry.
-                        if (ex.RetryAfter.HasValue)
-                        {
-                            _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
-                        }
-                        else
-                        {
-                            _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
-                        }
+                        _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
                         throw;
                     }
                     catch (Exception ex)
@@ -302,10 +291,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     int attempt = 0;
                     // Rate Limit
                     bool isRateLimitingEnabled = options.EnableRateLimit;
-                    var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
-                        options.RateLimitNumberExecutions,
-                        TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
-                    );
                     var retryPolicy = Policy
                         .Handle<Exception>()
                         .OrResult<HttpResponseMessage>(r =>
@@ -323,7 +308,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                         });
 
-                    IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+                    IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
 
                     var apiResponse = await policy.ExecuteAsync((ctx, ct) =>
                         {
@@ -380,18 +365,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // Success - no errors to publish
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
-                catch (RateLimiterRejectedException ex)
+                catch (RateLimitRejectedException)
                 {
-                    // Handle RateLimiterRejectedException,
-                    // that can optionally contain information about when to retry.
-                    if (ex.RetryAfter.HasValue)
-                    {
-                        _logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
-                    }
-                    else
-                    {
-                        _logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please try again later.");
-                    }
+                    _logger.Warning($"{msg.ResourceUrl}: Rate limit exceeded. Please try again later.");
                     throw;
                 }
                 catch (Exception ex)

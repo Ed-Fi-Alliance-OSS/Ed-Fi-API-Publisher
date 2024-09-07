@@ -74,8 +74,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--changeVersionPagingWindowSize"] = "Options:ChangeVersionPagingWindowSize",
                     ["--enableRateLimit"] = "Options:EnableRateLimit",
                     ["--rateLimitNumberExecutions"] = "Options:RateLimitNumberExecutions",
-                    ["--rateLimitTimeLimitMinutes"] = "Options:RateLimitTimeLimitMinutes",
+                    ["--rateLimitTimeSeconds"] = "Options:RateLimitTimeSeconds",
                     ["--useReversePaging"] = "Options:UseReversePaging",
+
 
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
                     ["--include"] = "Connections:Source:Include",
