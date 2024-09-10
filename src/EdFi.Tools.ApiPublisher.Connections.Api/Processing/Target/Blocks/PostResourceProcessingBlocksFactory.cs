@@ -18,6 +18,7 @@ using Jering.Javascript.NodeJS;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Polly.RateLimit;
 using Polly.RateLimiting;
 using Polly.Retry;
 using Serilog;
@@ -39,19 +40,23 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly ISourceConnectionDetails _sourceConnectionDetails;
         private readonly ISourceCapabilities _sourceCapabilities;
         private readonly ISourceResourceItemProvider _sourceResourceItemProvider;
+        private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
         public PostResourceProcessingBlocksFactory(
             INodeJSService nodeJsService,
             ITargetEdFiApiClientProvider targetEdFiApiClientProvider,
             ISourceConnectionDetails sourceConnectionDetails,
             ISourceCapabilities sourceCapabilities,
-            ISourceResourceItemProvider sourceResourceItemProvider)
+            ISourceResourceItemProvider sourceResourceItemProvider,
+            IRateLimiting<HttpResponseMessage> rateLimiter =null
+        )
         {
             _nodeJsService = nodeJsService;
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
             _sourceConnectionDetails = sourceConnectionDetails;
             _sourceCapabilities = sourceCapabilities;
             _sourceResourceItemProvider = sourceResourceItemProvider;
+            _rateLimiter = rateLimiter;
 
             // Ensure that the API connections are configured correctly with regards to Profiles
             // If we have no Profile applied to the target... ensure that the source also has no profile specified (to prevent accidental data loss on POST)
@@ -159,10 +164,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 int attempts = 0;
                 // Rate Limit
                 bool isRateLimitingEnabled = options.EnableRateLimit;
-                var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
-                    options.RateLimitNumberExecutions,
-                    TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
-                );
                 var retryPolicy = Policy.Handle<Exception>()
                     .OrResult<HttpResponseMessage>(
                         r =>
@@ -229,7 +230,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                     $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}");
                             }
                         });
-                IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+                IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
                 var apiResponse = await policy.ExecuteAsync(
                 async (ctx, ct) =>
                 {
@@ -410,18 +411,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 // Success - no errors to publish
                 return Enumerable.Empty<ErrorItemMessage>();
             }
-            catch (RateLimiterRejectedException ex)
+            catch (RateLimitRejectedException)
             {
-                // Handle RateLimiterRejectedException,
-                // that can optionally contain information about when to retry.
-                if (ex.RetryAfter.HasValue)
-                {
-                    _logger.Warning($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
-                }
-                else
-                {
-                    _logger.Warning($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please try again later.");
-                }
+                _logger.Warning($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please try again later.");
                 throw;
             }
             catch (Exception ex)

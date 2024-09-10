@@ -24,6 +24,7 @@ using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Microsoft.Extensions.Configuration;
+using System.Threading.RateLimiting;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Modules;
 
@@ -46,7 +47,8 @@ public class EdFiApiAsSourceModule : Module
         var sourceApiConnectionDetails = sourceConnectionConfiguration.Get<ApiConnectionDetails>();
 
         builder.RegisterInstance(sourceApiConnectionDetails).As<ISourceConnectionDetails>();
-        
+        var rateLimiter = new PollyRateLimiter<HttpResponseMessage>(options);
+
         var sourceEdFiApiClient = new Lazy<EdFiApiClient>(
             () => new EdFiApiClient(
                 "Source",
@@ -80,6 +82,7 @@ public class EdFiApiAsSourceModule : Module
 
         builder.RegisterType<ApiSourceResourceItemProvider>()
             .As<ISourceResourceItemProvider>()
+            .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
 
         // Register resource page message producer using a ChangeVersion paging strategy
@@ -109,11 +112,13 @@ public class EdFiApiAsSourceModule : Module
         // Register handler to perform page-based requests against a Source API
         builder.RegisterType<EdFiApiStreamResourcePageMessageHandler>()
             .As<IStreamResourcePageMessageHandler>()
+            .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
-
+        
         // Register Data Source Total Count provider for Source API
         builder.RegisterType<EdFiApiSourceTotalCountProvider>()
-            .As<ISourceTotalCountProvider>()
+        .As<ISourceTotalCountProvider>()
+            .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
         
         // API dependency metadata from Ed-Fi ODS API (using Source API)

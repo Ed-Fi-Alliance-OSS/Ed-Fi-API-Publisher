@@ -24,9 +24,11 @@ Defines general behavior of the Ed-Fi API Publisher.
 | Options:IncludeDescriptors<br/>`--includeDescriptors`                                                     | Indicates whether or not to attempt to publish descriptors.<br/>(_Default value: false_)                                                                                                                                                                                                   |
 | Options:ErrorPublishingBatchSize<br/>`--errorPublishingBatchSize`                                         | Indicates the number of items to batch in each call to the error writer. This could be used to optimize the size of a batch write depending on the operating environment (e.g. Amazon DynamoDB allows for 25 items to be written in a BatchWriteItem operation).<br/>(_Default value: 25_) |
 | Options:RemediationsScriptFile<br/>`--remediationsScriptFile`                                             | Indicates the file system path to a JavaScript file containing [remediations](Remediations.md) for failed POST requests against the target API. |
-| Options:UseChangeVersionPaging<br/>`--useChangeVersionPaging`                                             | Indicates whether or not to use change version paging.<br/>(_Default value: false_)
-| Options:ChangeVersionPagingWindowSize<br/>`--changeVersionPagingWindowSize`                               | Indicates the change version paging window size.<br/>(_Default value: 25000_)
-
+| Options:UseChangeVersionPaging<br/>`--useChangeVersionPaging`                                             | Indicates whether or not to use change version paging.<br/>(_Default value: false_) |
+| Options:ChangeVersionPagingWindowSize<br/>`--changeVersionPagingWindowSize`                               | Indicates the change version paging window size.<br/>(_Default value: 25000_) |
+| Options:EnableRateLimit<br/>`--enableRateLimit`                                                           | Indicates whether or not to use rate limiting.<br/>(_Default value: false_) |
+| Options:RateLimitNumberExecutions<br/>`--rateLimitNumberExecutions`                                       | Indicates the maximum number of executions allowed within the defined time window.<br/>(_Default value: 100_) |
+| Options:RateLimitTimeSeconds<br/>`--rateLimitTimeSeconds`                                                 | Indicates the  the time span for the rate limit in seconds.<br/>(_Default value: 1_) |
 
 ## API Connections
 

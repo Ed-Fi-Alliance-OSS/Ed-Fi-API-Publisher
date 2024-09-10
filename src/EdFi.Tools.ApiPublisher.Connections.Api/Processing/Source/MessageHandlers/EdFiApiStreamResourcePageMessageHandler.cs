@@ -20,6 +20,7 @@ using Serilog;
 using Serilog.Events;
 using System.Threading.Tasks.Dataflow;
 using Polly.Retry;
+using Polly.RateLimit;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
 
@@ -27,11 +28,13 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 {
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiStreamResourcePageMessageHandler));
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
+    private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
     public EdFiApiStreamResourcePageMessageHandler(
-        ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
+        ISourceEdFiApiClientProvider sourceEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter =null)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
+        _rateLimiter = rateLimiter;
     }
 
     public async Task<IEnumerable<TProcessDataMessage>> HandleStreamResourcePageAsync<TProcessDataMessage>(
@@ -72,11 +75,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 int attempts = 0;
                 // Rate Limit
                 bool isRateLimitingEnabled = options.EnableRateLimit;
-                var rateLimiterPolicy = Policy.RateLimitAsync<HttpResponseMessage>(
-                    options.RateLimitNumberExecutions,
-                    TimeSpan.FromMinutes(options.RateLimitTimeLimitMinutes)
-                );
-
+                
                 var retryPolicy = Policy
                     .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                     .WaitAndRetryAsync(
@@ -86,7 +85,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             _logger.Warning(
                                 $"{message.ResourceUrl}: Retrying GET page items {offset} to {offset + limit - 1} from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
                         });
-                IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(rateLimiterPolicy, retryPolicy) : retryPolicy;
+                IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
                 try
                 {
                     var apiResponse = await policy.ExecuteAsync(
@@ -198,18 +197,9 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         break;
                     }
                 }
-                catch (RateLimiterRejectedException ex)
+                catch (RateLimitRejectedException)
                 {
-                    // Handle RateLimiterRejectedException,
-                    // that can optionally contain information about when to retry.
-                    if (ex.RetryAfter.HasValue)
-                    {
-                        _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please retry after: {ex.RetryAfter.Value.TotalSeconds} seconds.");
-                    }
-                    else
-                    {
-                        _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
-                    }
+                    _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
                 }
                 break;
             }
