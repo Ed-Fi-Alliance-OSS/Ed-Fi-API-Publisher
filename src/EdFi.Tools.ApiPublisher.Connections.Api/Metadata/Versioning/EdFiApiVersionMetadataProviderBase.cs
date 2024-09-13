@@ -16,12 +16,12 @@ public class EdFiApiVersionMetadataProviderBase
     private readonly IEdFiApiClientProvider _edFiApiClientProvider;
 
     private readonly ILogger _logger;
-    
+
     protected EdFiApiVersionMetadataProviderBase(string role, IEdFiApiClientProvider edFiApiClientProvider)
     {
         _role = role;
         _edFiApiClientProvider = edFiApiClientProvider;
-        
+
         _logger = Log.ForContext(GetType());
     }
 
@@ -33,11 +33,11 @@ public class EdFiApiVersionMetadataProviderBase
         {
             throw new Exception($"{_role} API at '{_edFiApiClientProvider.GetApiClient().HttpClient.BaseAddress}' returned status code '{versionResponse.Result.StatusCode}' for request for version information.");
         }
-        
+
         string responseJson = await versionResponse.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
 
         return GetVersionObject(responseJson);
-        
+
         JObject GetVersionObject(string versionJson)
         {
             JObject versionObject;

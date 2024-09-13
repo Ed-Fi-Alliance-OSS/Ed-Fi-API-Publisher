@@ -7,18 +7,18 @@ using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
 {
-	public class GetItemForDeletionMessage
+    public class GetItemForDeletionMessage
     {
         /// <summary>
         /// Gets or sets the relative URL for the resource to be deleted.
         /// </summary>
         public string ResourceUrl { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the natural key values for the resource to be deleted on the target.
         /// </summary>
         public JToken KeyValues { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the source API's resource identifier for the resource that was deleted.
         /// </summary>

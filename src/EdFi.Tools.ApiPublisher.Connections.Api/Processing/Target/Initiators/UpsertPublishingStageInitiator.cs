@@ -18,13 +18,13 @@ public class UpsertPublishingStageInitiator : IPublishingStageInitiator
         _streamingResourceProcessor = streamingResourceProcessor;
         _processingBlocksFactory = processingBlocksFactory;
     }
-    
+
     public IDictionary<string, StreamingPagesItem> Start(ProcessingContext processingContext, CancellationToken cancellationToken)
     {
         return _streamingResourceProcessor.Start(
             _processingBlocksFactory.CreateProcessingBlocks,
             _processingBlocksFactory.CreateProcessDataMessages,
-            processingContext, 
+            processingContext,
             cancellationToken);
     }
 }

@@ -36,11 +36,11 @@ public class EdFiApiAsSourceModule : Module
     {
         _finalConfiguration = finalConfiguration;
     }
-    
+
     protected override void Load(ContainerBuilder builder)
     {
         var options = _finalConfiguration.Get<ApiPublisherSettings>().Options;
-        
+
         // Initialize source/target API clients
         var connectionsConfiguration = _finalConfiguration.GetSection("Connections");
         var sourceConnectionConfiguration = connectionsConfiguration.GetSection("Source");
@@ -59,7 +59,7 @@ public class EdFiApiAsSourceModule : Module
         builder.RegisterInstance(new EdFiApiClientProvider(sourceEdFiApiClient))
             .As<ISourceEdFiApiClientProvider>()
             .SingleInstance();
-        
+
         // Available ChangeVersions for Source API
         builder.RegisterType<EdFiApiSourceCurrentChangeVersionProvider>()
             .As<ISourceCurrentChangeVersionProvider>()
@@ -108,19 +108,19 @@ public class EdFiApiAsSourceModule : Module
                 .As<IStreamResourcePageMessageProducer>()
                 .SingleInstance();
         }
-        
+
         // Register handler to perform page-based requests against a Source API
         builder.RegisterType<EdFiApiStreamResourcePageMessageHandler>()
             .As<IStreamResourcePageMessageHandler>()
             .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
-        
+
         // Register Data Source Total Count provider for Source API
         builder.RegisterType<EdFiApiSourceTotalCountProvider>()
         .As<ISourceTotalCountProvider>()
             .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
-        
+
         // API dependency metadata from Ed-Fi ODS API (using Source API)
         if (options.UseSourceDependencyMetadata)
         {

@@ -20,11 +20,11 @@ public class EdFiApiSourceCurrentChangeVersionProvider : ISourceCurrentChangeVer
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
     }
-    
+
     public async Task<long?> GetCurrentChangeVersionAsync()
     {
         var sourceApiClient = _sourceEdFiApiClientProvider.GetApiClient();
-        
+
         // Get current source version information
         string availableChangeVersionsRelativePath = $"{sourceApiClient.ChangeQueriesApiSegment}/availableChangeVersions";
 

@@ -18,7 +18,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
 
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceIsolationApplicator));
-    
+
     public EdFiApiSourceIsolationApplicator(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
@@ -28,7 +28,8 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
     {
         var sourceApiClient = _sourceEdFiApiClientProvider.GetApiClient();
         var sourceApiConnectionDetails = sourceApiClient.ConnectionDetails;
-        if (sourceApiVersion.Major >= 7) {
+        if (sourceApiVersion.Major >= 7)
+        {
             sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Use-Snapshot", "true");
         }
         else
@@ -47,7 +48,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 
             // Configure source HTTP client to add the snapshot identifier header to every request against the source API
             sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Snapshot-Identifier", snapshotIdentifier);
-        }        
+        }
     }
 
     private async Task<string> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)

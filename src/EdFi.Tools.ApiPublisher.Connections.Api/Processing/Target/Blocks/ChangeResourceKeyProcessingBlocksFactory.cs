@@ -90,7 +90,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         int attempts = 0;
                         // Rate Limit
                         bool isRateLimitingEnabled = options.EnableRateLimit;
-                        
+
                         var retryPolicy = Policy
                             .Handle<Exception>()
                             .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())

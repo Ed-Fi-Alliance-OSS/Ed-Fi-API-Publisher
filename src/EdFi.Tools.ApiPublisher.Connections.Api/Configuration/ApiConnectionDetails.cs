@@ -72,12 +72,12 @@ public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnecti
         {
             yield return "Url";
         }
-            
+
         if (Key == null)
         {
             yield return "Key";
         }
-            
+
         if (Secret == null)
         {
             yield return "Secret";

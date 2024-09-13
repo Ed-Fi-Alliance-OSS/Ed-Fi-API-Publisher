@@ -12,12 +12,12 @@ public class EdFiApiClientProvider : ISourceEdFiApiClientProvider, ITargetEdFiAp
     private readonly Lazy<EdFiApiClient> _apiClient;
 
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClientProvider));
-    
+
     public EdFiApiClientProvider(Lazy<EdFiApiClient> apiClient)
     {
         _apiClient = apiClient;
     }
-    
+
     public EdFiApiClient GetApiClient()
     {
         if (!_apiClient.IsValueCreated)

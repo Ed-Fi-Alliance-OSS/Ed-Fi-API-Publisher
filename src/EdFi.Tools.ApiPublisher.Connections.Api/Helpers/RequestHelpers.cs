@@ -15,8 +15,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 public static class RequestHelpers
 {
     private static readonly char[] _pathSeparatorChars = { '/' };
-    private static readonly ConcurrentDictionary<string, string> _writableContentTypeByResourceUrl = new ();
-    private static readonly ConcurrentDictionary<string, string> _readableContentTypeByResourceUrl = new ();
+    private static readonly ConcurrentDictionary<string, string> _writableContentTypeByResourceUrl = new();
+    private static readonly ConcurrentDictionary<string, string> _readableContentTypeByResourceUrl = new();
 
     /// <summary>
     /// Sends a POST request (applying a Profile content type via the Content-Type header, if appropriate).
@@ -60,7 +60,7 @@ public static class RequestHelpers
             new StringContent(requestBodyJson, Encoding.UTF8, "application/json"),
             ct);
     }
-    
+
     /// <summary>
     /// Sends a GET request (applying an applied Profile content type via the Accept header, if appropriate).
     /// </summary>
@@ -102,7 +102,7 @@ public static class RequestHelpers
     private static bool ShouldApplyProfileContentType(string requestUri)
     {
         var uri = new Uri(requestUri);
-        
+
         // Don't apply Profiles to deletes requests
         if (uri.LocalPath.EndsWith("/deletes"))
         {
@@ -114,7 +114,7 @@ public static class RequestHelpers
         {
             return false;
         }
-        
+
         // Don't apply Profiles to descriptors requests
         if (uri.LocalPath.EndsWith("Descriptors"))
         {

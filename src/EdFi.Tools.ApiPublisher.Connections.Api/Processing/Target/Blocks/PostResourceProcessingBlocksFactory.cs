@@ -48,7 +48,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             ISourceConnectionDetails sourceConnectionDetails,
             ISourceCapabilities sourceCapabilities,
             ISourceResourceItemProvider sourceResourceItemProvider,
-            IRateLimiting<HttpResponseMessage> rateLimiter =null
+            IRateLimiting<HttpResponseMessage> rateLimiter = null
         )
         {
             _nodeJsService = nodeJsService;
@@ -167,7 +167,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 var retryPolicy = Policy.Handle<Exception>()
                     .OrResult<HttpResponseMessage>(
                         r =>
-
                             // Descriptor Conflicts are not to be retried
                             (r.StatusCode == HttpStatusCode.Conflict
                                 && !postItemMessage.ResourceUrl.EndsWith("Descriptors", StringComparison.OrdinalIgnoreCase))

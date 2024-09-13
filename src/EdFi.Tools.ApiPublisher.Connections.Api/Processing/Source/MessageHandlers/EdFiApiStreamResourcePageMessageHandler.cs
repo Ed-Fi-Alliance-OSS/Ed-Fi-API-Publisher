@@ -31,7 +31,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
     private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
     public EdFiApiStreamResourcePageMessageHandler(
-        ISourceEdFiApiClientProvider sourceEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter =null)
+        ISourceEdFiApiClientProvider sourceEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter = null)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
         _rateLimiter = rateLimiter;
@@ -75,7 +75,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 int attempts = 0;
                 // Rate Limit
                 bool isRateLimitingEnabled = options.EnableRateLimit;
-                
+
                 var retryPolicy = Policy
                     .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                     .WaitAndRetryAsync(

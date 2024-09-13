@@ -35,7 +35,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(DeleteResourceProcessingBlocksFactory));
 
-        public DeleteResourceProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter =null)
+        public DeleteResourceProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter = null)
         {
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
             _rateLimiter = rateLimiter;
@@ -89,7 +89,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         int attempts = 0;
                         // Rate Limit
                         bool isRateLimitingEnabled = options.EnableRateLimit;
-                        
+
                         var retryPolicy = Policy
                             .Handle<Exception>()
                             .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
@@ -243,7 +243,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     int attempts = 0;
                     // Rate Limit
                     bool isRateLimitingEnabled = options.EnableRateLimit;
-                    
+
                     var retryPolicy = Policy
                         .Handle<Exception>()
                         .OrResult<HttpResponseMessage>(r =>
@@ -346,13 +346,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                     yield break;
                 }
-
-                // // Add the item to the buffer for processing into the target API
-                // if (_logger.IsEnabled(LogEventLevel.Debug))
-                // {
-                //     _logger.Debug(
-                //         $"{message.ResourceUrl}: Adding individual action message of type '{nameof(GetItemForDeletionMessage)}' for item '{item["id"]?.Value<string>() ?? "unknown"}'...");
-                // }
 
                 var itemMessage = CreateItemActionMessage(item);
 

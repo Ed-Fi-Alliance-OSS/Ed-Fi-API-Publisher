@@ -15,18 +15,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProdu
 public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStreamResourcePageMessageProducer
 {
     private readonly ISourceTotalCountProvider _sourceTotalCountProvider;
-    
+
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer));
-    
+
     public EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(ISourceTotalCountProvider sourceTotalCountProvider)
     {
         _sourceTotalCountProvider = sourceTotalCountProvider;
     }
-    
+
     public async Task<IEnumerable<StreamResourcePageMessage<TProcessDataMessage>>> ProduceMessagesAsync<TProcessDataMessage>(
-        StreamResourceMessage message, 
+        StreamResourceMessage message,
         Options options,
-        ITargetBlock<ErrorItemMessage> errorHandlingBlock, 
+        ITargetBlock<ErrorItemMessage> errorHandlingBlock,
         Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
         CancellationToken cancellationToken)
     {
@@ -47,7 +47,7 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
             message.ChangeWindow,
             errorHandlingBlock,
             cancellationToken);
-        
+
         if (!totalCountSuccess)
         {
             // Allow processing to continue without performing additional work on this resource.
@@ -72,14 +72,14 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
                 // Page-strategy specific context
                 Limit = limit,
                 Offset = offset,
-                
+
                 // Source Ed-Fi ODS API processing context (shared)
                 // EdFiApiClient = message.EdFiApiClient,
 
                 // Global processing context
                 ChangeWindow = message.ChangeWindow,
                 CreateProcessDataMessages = createProcessDataMessages,
-                
+
                 CancellationSource = message.CancellationSource,
             };
 

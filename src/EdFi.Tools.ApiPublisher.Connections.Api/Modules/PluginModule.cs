@@ -18,7 +18,7 @@ public class PluginModule : Module
     {
         builder.RegisterType<ApiConnectionDetails>()
             .Named<INamedConnectionDetails>(Plugin.ApiConnectionType);
-        
+
         builder.RegisterType<EdFiApiConnectionsConfigurationBuilderEnhancer>()
             .As<IConfigurationBuilderEnhancer>()
             .SingleInstance();

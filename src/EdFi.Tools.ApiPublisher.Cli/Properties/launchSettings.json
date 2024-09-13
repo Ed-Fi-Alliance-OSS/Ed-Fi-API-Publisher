@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "EdFi.Tools.ApiPublisher.Cli": {
+      "commandName": "Project",
+      "commandLineArgs": ".\\EdFiApiPublisher.exe --sourceName=AzureJesus01 --targetName=AzureJesus02 --sourceUrl=https://tools-apipub01.southcentralus.cloudapp.azure.com/WebApi --sourceKey=2rJ19ql1NPqs --sourceSecret=rNHZqSu76dzHzofHLhowWxTk --targetUrl=https://tools-apipub02.southcentralus.cloudapp.azure.com/WebApi --targetKey=1Nw7lf7XuO7K --targetSecret=keggce1Nr06fjqAWhHOu4ClG --ignoreIsolation=true --maxDegreeOfParallelismForPostResourceItem=5 --maxDegreeOfParallelismForStreamResourcePages=3 --includeDescriptors=true --exclude=surveys --ignoreSslErrors=true --useChangeVersionPaging=true --useReversePaging=true"
+    }
+  }
+}

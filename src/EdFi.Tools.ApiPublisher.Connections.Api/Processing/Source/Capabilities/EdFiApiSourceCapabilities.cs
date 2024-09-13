@@ -15,16 +15,16 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
 
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceCapabilities));
-    
+
     public EdFiApiSourceCapabilities(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
     }
-    
+
     public async Task<bool> SupportsKeyChangesAsync(string probeResourceKey)
     {
         var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
-        
+
         string probeUrl = $"{edFiApiClient.DataManagementApiSegment}{probeResourceKey}{EdFiApiConstants.KeyChangesPathSuffix}";
 
         _logger.Debug($"Probing source API for key changes support at '{probeUrl}'.");
