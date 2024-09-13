@@ -75,6 +75,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--enableRateLimit"] = "Options:EnableRateLimit",
                     ["--rateLimitNumberExecutions"] = "Options:RateLimitNumberExecutions",
                     ["--rateLimitTimeSeconds"] = "Options:RateLimitTimeSeconds",
+                    ["--rateLimitMaxRetries"] = "Options:RateLimitMaxRetries",
                     ["--useReversePaging"] = "Options:UseReversePaging",
 
 

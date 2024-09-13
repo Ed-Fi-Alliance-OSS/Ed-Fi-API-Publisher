@@ -137,7 +137,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         }
         catch (RateLimitRejectedException)
         {
-            _logger.Warning($"{edFiApiClient.DataManagementApiSegment}{resourceUrl}: Rate limit exceeded. Please try again later.");
+            _logger.Fatal($"{edFiApiClient.DataManagementApiSegment}{resourceUrl}: Rate limit exceeded. Please try again later.");
             return (false, 0);
         }
     }

@@ -199,7 +199,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 }
                 catch (RateLimitRejectedException)
                 {
-                    _logger.Warning($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                    _logger.Fatal($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
                 }
                 break;
             }

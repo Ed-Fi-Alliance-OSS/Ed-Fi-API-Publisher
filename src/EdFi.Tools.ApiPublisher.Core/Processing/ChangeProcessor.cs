@@ -15,6 +15,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Newtonsoft.Json;
+using Polly.RateLimit;
 using Serilog;
 using Serilog.Events;
 using System;
@@ -191,6 +192,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 await UpdateChangeVersionAsync(configuration, changeWindow)
                     .ConfigureAwait(false);
+            }
+            catch (RateLimitRejectedException ex)
+            {
+                _logger.Fatal(ex.Message);
+                throw;
             }
             catch (Exception ex)
             {
@@ -886,12 +892,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 i++;
             }
 
-            if (i == infiniteLoopProtectionThreshold)
-            {
-                // This should never happen
-                throw new Exception(
-                    "Unable to reduce resource dependencies for processing key changes as expected (the infinite loop threshold was exceeded during processing).");
-            }
+            //if (i == infiniteLoopProtectionThreshold)
+            //{
+            //    // This should never happen
+            //    throw new Exception(
+            //        "Unable to reduce resource dependencies for processing key changes as expected (the infinite loop threshold was exceeded during processing).");
+            //}
 
             return keyChangeDependenciesByResourcePath;
         }
