@@ -43,7 +43,7 @@ public class PollyRateLimiter<TResult> : IRateLimiting<TResult>
             return await _rateLimiter.ExecuteAsync(action);
         }
         catch (RateLimitRejectedException) {
-            _logger.Fatal("Rate limit exceeded. Please try again later.dddd");
+            _logger.Fatal("Rate limit exceeded. Please try again later.");
             throw;
         }
 
