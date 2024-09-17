@@ -74,8 +74,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
 
                     string requestUri =
                         $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}";
-
-                    return RequestHelpers.SendGetRequestAsync(edFiApiClient, resourceUrl, requestUri, ct).Result;
+                    return await RequestHelpers.SendGetRequestAsync(edFiApiClient, resourceUrl, requestUri, ct);
                 }, new Context(), cancellationToken);
 
             string responseContent = null;
