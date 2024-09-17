@@ -27,8 +27,9 @@ Defines general behavior of the Ed-Fi API Publisher.
 | Options:UseChangeVersionPaging<br/>`--useChangeVersionPaging`                                             | Indicates whether or not to use change version paging.<br/>(_Default value: false_) |
 | Options:ChangeVersionPagingWindowSize<br/>`--changeVersionPagingWindowSize`                               | Indicates the change version paging window size.<br/>(_Default value: 25000_) |
 | Options:EnableRateLimit<br/>`--enableRateLimit`                                                           | Indicates whether or not to use rate limiting.<br/>(_Default value: false_) |
-| Options:RateLimitNumberExecutions<br/>`--rateLimitNumberExecutions`                                       | Indicates the maximum number of executions allowed within the defined time window.<br/>(_Default value: 100_) |
+| Options:RateLimitNumberExecutions<br/>`--rateLimitNumberExecutions`                                       | Indicates the maximum number of executions allowed within the defined time window.<br/>(_Default value: 30_) |
 | Options:RateLimitTimeSeconds<br/>`--rateLimitTimeSeconds`                                                 | Indicates the  the time span for the rate limit in seconds.<br/>(_Default value: 1_) |
+| Options:RateLimitMaxRetries<br/>`--rateLimitMaxRetries`                                                   | Indicates the number of times the Ed-Fi API publisher will attempt to _resend_ a request, rejected by rate limiting, to the source or destination APIs before determining that the failure is permanent.<br/>(_Default value: 10_) |
 
 ## API Connections
 

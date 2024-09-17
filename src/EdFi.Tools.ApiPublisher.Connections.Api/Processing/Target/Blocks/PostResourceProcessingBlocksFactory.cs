@@ -413,8 +413,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             }
             catch (RateLimitRejectedException)
             {
-                _logger.Warning($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please try again later.");
-                throw;
+                _logger.Fatal($"{postItemMessage.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                return Enumerable.Empty<ErrorItemMessage>();
             }
             catch (Exception ex)
             {

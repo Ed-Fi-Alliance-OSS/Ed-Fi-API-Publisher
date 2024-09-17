@@ -167,7 +167,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
         }
         catch (RateLimitRejectedException)
         {
-            _logger.Warning($"{sourceEdFiApiClient.DataManagementApiSegment}{resourceItemUrl}: Rate limit exceeded. Please try again later.");
+            _logger.Fatal($"{sourceEdFiApiClient.DataManagementApiSegment}{resourceItemUrl}: Rate limit exceeded. Please try again later.");
             return (false, null);
         }
         //----------------------------------------------------------------------------------------------

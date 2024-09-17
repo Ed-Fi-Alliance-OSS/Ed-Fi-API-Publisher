@@ -54,6 +54,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 options.EnableRateLimit = true;
                 options.RateLimitNumberExecutions = 5;
                 options.RateLimitTimeSeconds = 1;
+                options.RateLimitMaxRetries = 1;
                 var rateLimiter = new PollyRateLimiter<HttpResponseMessage>(options);
             
                 var methodToTest = new MockRateLimitingMethod(rateLimiter);
