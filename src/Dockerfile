@@ -33,3 +33,4 @@ RUN apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 postgresql13-clie
     rm -f /app/*.exe
 
 ENTRYPOINT [ "/app/run.sh" ]
+

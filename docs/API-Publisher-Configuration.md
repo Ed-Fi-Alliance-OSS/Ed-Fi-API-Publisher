@@ -30,6 +30,7 @@ Defines general behavior of the Ed-Fi API Publisher.
 | Options:RateLimitNumberExecutions<br/>`--rateLimitNumberExecutions`                                       | Indicates the maximum number of executions allowed within the defined time window.<br/>(_Default value: 30_) |
 | Options:RateLimitTimeSeconds<br/>`--rateLimitTimeSeconds`                                                 | Indicates the  the time span for the rate limit in seconds.<br/>(_Default value: 1_) |
 | Options:RateLimitMaxRetries<br/>`--rateLimitMaxRetries`                                                   | Indicates the number of times the Ed-Fi API publisher will attempt to _resend_ a request, rejected by rate limiting, to the source or destination APIs before determining that the failure is permanent.<br/>(_Default value: 10_) |
+| Options:useReversePaging<br/>`--useReversePaging`                                                         | Indicates whether or not to use reverse paging mode. For more information about this feature read [here](Reverse-Paging.md).<br/>(_Default value: false_) |
 
 ## API Connections
 
