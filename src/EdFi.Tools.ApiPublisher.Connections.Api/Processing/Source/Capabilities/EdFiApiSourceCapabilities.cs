@@ -27,17 +27,18 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
 
         string probeUrl = $"{edFiApiClient.DataManagementApiSegment}{probeResourceKey}{EdFiApiConstants.KeyChangesPathSuffix}";
 
-        _logger.Debug($"Probing source API for key changes support at '{probeUrl}'.");
+        _logger.Debug("Probing source API for key changes support at '{ProbeUrl}'.", probeUrl);
 
         var probeResponse = await edFiApiClient.HttpClient.GetAsync($"{probeUrl}?limit=1").ConfigureAwait(false);
 
         if (probeResponse.IsSuccessStatusCode)
         {
-            _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'.");
+            _logger.Debug("Probe response status was '{StatusCode}'.", probeResponse.StatusCode);
             return true;
         }
 
-        _logger.Warning($"Request to Source API for the '{EdFiApiConstants.KeyChangesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Key change processing cannot be performed.");
+        _logger.Warning("Request to Source API for the '{KeyChangesPathSuffix}' child resource was unsuccessful (response status was '{StatusCode}'). Key change processing cannot be performed.",
+            EdFiApiConstants.KeyChangesPathSuffix, probeResponse.StatusCode);
 
         return false;
     }
@@ -49,17 +50,18 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
         // Probe for deletes support
         string probeUrl = $"{edFiApiClient.DataManagementApiSegment}{probeResourceKey}{EdFiApiConstants.DeletesPathSuffix}";
 
-        _logger.Debug($"Probing source API for deletes support at '{probeUrl}'.");
+        _logger.Debug("Probing source API for deletes support at '{ProbeUrl}'.", probeUrl);
 
         var probeResponse = await edFiApiClient.HttpClient.GetAsync($"{probeUrl}?limit=1").ConfigureAwait(false);
 
         if (probeResponse.IsSuccessStatusCode)
         {
-            _logger.Debug($"Probe response status was '{probeResponse.StatusCode}'.");
+            _logger.Debug("Probe response status was '{StatusCode}'.", probeResponse.StatusCode);
             return true;
         }
 
-        _logger.Warning($"Request to Source API for the '{EdFiApiConstants.DeletesPathSuffix}' child resource was unsuccessful (response status was '{probeResponse.StatusCode}'). Delete processing cannot be performed.");
+        _logger.Warning("Request to Source API for the '{DeletesPathSuffix}' child resource was unsuccessful (response status was '{StatusCode}'). Delete processing cannot be performed.",
+            EdFiApiConstants.DeletesPathSuffix, probeResponse.StatusCode);
 
         return false;
     }

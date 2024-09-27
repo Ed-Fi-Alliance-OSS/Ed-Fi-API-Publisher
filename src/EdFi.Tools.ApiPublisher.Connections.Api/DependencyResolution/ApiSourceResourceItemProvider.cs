@@ -51,8 +51,8 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                 getByIdDelay,
                 (result, ts, retryAttempt, ctx) =>
                 {
-                    _logger.Warning(
-                        $"Retrying GET for resource item '{resourceItemUrl}' from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {_options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                    _logger.Warning("Retrying GET for resource item '{ResourceItemUrl}' from source failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
+                        resourceItemUrl, result.Result.StatusCode, retryAttempt, _options.MaxRetryAttempts, ts.TotalSeconds);
                 });
         IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
         try
@@ -62,13 +62,10 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                     {
                         getByIdAttempts++;
 
-                        if (getByIdAttempts > 1)
+                        if (getByIdAttempts > 1 && _logger.IsEnabled(LogEventLevel.Debug))
                         {
-                            if (_logger.IsEnabled(LogEventLevel.Debug))
-                            {
-                                _logger.Debug(
-                                    $"GET for missing dependency '{resourceItemUrl}' reference from source attempt #{getByIdAttempts}.");
-                            }
+                            _logger.Debug("GET for missing dependency '{ResourceItemUrl}' reference from source attempt #{GetByIdAttempts}.",
+                                resourceItemUrl, getByIdAttempts);
                         }
 
                         return sourceEdFiApiClient.HttpClient.GetAsync(
@@ -94,15 +91,16 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
             }
             else
             {
-                _logger.Warning(
-                    $"GET request from source API for '{resourceItemUrl}' reference failed with status '{getByIdResponse.StatusCode}': {responseContent}");
+                _logger.Warning("GET request from source API for '{ResourceItemUrl}' reference failed with status '{StatusCode}': {ResponseContent}",
+                    resourceItemUrl, getByIdResponse.StatusCode, responseContent);
 
                 return (false, null);
             }
         }
-        catch (RateLimitRejectedException)
+        catch (RateLimitRejectedException ex)
         {
-            _logger.Fatal($"{sourceEdFiApiClient.DataManagementApiSegment}{resourceItemUrl}: Rate limit exceeded. Please try again later.");
+            _logger.Fatal(ex, "{DataManagementApiSegment}{ResourceItemUrl}: Rate limit exceeded. Please try again later.",
+                sourceEdFiApiClient.DataManagementApiSegment, resourceItemUrl);
             return (false, null);
         }
         //----------------------------------------------------------------------------------------------

@@ -33,16 +33,16 @@ public class EdFiApiSourceCurrentChangeVersionProvider : ISourceCurrentChangeVer
 
         if (!versionResponse.IsSuccessStatusCode)
         {
-            _logger.Warning(
-                $"Unable to get current change version from source API at '{sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath}' (response status: {versionResponse.StatusCode}). Full synchronization will always be performed against this source, and any concurrent changes made against the source may cause change processing to produce unreliable results.");
+            _logger.Warning("Unable to get current change version from source API at '{BaseAddress}{AvailableChangeVersionsRelativePath}' (response status: {StatusCode}). Full synchronization will always be performed against this source, and any concurrent changes made against the source may cause change processing to produce unreliable results.",
+                sourceApiClient.HttpClient.BaseAddress, availableChangeVersionsRelativePath, versionResponse.StatusCode);
 
             return null;
         }
 
         string versionResponseText = await versionResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-        _logger.Debug(
-            $"Available change versions request from {sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath} returned {versionResponse.StatusCode}: {versionResponseText}");
+        _logger.Debug("Available change versions request from {BaseAddress}{AvailableChangeVersionsRelativePath} returned {StatusCode}: {VersionResponseText}",
+            sourceApiClient.HttpClient.BaseAddress, availableChangeVersionsRelativePath, versionResponse.StatusCode, versionResponseText);
 
         try
         {

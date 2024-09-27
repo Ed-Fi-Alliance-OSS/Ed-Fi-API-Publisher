@@ -70,7 +70,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
                 ApiConnectionDetails connection,
                 ConnectionRole connectionType)
             {
-                _logger.Debug($"{connectionType} connection details are not fully defined.");
+                _logger.Debug("{ConnectionType} connection details are not fully defined.", connectionType);
 
                 if (string.IsNullOrEmpty(connection.Name))
                 {
@@ -87,8 +87,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
                 string apiConnectionName,
                 ConnectionRole connectionRole)
             {
-                _logger.Debug(
-                    $"Obtaining {connectionRole.ToString().ToLower()} API connection details for connection '{apiConnectionName}' using '{_namedApiConnectionDetailsReader.GetType().Name}'.");
+                _logger.Debug("Obtaining {ConnectionRole} API connection details for connection '{ApiConnectionName}' using '{NamedApiConnectionDetailsReaderName}'.",
+                    connectionRole.ToString().ToLower(), apiConnectionName, _namedApiConnectionDetailsReader.GetType().Name);
 
                 var namedApiConnectionDetails =
                     _namedApiConnectionDetailsReader.GetNamedApiConnectionDetails(apiConnectionName, configurationStoreSection);

@@ -98,12 +98,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 if (result.Exception != null)
                                 {
-                                    _logger.Warning($"{message.ResourceUrl} (source id: {sourceId}): GET by key on resource failed with an exception. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay){Environment.NewLine}{result.Exception}");
+                                    _logger.Warning(result.Exception, "{ResourceUrl} (source id: {SourceId}): GET by key on resource failed with an exception. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay){NewLine}{Exception}",
+                                        message.ResourceUrl, sourceId, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds, Environment.NewLine, result.Exception);
                                 }
                                 else
                                 {
-                                    _logger.Warning(
-                                        $"{message.ResourceUrl} (source id: {sourceId}): GET by key on resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                                    _logger.Warning("{ResourceUrl} (source id: {SourceId}): GET by key on resource failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
+                                        message.ResourceUrl, sourceId, result.Result.StatusCode, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds);
                                 }
                             });
 
@@ -113,12 +114,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             attempts++;
 
-                            if (attempts > 1)
+                            if (attempts > 1 && _logger.IsEnabled(LogEventLevel.Debug))
                             {
-                                if (_logger.IsEnabled(LogEventLevel.Debug))
-                                {
-                                    _logger.Debug($"{message.ResourceUrl} (source id: {message.SourceId}): GET by key on target attempt #{attempts} ({queryString}).");
-                                }
+                                _logger.Debug("{ResourceUrl} (source id: {SourceId}): GET by key on target attempt #{Attempts} ({QueryString}).",
+                                    message.ResourceUrl, message.SourceId, attempts, queryString);
                             }
 
                             return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{message.ResourceUrl}?{queryString}", ct);
@@ -135,8 +134,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         // Failure
                         if (!apiResponse.IsSuccessStatusCode)
                         {
-                            _logger.Error(
-                                $"{message.ResourceUrl} (source id: {sourceId}): GET by key returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                            _logger.Error("{ResourceUrl} (source id: {SourceId}): GET by key returned {StatusCode}{NewLine}{ResponseContent}",
+                                message.ResourceUrl, sourceId, apiResponse.StatusCode, Environment.NewLine, responseContent);
 
                             var error = new ErrorItemMessage
                             {
@@ -144,7 +143,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 ResourceUrl = $"{message.ResourceUrl}?{queryString}",
                                 Id = sourceId,
                                 Body = null,
-                                ResponseStatus = apiResponse?.StatusCode,
+                                ResponseStatus = apiResponse.StatusCode,
                                 ResponseContent = responseContent
                             };
 
@@ -158,13 +157,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         // Success
                         if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                         {
-                            _logger.Information(
-                                $"{message.ResourceUrl} (source id: {sourceId}): GET by key attempt #{attempts} returned {apiResponse.StatusCode}.");
+                            _logger.Information("{ResourceUrl} (source id: {SourceId}): GET by key attempt #{Attempts} returned {StatusCode}.",
+                                message.ResourceUrl, sourceId, attempts, apiResponse.StatusCode);
                         }
 
                         if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
-                            _logger.Debug($"{message.ResourceUrl} (source id: {sourceId}): GET by key returned {apiResponse.StatusCode}");
+                            _logger.Debug("{ResourceUrl} (source id: {SourceId}): GET by key returned {StatusCode}",
+                                message.ResourceUrl, sourceId, apiResponse.StatusCode);
                         }
 
                         var getByKeyResults = JArray.Parse(responseContent);
@@ -174,7 +174,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             if (_logger.IsEnabled(LogEventLevel.Warning))
                             {
-                                _logger.Warning($"{message.ResourceUrl} (source id: {sourceId}): GET by key for key change returned no results on target API ({queryString}).");
+                                _logger.Warning("{ResourceUrl} (source id: {SourceId}): GET by key for key change returned no results on target API ({QueryString}).",
+                                    message.ResourceUrl, sourceId, queryString);
                             }
 
                             // No key changes to process
@@ -215,7 +216,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 if (_logger.IsEnabled(LogEventLevel.Debug))
                                 {
-                                    _logger.Debug($"{message.ResourceUrl} (source id: {message.SourceId}): Assigning new value for '{candidateProperty.Name}' as '{newValueProperty.Value}'...");
+                                    _logger.Debug("{ResourceUrl} (source id: {SourceId}): Assigning new value for '{CandidatePropertyName}' as '{NewValuePropertyValue}'...",
+                                        message.ResourceUrl, message.SourceId, candidateProperty.Name, newValueProperty.Value);
                                 }
 
                                 candidateProperty.Value = newValueProperty.Value;
@@ -233,14 +235,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                         };
                     }
-                    catch (RateLimitRejectedException)
+                    catch (RateLimitRejectedException ex)
                     {
-                        _logger.Fatal($"{message.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                        _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.",
+                            message.ResourceUrl);
                         throw;
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error($"{message.ResourceUrl} (source id: {sourceId}): An unhandled exception occurred in the block created by '{nameof(CreateGetItemForKeyChangeBlock)}': {ex}");
+                        _logger.Error(ex, "{ResourceUrl} (source id: {SourceId}): An unhandled exception occurred in the block created by '{CreateGetItemForKeyChangeBlock}': {Ex}",
+                            message.ResourceUrl, sourceId, nameof(CreateGetItemForKeyChangeBlock), ex);
                         throw;
                     }
                 }, new ExecutionDataflowBlockOptions
@@ -299,12 +303,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             if (result.Exception != null)
                             {
-                                _logger.Warning($"{msg.ResourceUrl} (source id: {sourceId}): Key change attempt #{attempt} threw an exception: {result.Exception}");
+                                _logger.Warning(result.Exception, "{ResourceUrl} (source id: {SourceId}): Key change attempt #{Attempt} threw an exception: {Exception}",
+                                    msg.ResourceUrl, sourceId, attempt, result.Exception);
                             }
                             else
                             {
-                                _logger.Warning(
-                                    $"{msg.ResourceUrl} (source id: {id}): Select by key on target resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                                _logger.Warning(result.Exception, "{ResourceUrl} (source id: {Id}): Select by key on target resource failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
+                                    msg.ResourceUrl, id, result.Result.StatusCode, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds);
                             }
                         });
 
@@ -314,12 +319,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             attempt++;
 
-                            if (attempt > 1)
+                            if (attempt > 1 && _logger.IsEnabled(LogEventLevel.Debug))
                             {
-                                if (_logger.IsEnabled(LogEventLevel.Debug))
-                                {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): PUT request to update key (attempt #{attempt}.");
-                                }
+                                _logger.Debug("{ResourceUrl} (source id: {SourceId}): PUT request to update key (attempt #{Attempt}.",
+                                    msg.ResourceUrl, sourceId, attempt);
                             }
 
                             return targetApiClient.HttpClient.PutAsync(
@@ -334,7 +337,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                         _logger.Error(
-                            $"{msg.ResourceUrl} (source id: {sourceId}): PUT returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                            "{ResourceUrl} (source id: {SourceId}): PUT returned {StatusCode}{NewLine}{ResponseContent}",
+                            msg.ResourceUrl, sourceId, apiResponse.StatusCode, Environment.NewLine, responseContent);
 
                         // Publish the failure
                         var error = new ErrorItemMessage
@@ -353,26 +357,28 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // Success
                     if (_logger.IsEnabled(LogEventLevel.Information) && attempt > 1)
                     {
-                        _logger.Information(
-                            $"{msg.ResourceUrl} (source id: {sourceId}): PUT attempt #{attempt} returned {apiResponse.StatusCode}.");
+                        _logger.Information("{ResourceUrl} (source id: {SourceId}): PUT attempt #{Attempt} returned {StatusCode}.",
+                            msg.ResourceUrl, sourceId, attempt, apiResponse.StatusCode);
                     }
 
                     if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
-                        _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): PUT returned {apiResponse.StatusCode}");
+                        _logger.Debug("{ResourceUrl} (source id: {SourceId}): PUT returned {StatusCode}",
+                            msg.ResourceUrl, sourceId, apiResponse.StatusCode);
                     }
 
                     // Success - no errors to publish
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
-                catch (RateLimitRejectedException)
+                catch (RateLimitRejectedException ex)
                 {
-                    _logger.Fatal($"{msg.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                    _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.",
+                        msg.ResourceUrl);
                     throw;
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error($"{msg.ResourceUrl} (source id: {sourceId}): An unhandled exception occurred in the ChangeResourceKey block: {ex}");
+                    _logger.Error(ex, "{ResourceUrl} (source id: {SourceId}): An unhandled exception occurred in the ChangeResourceKey block: {Ex}", msg.ResourceUrl, sourceId, ex);
                     throw;
                 }
             }, new ExecutionDataflowBlockOptions

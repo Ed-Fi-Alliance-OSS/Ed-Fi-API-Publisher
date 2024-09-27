@@ -23,7 +23,7 @@ public class EdFiApiClientProvider : ISourceEdFiApiClientProvider, ITargetEdFiAp
         if (!_apiClient.IsValueCreated)
         {
             // Establish connection to API
-            _logger.Information($"Initializing API client '{_apiClient.Value.ConnectionDetails.Name}'...");
+            _logger.Information("Initializing API client '{ConnectionDetailsName}'...", _apiClient.Value.ConnectionDetails.Name);
         }
 
         return _apiClient.Value;
