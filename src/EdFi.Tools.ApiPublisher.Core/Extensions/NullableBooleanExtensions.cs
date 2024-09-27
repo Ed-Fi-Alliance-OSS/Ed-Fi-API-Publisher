@@ -16,7 +16,7 @@ public static class NullableBooleanExtensions
     {
         return value != true;
     }
-    
+
     public static bool IsFalse(this bool? value)
     {
         return (value == false);

@@ -6,6 +6,7 @@
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using Polly.RateLimit;
 using Serilog;
 using Serilog.Events;
 using System;
@@ -17,7 +18,7 @@ using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-	public class StreamResourceBlockFactory
+    public class StreamResourceBlockFactory
     {
         private readonly ILogger _logger = Log.ForContext(typeof(StreamResourceBlockFactory));
         private readonly IStreamResourcePageMessageProducer _streamResourcePageMessageProducer;
@@ -62,6 +63,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         }
 
                         return messages;
+                    }
+                    catch (RateLimitRejectedException ex)
+                    {
+                        _logger.Fatal(ex, ex.Message);
+                        throw;
                     }
                     catch (Exception ex)
                     {
@@ -127,6 +133,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     errorHandlingBlock,
                     createProcessDataMessages,
                     cancellationToken);
+            }
+            catch (RateLimitRejectedException ex)
+            {
+                _logger.Fatal(ex, ex.Message);
+                throw;
             }
             catch (Exception ex)
             {

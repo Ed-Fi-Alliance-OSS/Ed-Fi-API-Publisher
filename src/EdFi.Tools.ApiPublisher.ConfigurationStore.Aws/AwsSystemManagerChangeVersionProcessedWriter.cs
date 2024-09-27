@@ -63,7 +63,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
             string sourceConnectionName)
         {
             string parameterName = $"{ConfigurationStoreHelper.Key(sourceConnectionName)}/lastChangeVersionsProcessed";
-            
+
             var getRequest = new GetParameterRequest
             {
                 Name = parameterName,

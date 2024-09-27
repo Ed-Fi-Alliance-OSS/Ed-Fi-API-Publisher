@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Licensed to the Ed-Fi Alliance under one or more agreements.
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
@@ -12,10 +12,10 @@ using static System.Text.RegularExpressions.Regex;
 
 namespace EdFi.Common.Inflection
 {
-	// Done: GKM - Unify this with the instance in EdFi.Ods.CodeGen.
-	// In the meantime, duplicate any changes made to this file in the corresponding class.
+    // Done: GKM - Unify this with the instance in EdFi.Ods.CodeGen.
+    // In the meantime, duplicate any changes made to this file in the corresponding class.
 
-	/*
+    /*
      * SubSonic - http://subsonicproject.com
      *
      * The contents of this file are subject to the New BSD
@@ -29,10 +29,10 @@ namespace EdFi.Common.Inflection
      * rights and limitations under the License.
     */
 
-	/// <summary>
-	///     Summary for the Inflector class
-	/// </summary>
-	public static class Inflector
+    /// <summary>
+    ///     Summary for the Inflector class
+    /// </summary>
+    public static class Inflector
     {
         private static readonly List<InflectorRule> _plurals = new List<InflectorRule>();
         private static readonly List<InflectorRule> _singulars = new List<InflectorRule>();
@@ -189,7 +189,7 @@ namespace EdFi.Common.Inflection
             {
                 throw new ArgumentOutOfRangeException(nameof(basisCount), "Value must be greater than or equal to 0.");
             }
-            
+
             if (basisCount == 1)
             {
                 return singularWordOverride ?? MakeSingular(word);
@@ -197,7 +197,7 @@ namespace EdFi.Common.Inflection
 
             return pluralWordOverride ?? MakePlural(word);
         }
-        
+
         /// <summary>
         ///     Applies the rules.
         /// </summary>
@@ -236,7 +236,7 @@ namespace EdFi.Common.Inflection
             return Regex.Replace(
                 ToHumanCase(AddUnderscores(word)),
                 @"\b([a-z])",
-                delegate(Match match)
+                delegate (Match match)
                 {
                     return match.Captures[0]
                         .Value.ToUpper();

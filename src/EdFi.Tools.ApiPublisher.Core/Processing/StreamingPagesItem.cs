@@ -8,7 +8,7 @@ using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-	public class StreamingPagesItem
+    public class StreamingPagesItem
     {
         public string[] DependencyPaths { get; set; }
         public ISourceBlock<ErrorItemMessage> CompletionBlock { get; set; }

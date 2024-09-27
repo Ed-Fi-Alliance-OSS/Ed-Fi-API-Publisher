@@ -14,7 +14,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer;
 public class Plugin : IPlugin
 {
     private const string ConfigurationProviderName = "sqlServer";
-        
+
     public void ApplyConfiguration(string[] args, IConfigurationBuilder configBuilder)
     {
         // Nothing to do

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Core.Dependencies
 {
-	public interface IResourceDependencyProvider
+    public interface IResourceDependencyProvider
     {
         Task<IDictionary<string, string[]>> GetDependenciesByResourcePathAsync(bool includeDescriptors);
     }

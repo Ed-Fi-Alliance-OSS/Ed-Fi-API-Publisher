@@ -25,7 +25,7 @@ public class SourceEdFiVersionMetadataCollector : ISourceEdFiApiVersionMetadataP
     public async Task<JObject> GetVersionMetadata()
     {
         var versionMetadata = await _sourceEdFiApiVersionMetadataProvider.GetVersionMetadata();
-        
+
         _metadataCollector.SetSourceVersionMetadata(versionMetadata);
 
         return versionMetadata;

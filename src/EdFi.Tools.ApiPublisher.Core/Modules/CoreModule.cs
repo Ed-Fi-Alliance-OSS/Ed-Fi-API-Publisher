@@ -14,7 +14,7 @@ using EdFi.Tools.ApiPublisher.Core.Versioning;
 
 namespace EdFi.Tools.ApiPublisher.Core.Modules
 {
-	public class CoreModule : Module
+    public class CoreModule : Module
     {
         protected override void Load(ContainerBuilder builder)
         {
@@ -25,23 +25,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
             builder.RegisterType<SerilogErrorPublisher>()
                 .As<IErrorPublisher>()
                 .SingleInstance();
-            
+
             // General purpose version checker
             builder.RegisterType<EdFiVersionsChecker>()
                 .As<IEdFiVersionsChecker>()
                 .SingleInstance();
-            
+
             // Register decorators for collecting publishing operation metadata
             builder.RegisterType<PublishingOperationMetadataCollector>()
                 .As<IPublishingOperationMetadataCollector>()
                 .SingleInstance();
-            
+
             builder.RegisterDecorator<CurrentChangeVersionCollector, ISourceCurrentChangeVersionProvider>();
             builder.RegisterDecorator<ResourceItemCountCollector, ISourceTotalCountProvider>();
-            
+
             builder.RegisterDecorator<SourceEdFiVersionMetadataCollector, ISourceEdFiApiVersionMetadataProvider>();
             builder.RegisterDecorator<TargetEdFiVersionMetadataCollector, ITargetEdFiApiVersionMetadataProvider>();
-            
+
             // Block factories
             builder.RegisterType<StreamResourceBlockFactory>(); //.SingleInstance();
             builder.RegisterType<StreamResourcePagesBlockFactory>(); //.SingleInstance();

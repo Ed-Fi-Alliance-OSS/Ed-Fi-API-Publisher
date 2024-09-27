@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Extensions
 {
-	public static class StringExtensions
+    public static class StringExtensions
     {
         public static string EnsureSuffixApplied(this string text, string suffix)
         {
@@ -16,7 +16,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Extensions
             {
                 return suffix;
             }
-            
+
             if (text.EndsWith(suffix))
             {
                 return text;
@@ -24,7 +24,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Extensions
 
             return text + suffix;
         }
-        
+
         public static bool TryTrimSuffix(this string text, string suffix, out string trimmedText)
         {
             trimmedText = null;
@@ -61,7 +61,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Extensions
 
             return text;
         }
-        
+
         /// <summary>
         /// Returns a string that is converted to camel casing, detecting and handling acronyms as prefixes and suffixes.
         /// </summary>
@@ -103,7 +103,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Extensions
             // Apply simple camel casing
             return char.ToLower(text[0]) + text.Substring(1);
         }
-        
+
         public static bool EqualsIgnoreCase(this string text, string compareText) => text == null ? compareText == null : text.Equals(compareText, StringComparison.InvariantCultureIgnoreCase);
 
         public static bool StartsWithIgnoreCase(this string text, string compareText) => text == null ? compareText == null : text.StartsWith(compareText, StringComparison.InvariantCultureIgnoreCase);

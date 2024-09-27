@@ -20,7 +20,7 @@ public class SqliteSourceTotalCountProvider : ISourceTotalCountProvider
     {
         _createConnection = createConnection;
     }
-    
+
     public async Task<(bool, long)> TryGetTotalCountAsync(
         string resourceUrl,
         Options options,
@@ -30,13 +30,13 @@ public class SqliteSourceTotalCountProvider : ISourceTotalCountProvider
     {
         await using var connection = _createConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        
+
         var cmd = connection.CreateCommand();
 
         cmd.CommandText = @"SELECT ItemCount FROM ResourceItemCount WHERE ResourcePath = $resourcePath";
         cmd.Parameters.AddWithValue("$resourcePath", resourceUrl);
 
-        long count = (long) (cmd.ExecuteScalar() ?? -1);
+        long count = (long)(cmd.ExecuteScalar() ?? -1);
 
         return (count >= 0, count);
     }

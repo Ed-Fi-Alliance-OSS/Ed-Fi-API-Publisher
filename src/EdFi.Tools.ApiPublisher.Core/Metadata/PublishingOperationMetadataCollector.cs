@@ -40,8 +40,8 @@ public class PublishingOperationMetadataCollector : IPublishingOperationMetadata
 
     public void SetResourceItemCount(string resourcePath, long count)
     {
-        _resourceItemCountByPath.AddOrUpdate(resourcePath, 
-            _ => count, 
+        _resourceItemCountByPath.AddOrUpdate(resourcePath,
+            _ => count,
             (_, _) => count);
     }
 

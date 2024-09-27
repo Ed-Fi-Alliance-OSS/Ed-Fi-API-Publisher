@@ -9,10 +9,10 @@ using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext
 {
-	public class PlaintextChangeVersionProcessedWriter : IChangeVersionProcessedWriter
+    public class PlaintextChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
         private readonly ILogger _logger = Log.Logger.ForContext(typeof(PlaintextChangeVersionProcessedWriter));
-        
+
         public Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
             string targetConnectionName,

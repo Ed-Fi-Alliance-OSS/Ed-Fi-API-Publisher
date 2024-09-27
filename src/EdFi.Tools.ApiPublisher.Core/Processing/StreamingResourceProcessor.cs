@@ -61,7 +61,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
         _logger.Information($"Initiating resource streaming.");
 
         var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
-        
+
         var streamingPagesByResourceKey = new Dictionary<string, StreamingPagesItem>(StringComparer.OrdinalIgnoreCase);
 
         var streamingResourceBlockByResourceKey =
@@ -88,7 +88,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             if (resourceKey.EndsWith(Conventions.RetryKeySuffix))
             {
                 // Save an action delegate for processing the item, keyed by the resource path
-                postAuthorizationRetryByResourceKey.Add(resourcePath, msg => processingInputBlock.Post((TProcessDataMessage) msg));
+                postAuthorizationRetryByResourceKey.Add(resourcePath, msg => processingInputBlock.Post((TProcessDataMessage)msg));
             }
 
             streamingPagesByResourceKey.Add(resourceKey, new StreamingPagesItem { CompletionBlock = processingOutputBlock });

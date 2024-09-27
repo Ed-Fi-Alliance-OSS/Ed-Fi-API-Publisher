@@ -11,7 +11,7 @@ using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-	public class PublishErrorsBlocksFactory
+    public class PublishErrorsBlocksFactory
     {
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(PublishErrorsBlocksFactory));
         private IErrorPublisher _errorPublisher;
@@ -20,17 +20,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         {
             _errorPublisher = errorPublisher;
         }
-        
+
         public ValueTuple<ITargetBlock<ErrorItemMessage>, ActionBlock<ErrorItemMessage[]>> CreateBlocks(Options options)
         {
             var publishErrorsIngestionBlock = new BatchBlock<ErrorItemMessage>(options.ErrorPublishingBatchSize);
             var publishErrorsCompletionBlock = CreatePublishErrorsBlock(_errorPublisher);
-            
-            publishErrorsIngestionBlock.LinkTo(publishErrorsCompletionBlock, new DataflowLinkOptions {PropagateCompletion = true});
+
+            publishErrorsIngestionBlock.LinkTo(publishErrorsCompletionBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             return (publishErrorsIngestionBlock, publishErrorsCompletionBlock);
         }
-        
+
         private ActionBlock<ErrorItemMessage[]> CreatePublishErrorsBlock(IErrorPublisher errorPublisher)
         {
             return new ActionBlock<ErrorItemMessage[]>(async errors =>

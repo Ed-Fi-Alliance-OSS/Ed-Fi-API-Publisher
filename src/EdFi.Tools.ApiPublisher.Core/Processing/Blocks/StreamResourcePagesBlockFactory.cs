@@ -6,25 +6,26 @@
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using Polly.RateLimit;
 using Serilog;
 using System;
 using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
-	public class StreamResourcePagesBlockFactory
+    public class StreamResourcePagesBlockFactory
     {
         private readonly IStreamResourcePageMessageHandler _streamResourcePageMessageHandler;
-        
+
         private readonly ILogger _logger = Log.ForContext(typeof(StreamResourcePagesBlockFactory));
 
         public StreamResourcePagesBlockFactory(IStreamResourcePageMessageHandler streamResourcePageMessageHandler)
         {
             _streamResourcePageMessageHandler = streamResourcePageMessageHandler;
         }
-        
+
         public TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> CreateBlock<TProcessDataMessage>(
-            Options options, 
+            Options options,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
             var streamResourcePagesBlock =
@@ -34,6 +35,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         try
                         {
                             return await _streamResourcePageMessageHandler.HandleStreamResourcePageAsync(msg, options, errorHandlingBlock).ConfigureAwait(false);
+                        }
+                        catch (RateLimitRejectedException ex)
+                        {
+                            _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
+                            throw;
                         }
                         catch (Exception ex)
                         {
@@ -45,8 +51,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     {
                         MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForStreamResourcePages
                     });
-            
+
             return streamResourcePagesBlock;
         }
-   }
+    }
 }

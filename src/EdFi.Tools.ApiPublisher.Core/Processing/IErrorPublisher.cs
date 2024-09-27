@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-	public interface IErrorPublisher
+    public interface IErrorPublisher
     {
         Task PublishErrorsAsync(ErrorItemMessage[] messages);
 

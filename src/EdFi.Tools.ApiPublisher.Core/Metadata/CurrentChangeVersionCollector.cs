@@ -24,7 +24,7 @@ public class CurrentChangeVersionCollector : ISourceCurrentChangeVersionProvider
     public async Task<long?> GetCurrentChangeVersionAsync()
     {
         var currentChangeVersion = await _currentChangeVersionProvider.GetCurrentChangeVersionAsync();
-        
+
         _metadataCollector.SetCurrentChangeVersion(currentChangeVersion);
 
         return currentChangeVersion;

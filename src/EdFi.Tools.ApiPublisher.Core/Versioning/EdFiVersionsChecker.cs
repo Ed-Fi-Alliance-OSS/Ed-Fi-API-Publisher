@@ -20,7 +20,7 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
     private readonly ITargetEdFiApiVersionMetadataProvider _targetEdFiApiVersionMetadataProvider;
 
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiVersionsChecker));
-    
+
     public EdFiVersionsChecker(
         ISourceEdFiApiVersionMetadataProvider sourceEdFiApiVersionMetadataProvider,
         ITargetEdFiApiVersionMetadataProvider targetEdFiApiVersionMetadataProvider)
@@ -28,7 +28,7 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
         _sourceEdFiApiVersionMetadataProvider = sourceEdFiApiVersionMetadataProvider;
         _targetEdFiApiVersionMetadataProvider = targetEdFiApiVersionMetadataProvider;
     }
-    
+
     public async Task CheckApiVersionsAsync(ChangeProcessorConfiguration configuration)
     {
         _logger.Debug($"Loading source and target API version information...");
@@ -46,13 +46,13 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
             _logger.Warning("Source connection does not support Ed-Fi version metadata. Version compatibility check for publishing operation cannot be performed.");
             return;
         }
-        
+
         if (targetVersionObject == null)
         {
             _logger.Warning("Target connection does not support Ed-Fi version metadata. Version compatibility check for publishing operation cannot be performed.");
             return;
         }
-        
+
         string sourceApiVersionText = sourceVersionObject.Value<string>("version");
         string targetApiVersionText = targetVersionObject.Value<string>("version");
 
@@ -63,7 +63,7 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
         // TODO: Consider splitting this into a separate context object
         configuration.SourceApiVersion = sourceApiVersion;
         configuration.TargetApiVersion = targetApiVersion;
-        
+
         // Warn if API versions don't match
         if (!sourceApiVersion.Equals(targetApiVersion))
         {
@@ -91,16 +91,16 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
         {
             string edFiVersion;
 
-            var dataModels = (JArray) jObject["dataModels"];
+            var dataModels = (JArray)jObject["dataModels"];
 
             edFiVersion = dataModels.Where(o => Newtonsoft.Json.Linq.Extensions.Value<string>(o["name"]) == "Ed-Fi")
                 .Select(o => o["version"].Value<string>())
                 .SingleOrDefault();
-                
+
             return edFiVersion;
         }
 
-#region Sample Version Metadata
+        #region Sample Version Metadata
 
         /*
         Sample version metadata:
@@ -166,6 +166,6 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
             ]
         }
          */
-#endregion
+        #endregion
     }
 }

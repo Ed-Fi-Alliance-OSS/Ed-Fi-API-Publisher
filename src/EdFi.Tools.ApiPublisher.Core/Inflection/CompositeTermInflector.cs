@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Licensed to the Ed-Fi Alliance under one or more agreements.
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
@@ -9,14 +9,14 @@ using System.Text.RegularExpressions;
 
 namespace EdFi.Common.Inflection
 {
-	public static class CompositeTermInflector
+    public static class CompositeTermInflector
     {
-        private static readonly HashSet<string> IgnoredSuffixes = new HashSet<string>();
+        private static readonly HashSet<string> _ignoredSuffixes = new HashSet<string>();
 
-        private static readonly ConcurrentDictionary<string, string> PluralizedByTerm
+        private static readonly ConcurrentDictionary<string, string> _pluralizedByTerm
             = new ConcurrentDictionary<string, string>();
 
-        private static readonly ConcurrentDictionary<string, string> SingularizedByTerm
+        private static readonly ConcurrentDictionary<string, string> _singularizedByTerm
             = new ConcurrentDictionary<string, string>();
 
         static CompositeTermInflector()
@@ -26,12 +26,12 @@ namespace EdFi.Common.Inflection
 
         public static void AddIgnoredSuffix(string suffix)
         {
-            IgnoredSuffixes.Add(suffix.ToLower());
+            _ignoredSuffixes.Add(suffix.ToLower());
         }
 
         public static string MakePlural(string compositeTerm)
         {
-            return PluralizedByTerm.GetOrAdd(
+            return _pluralizedByTerm.GetOrAdd(
                 compositeTerm,
                 t =>
                 {
@@ -47,7 +47,7 @@ namespace EdFi.Common.Inflection
                         string term = matches[i]
                            .Value;
 
-                        if (isCompositeTermPluralized || IgnoredSuffixes.Contains(term.ToLower()))
+                        if (isCompositeTermPluralized || _ignoredSuffixes.Contains(term.ToLower()))
                         {
                             result.Insert(0, term);
                             continue;
@@ -65,7 +65,7 @@ namespace EdFi.Common.Inflection
 
         public static string MakeSingular(string compositeTerm)
         {
-            return SingularizedByTerm.GetOrAdd(
+            return _singularizedByTerm.GetOrAdd(
                 compositeTerm,
                 t =>
                 {
@@ -81,7 +81,7 @@ namespace EdFi.Common.Inflection
                         string term = matches[i]
                            .Value;
 
-                        if (isCompositeTermSingularized || IgnoredSuffixes.Contains(term.ToLower()))
+                        if (isCompositeTermSingularized || _ignoredSuffixes.Contains(term.ToLower()))
                         {
                             result.Insert(0, term);
                             continue;

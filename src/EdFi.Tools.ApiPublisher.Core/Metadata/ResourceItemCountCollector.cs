@@ -23,7 +23,7 @@ public class ResourceItemCountCollector : ISourceTotalCountProvider
         _totalCountProvider = totalCountProvider;
         _metadataCollector = metadataCollector;
     }
-    
+
     public async Task<(bool, long)> TryGetTotalCountAsync(
         string resourceUrl,
         Options options,
@@ -41,7 +41,7 @@ public class ResourceItemCountCollector : ISourceTotalCountProvider
         _metadataCollector.SetResourceItemCount(resourceUrl, success ? count : -1);
 
         _metadataCollector.SetChangeWindow(changeWindow);
-        
+
         return (success, count);
     }
 }

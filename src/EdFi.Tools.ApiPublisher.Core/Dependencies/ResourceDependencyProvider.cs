@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Core.Dependencies
 {
-	public class ResourceDependencyProvider : IResourceDependencyProvider
+    public class ResourceDependencyProvider : IResourceDependencyProvider
     {
         private readonly IGraphMLDependencyMetadataProvider _graphMLDependencyMetadataProvider;
 

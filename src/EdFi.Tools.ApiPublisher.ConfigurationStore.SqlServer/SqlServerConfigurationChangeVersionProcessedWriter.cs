@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
 {
-	public class SqlServerConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
+    public class SqlServerConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
@@ -44,7 +44,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
                         using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow).ConfigureAwait(false))
                         {
                             var currentParameter = new JObject();
-                            
+
                             if (await reader.ReadAsync().ConfigureAwait(false))
                             {
                                 string changeVersionsJson = reader.GetString("ConfigurationValue");

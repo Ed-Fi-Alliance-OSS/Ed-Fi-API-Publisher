@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext
 {
-	public class PlainTextJsonFileNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
+    public class PlainTextJsonFileNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {
         public ApiConnectionDetails GetNamedApiConnectionDetails(
             string apiConnectionName,
@@ -18,9 +18,9 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext
             var config = new ConfigurationBuilder()
                 .AddJsonFile("plainTextNamedConnections.json")
                 .Build();
-            
+
             var connections = config.Get<PlainTextNamedConnectionConfiguration>();
-            
+
             return connections.Connections?
                     .Where(details => details.Name != null)
                     .FirstOrDefault(details => details.Name!.Equals(apiConnectionName, StringComparison.OrdinalIgnoreCase))

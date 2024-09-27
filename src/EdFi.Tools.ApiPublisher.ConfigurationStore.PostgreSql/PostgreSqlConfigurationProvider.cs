@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
-	public class PostgreSqlConfigurationProvider : ConfigurationProvider
+    public class PostgreSqlConfigurationProvider : ConfigurationProvider
     {
         private readonly PostgreSqlConfigurationSource _postgreSqlConfigurationSource;
 
@@ -20,8 +20,8 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
         {
             var settings = new PostgreSqlConfigurationValuesProvider()
                 .GetConfigurationValues(
-                    _postgreSqlConfigurationSource.ConnectionString, 
-                    _postgreSqlConfigurationSource.EncryptionPassword, 
+                    _postgreSqlConfigurationSource.ConnectionString,
+                    _postgreSqlConfigurationSource.EncryptionPassword,
                     _postgreSqlConfigurationSource.ConfigurationKeyPrefix);
 
             Data = settings;

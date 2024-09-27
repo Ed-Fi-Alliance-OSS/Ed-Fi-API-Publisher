@@ -127,8 +127,6 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
 
                     pageMessages.Add(pageMessage);
                     offsetOnWindow -= limit;
-                    if (isLastOne)
-                        break;
                     if (offsetOnWindow < 0)
                     {
                         limitOnWindow = limit + (int)offsetOnWindow;

@@ -13,6 +13,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Registration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Polly.RateLimit;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -23,7 +24,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Cli
 {
-	internal class Program
+    internal class Program
     {
         private static readonly ILogger _logger = Log.ForContext(typeof(Program));
 
@@ -173,6 +174,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
                 _logger.Information($"Processing complete.");
                 return 0;
+            }
+            catch (RateLimitRejectedException ex)
+            {
+                _logger.Fatal(ex, ex.Message);
+                return -1;
             }
             catch (Exception ex)
             {

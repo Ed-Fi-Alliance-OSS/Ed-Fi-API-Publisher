@@ -30,7 +30,7 @@ public class SqliteSourceEdFiApiVersionMetadataProvider : ISourceEdFiApiVersionM
 
         if (rawValue != null)
         {
-            return JObject.Parse((string) rawValue);
+            return JObject.Parse((string)rawValue);
         }
 
         return null;

@@ -33,7 +33,7 @@ public class Plugin : IPlugin
     {
         // TODO: When support is added for Sqlite database as source  
         string sourceConnectionType = ConfigurationHelper.GetSourceConnectionType(finalConfigurationRoot);
-        
+
         if (sourceConnectionType == SqliteConnectionType)
         {
             containerBuilder.RegisterModule(new SqliteAsSourceModule(finalConfigurationRoot));

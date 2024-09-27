@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Licensed to the Ed-Fi Alliance under one or more agreements.
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
@@ -21,7 +21,7 @@ public class PollyRateLimiter<TResult> : IRateLimiting<TResult>
     public PollyRateLimiter(Options options)
     {
         _rateLimiter = Policy.RateLimitAsync<TResult>(
-            options.RateLimitNumberExecutions, 
+            options.RateLimitNumberExecutions,
             TimeSpan.FromSeconds(options.RateLimitTimeSeconds),
             options.RateLimitNumberExecutions);
         _retryPolicyForRateLimit = Policy<TResult>
@@ -35,15 +35,21 @@ public class PollyRateLimiter<TResult> : IRateLimiting<TResult>
                 }
             );
     }
-        
+
     public async Task<TResult> ExecuteAsync(Func<Task<TResult>> action)
     {
         try
         {
             return await _rateLimiter.ExecuteAsync(action);
         }
-        catch (RateLimitRejectedException) {
+        catch (RateLimitRejectedException)
+        {
             _logger.Fatal("Rate limit exceeded. Please try again later.");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Fatal(ex, ex.Message);
             throw;
         }
 

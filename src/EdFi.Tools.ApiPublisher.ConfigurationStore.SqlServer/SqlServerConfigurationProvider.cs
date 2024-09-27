@@ -11,7 +11,7 @@ using System.Data;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
 {
-	public class SqlServerConfigurationProvider : ConfigurationProvider
+    public class SqlServerConfigurationProvider : ConfigurationProvider
     {
         private readonly SqlServerConfigurationSource _sqlServerConfigurationSource;
 
@@ -51,7 +51,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
                 {
                     key = key.Substring(_sqlServerConfigurationSource.ConfigurationKey.Length);
                 }
-                            
+
                 settings.Add(key, value);
             }
 

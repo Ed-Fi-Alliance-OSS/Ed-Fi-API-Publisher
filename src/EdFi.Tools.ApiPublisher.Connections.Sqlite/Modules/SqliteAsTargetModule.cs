@@ -47,12 +47,12 @@ public class SqliteAsTargetModule : Module
         builder.RegisterType<DeleteResourceProcessingBlocksFactory>()
             .As<IProcessingBlocksFactory<DeletesJsonMessage>>()
             .SingleInstance();
-        
+
         // Register the processing stage initiators
         builder.RegisterType<KeyChangePublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.KeyChanges);
         builder.RegisterType<UpsertPublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.Upserts);
         builder.RegisterType<DeletePublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.Deletes);
-        
+
         // Register a finalization step to record publishing operation metadata
         builder.RegisterType<SavePublishingOperationMetadataFinalizationActivity>().As<IFinalizationActivity>();
     }

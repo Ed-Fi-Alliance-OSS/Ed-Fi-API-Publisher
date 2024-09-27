@@ -8,16 +8,16 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-	public class AppSettingsConfigurationProvider : IAppSettingsConfigurationProvider
+    public class AppSettingsConfigurationProvider : IAppSettingsConfigurationProvider
     {
         private readonly Lazy<IConfiguration> _configuration;
-        
+
         public AppSettingsConfigurationProvider()
         {
             _configuration = new Lazy<IConfiguration>(() =>
             {
                 string environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-            
+
                 var configuration = new ConfigurationBuilder()
                     .AddJsonFile("appSettings.json", optional: true, reloadOnChange: true)
                     .AddJsonFile($"appSettings.{environmentName}.json", optional: true)
@@ -26,7 +26,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 return configuration;
             });
         }
-        
+
         public IConfiguration GetConfiguration()
         {
             return _configuration.Value;

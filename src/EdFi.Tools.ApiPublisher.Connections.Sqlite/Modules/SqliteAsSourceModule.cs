@@ -29,7 +29,7 @@ public class SqliteAsSourceModule : Module
     {
         _finalConfiguration = finalConfiguration;
     }
-    
+
     protected override void Load(ContainerBuilder builder)
     {
         var connectionsConfiguration = _finalConfiguration.GetSection("Connections");
@@ -44,15 +44,15 @@ public class SqliteAsSourceModule : Module
         builder.RegisterType<SqliteSourceCurrentChangeVersionProvider>()
             .As<ISourceCurrentChangeVersionProvider>()
             .SingleInstance();
-        
+
         // Version metadata for a Source API
         builder.RegisterType<SqliteSourceEdFiApiVersionMetadataProvider>()
             .As<ISourceEdFiApiVersionMetadataProvider>()
             .SingleInstance();
-        
+
         // Determine data source capabilities for Sqlite as source
         builder.RegisterType<SqliteSourceCapabilities>().As<ISourceCapabilities>();
-        
+
         // Register resource page message producer using a page-based strategy
         builder.RegisterType<SqliteStreamResourcePageMessageProducer>()
             .As<IStreamResourcePageMessageProducer>()

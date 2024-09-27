@@ -15,6 +15,6 @@ public interface IPublishingOperationMetadataCollector
     void SetTargetVersionMetadata(JObject versionMetadata);
     void SetChangeWindow(ChangeWindow changeWindow);
     void SetResourceItemCount(string resourcePath, long count);
-    
+
     PublishingOperationMetadata GetMetadata();
 }

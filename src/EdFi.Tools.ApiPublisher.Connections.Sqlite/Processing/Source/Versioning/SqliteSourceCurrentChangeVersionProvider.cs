@@ -16,7 +16,7 @@ public class SqliteSourceCurrentChangeVersionProvider : ISourceCurrentChangeVers
     {
         _createConnection = createConnection;
     }
-    
+
     public async Task<long?> GetCurrentChangeVersionAsync()
     {
         await using var connection = _createConnection();
