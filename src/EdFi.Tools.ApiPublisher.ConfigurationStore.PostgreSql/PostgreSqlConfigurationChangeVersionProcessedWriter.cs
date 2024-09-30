@@ -25,7 +25,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
             var postgresConfiguration = configurationStoreSection.Get<PostgresConfigurationStore>().PostgreSql;
 
             // Make sure Postgres configuration has encryption key provided
-            if (string.IsNullOrWhiteSpace(postgresConfiguration?.EncryptionPassword)) 
+            if (string.IsNullOrWhiteSpace(postgresConfiguration?.EncryptionPassword))
             {
                 throw new Exception("The PostgreSQL Configuration Store encryption key for storing API keys and secrets was not provided.");
             }

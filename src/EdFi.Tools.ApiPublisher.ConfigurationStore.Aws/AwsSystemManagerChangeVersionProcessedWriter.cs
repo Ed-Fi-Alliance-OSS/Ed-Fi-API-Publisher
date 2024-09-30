@@ -16,10 +16,10 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
 {
-	public class AwsSystemManagerChangeVersionProcessedWriter : IChangeVersionProcessedWriter
+    public class AwsSystemManagerChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
         private readonly ILogger _logger = Log.ForContext(typeof(AwsSystemManagerChangeVersionProcessedWriter));
-        
+
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
             string targetConnectionName,
@@ -34,7 +34,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
 
             // Assign the new "LastChangeVersionProcessed" value
             currentParameter[targetConnectionName] = changeVersion;
-            
+
             // Serialize the parameter's values
             string newParameterJson = currentParameter.ToString(Formatting.None);
 
@@ -51,7 +51,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws
             var response = await amazonSimpleSystemsManagement.PutParameterAsync(putRequest)
                 .ConfigureAwait(false);
 
-            if ((int) response.HttpStatusCode >= 400)
+            if ((int)response.HttpStatusCode >= 400)
             {
                 throw new Exception(
                     $"Failed to write updated change version of {changeVersion} for source connection '{sourceConnectionName}' to target connection '{targetConnectionName}' (AWS response status: {response.HttpStatusCode}).");
