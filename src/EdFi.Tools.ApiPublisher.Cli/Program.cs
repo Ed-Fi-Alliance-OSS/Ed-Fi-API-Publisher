@@ -175,11 +175,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 _logger.Information($"Processing complete.");
                 return 0;
             }
-            catch (RateLimitRejectedException ex)
-            {
-                _logger.Fatal(ex, ex.Message);
-                return -1;
-            }
+            //catch (RateLimitRejectedException ex)
+            //{
+            //    _logger.Fatal(ex, ex.Message);
+            //    return -1;
+            //}
             catch (Exception ex)
             {
                 _logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");

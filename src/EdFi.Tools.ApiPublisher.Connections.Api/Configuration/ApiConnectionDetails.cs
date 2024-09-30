@@ -14,49 +14,6 @@ public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnecti
     public string Scope { get; set; }
     public int? SchoolYear { get; set; }
 
-    [Obsolete(
-        "The 'Resources' configuration setting has been replaced by 'Include'. Adjust your connection configuration appropriately and try again.")]
-    public string Resources
-    {
-        get => null;
-        set
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                throw new Exception(
-                    "The 'Connections:Source:Resources' configuration setting has been replaced by 'Connections:Source:Include'. Adjust your connection configuration appropriately and try again.");
-            }
-        }
-    }
-
-    [Obsolete(
-        "The 'ExcludeResources' configuration setting has been replaced by 'Exclude'. Adjust your connection configuration appropriately and try again.")]
-    public string ExcludeResources
-    {
-        get => null;
-        set
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                throw new Exception(
-                    "The 'Connections:Source:ExcludeResources' configuration setting has been replaced by 'Connections:Source:Exclude'. Adjust your connection configuration appropriately and try again.");
-            }
-        }
-    }
-
-    [Obsolete("The 'SkipResources' configuration setting has been replaced by 'ExcludeOnly'. Adjust your connection configuration appropriately and try again.")]
-    public string SkipResources
-    {
-        get => null;
-        set
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                throw new Exception("The 'Connections:Source:SkipResources' configuration setting has been replaced by 'Connections:Source:ExcludeOnly'. Adjust your connection configuration appropriately and try again.");
-            }
-        }
-    }
-
     public bool? TreatForbiddenPostAsWarning { get; set; }
 
     public string ProfileName { get; set; }

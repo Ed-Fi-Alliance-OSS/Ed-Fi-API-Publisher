@@ -407,6 +407,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 // Success - no errors to publish
                 return Enumerable.Empty<ErrorItemMessage>();
             }
+#pragma warning disable S2139
             catch (RateLimitRejectedException ex)
             {
                 _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", postItemMessage.ResourceUrl);
@@ -415,9 +416,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             catch (Exception ex)
             {
                 _logger.Error(ex, "{ResourceUrl} (source id: {Id}): An unhandled exception occurred in the PostResource block: {Ex}", postItemMessage.ResourceUrl, id, ex);
-
                 throw;
             }
+#pragma warning restore S2139
             finally
             {
                 // Drop reference to JObject so it can be GC'd.

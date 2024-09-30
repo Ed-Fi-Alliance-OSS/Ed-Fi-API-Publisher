@@ -106,7 +106,7 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
                 }
 
                 int limitOnWindow = totalCountOnWindow < limit ? (int)totalCountOnWindow : limit;
-                while (isLastOne && totalCountOnWindow > 0 && limitOnWindow > 0)
+                while (totalCountOnWindow > 0 && limitOnWindow > 0)
                 {
                     var pageMessage = new StreamResourcePageMessage<TProcessDataMessage>
                     {
@@ -127,6 +127,8 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
 
                     pageMessages.Add(pageMessage);
                     offsetOnWindow -= limit;
+                    if (isLastOne)
+                        break;
                     if (offsetOnWindow < 0)
                     {
                         limitOnWindow = limit + (int)offsetOnWindow;

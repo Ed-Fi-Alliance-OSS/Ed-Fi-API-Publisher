@@ -235,10 +235,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                         };
                     }
+#pragma warning disable S2139
                     catch (RateLimitRejectedException ex)
                     {
-                        _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.",
-                            message.ResourceUrl);
+                        _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", message.ResourceUrl);
                         throw;
                     }
                     catch (Exception ex)
@@ -247,6 +247,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             message.ResourceUrl, sourceId, nameof(CreateGetItemForKeyChangeBlock), ex);
                         throw;
                     }
+#pragma warning restore S2139
                 }, new ExecutionDataflowBlockOptions
                 {
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
@@ -370,10 +371,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // Success - no errors to publish
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
+#pragma warning disable S2139
                 catch (RateLimitRejectedException ex)
                 {
-                    _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.",
-                        msg.ResourceUrl);
+                    _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                     throw;
                 }
                 catch (Exception ex)
@@ -381,6 +382,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     _logger.Error(ex, "{ResourceUrl} (source id: {SourceId}): An unhandled exception occurred in the ChangeResourceKey block: {Ex}", msg.ResourceUrl, sourceId, ex);
                     throw;
                 }
+#pragma warning restore S2139
             }, new ExecutionDataflowBlockOptions
             {
                 MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
