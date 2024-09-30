@@ -17,7 +17,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class ExcludeOnlyResourcesTests
     {
         [TestFixture]
@@ -50,19 +50,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
-               
+
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
                 // Every POST succeeds
                 _fakeTargetRequestHandler.EveryDataManagementPostReturns200Ok();
-                
+
                 // -----------------------------------------------------------------
                 //                  Source/Target Connection Details
                 // -----------------------------------------------------------------
-                
+
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    excludeOnly: new []{ "schools" });
-            
+                    excludeOnly: new[] { "schools" });
+
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
                 // -----------------------------------------------------------------
@@ -87,8 +87,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {

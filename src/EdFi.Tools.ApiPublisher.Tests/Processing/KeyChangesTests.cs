@@ -26,13 +26,13 @@ using System.Xml.XPath;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class KeyChangesTests
     {
         [TestFixture]
         public class When_publishing_natural_key_changes : TestFixtureAsyncBase
         {
-            const int TestItemQuantity = 2;
+            private const int TestItemQuantity = 2;
 
             private ChangeProcessor _changeProcessor;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
@@ -51,7 +51,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 // Initialize a generator for the fake natural key class
                 var keyValueFaker = TestHelpers.GetKeyValueFaker();
-                
+
                 // Initialize a generator for the /keyChanges API response
                 var keyChangeFaker = new Faker<KeyChange<FakeKey>>().StrictMode(true)
                     .RuleFor(o => o.Id, f => Guid.NewGuid().ToString("n"))
@@ -74,7 +74,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 //                      Target Requests
                 // -----------------------------------------------------------------
                 int i = 0;
-                
+
                 // Initialize a generator for a generic resource with a reference containing the key values
                 var targetResourceFaker = new Faker<GenericResource<FakeKey>>().StrictMode(true)
                     .RuleFor(o => o.Id, f => Guid.NewGuid().ToString("n"))
@@ -83,7 +83,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .RuleFor(o => o.VehicleYear, f => f.Date.Between(DateTime.Today.AddYears(-50), DateTime.Today).Year);
 
                 _suppliedTargetResources = targetResourceFaker.Generate(TestItemQuantity);
-                
+
                 _fakeTargetRequestHandler = A.Fake<IFakeHttpRequestHandler>()
                     .SetBaseUrl(MockRequests.TargetApiBaseUrl)
                     .SetDataManagementUrlSegment(EdFiApiConstants.DataManagementApiSegment)
@@ -99,7 +99,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         _suppliedKeyChanges[j].OldKeyValuesObject.ToQueryStringParams(),
                         new[] { _suppliedTargetResources[j] });
                 }
-                
+
                 // -----------------------------------------------------------------
                 //                  Source/Target Connection Details
                 // -----------------------------------------------------------------
@@ -132,8 +132,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {
@@ -144,20 +144,20 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             public void Should_probe_the_source_API_for_keyChanges_support_by_calling_the_first_resource_with_a_limit_of_1()
             {
                 string keyChangeSupportProbingResourceName = _resourcesWithUpdatableKeys.OrderBy(x => x).FirstOrDefault();
-                
+
                 A.CallTo(
                         () => _fakeSourceRequestHandler.Get(
                             $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}{keyChangeSupportProbingResourceName}{EdFiApiConstants.KeyChangesPathSuffix}",
                             A<HttpRequestMessage>.That.Matches(msg => !msg.HasParameter("totalCount") && msg.QueryString<int>("limit") == 1
                             )))
-                    .MustHaveHappenedOnceExactly();                
+                    .MustHaveHappenedOnceExactly();
             }
 
             [Test]
             public void Should_GET_keyChanges_from_source_API_for_each_resource_whose_keys_are_updatable()
             {
                 // Console.WriteLine(_loggerRepository.LoggedContent());
-                
+
                 foreach (var resourceWithUpdatableKey in _resourcesWithUpdatableKeys)
                 {
                     // One request for the count
@@ -185,11 +185,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 var ns = new XmlNamespaceManager(new NameTable());
                 ns.AddNamespace("g", "http://graphml.graphdrawing.org/xmlns");
-                
+
                 var resourcePaths = dependencies
                     .XPathSelectElements("//g:node", ns)
                     .Select(x => x.Attribute("id")?.Value).ToArray();
-                
+
                 var resourcesWithoutUpdatableKeys = resourcePaths.Except(_resourcesWithUpdatableKeys).ToArray();
 
                 foreach (var resourceWithoutUpdatableKeys in resourcesWithoutUpdatableKeys)
@@ -234,19 +234,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 string content = request.Content.ReadAsStringAsync().Result;
 
                 var requestItem = JsonConvert.DeserializeObject<GenericResource<FakeKey>>(content);
-                
+
                 requestItem.ShouldSatisfyAllConditions(
                     // The main values of the object should match the target
-                    () => request.RequestUri.LocalPath.Split('/').Last().ShouldBe(suppliedTargetResource.Id), 
-                    () => requestItem.VehicleManufacturer.ShouldBe(suppliedTargetResource.VehicleManufacturer), 
+                    () => request.RequestUri.LocalPath.Split('/').Last().ShouldBe(suppliedTargetResource.Id),
+                    () => requestItem.VehicleManufacturer.ShouldBe(suppliedTargetResource.VehicleManufacturer),
                     () => requestItem.VehicleYear.ShouldBe(suppliedTargetResource.VehicleYear),
                     // The key should match the source
                     () => requestItem.SomeReference.Name.ShouldBe(suppliedKeyChange.NewKeyValuesObject.Name),
-                    () => requestItem.SomeReference.BirthDate.ShouldBe(suppliedKeyChange.NewKeyValuesObject.BirthDate), 
+                    () => requestItem.SomeReference.BirthDate.ShouldBe(suppliedKeyChange.NewKeyValuesObject.BirthDate),
                     () => requestItem.SomeReference.RetirementAge.ShouldBe(suppliedKeyChange.NewKeyValuesObject.RetirementAge));
 
                 return true;
             }
         }
-   }
+    }
 }

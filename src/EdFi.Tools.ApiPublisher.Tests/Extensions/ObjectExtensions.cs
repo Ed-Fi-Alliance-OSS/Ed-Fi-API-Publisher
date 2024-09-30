@@ -15,7 +15,7 @@ using System.Web;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Extensions
 {
-	public static class ObjectExtensions
+    public static class ObjectExtensions
     {
         private static readonly ILogger _logger = Log.ForContext(typeof(ObjectExtensions));
 
@@ -99,7 +99,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Extensions
                MockRequests.SerializerSettings);
 
             var obj = JObject.Parse(json);
-            
+
             var queryStringParms = new Dictionary<string, string>();
 
             foreach (var property in obj.Properties())
@@ -109,7 +109,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Extensions
 
             return queryStringParms;
         }
-        
+
         public static NameValueCollection ParseQueryString(this Uri uri)
         {
             return HttpUtility.ParseQueryString(uri.Query);

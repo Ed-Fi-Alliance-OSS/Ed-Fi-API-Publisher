@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class IgnoreIsolationTests
     {
         [TestFixture]
@@ -47,7 +47,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
-               
+
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
                 // Every POST succeeds
@@ -82,8 +82,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {

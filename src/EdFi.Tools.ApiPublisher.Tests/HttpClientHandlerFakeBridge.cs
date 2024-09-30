@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
-	public class HttpClientHandlerFakeBridge : HttpClientHandler
+    public class HttpClientHandlerFakeBridge : HttpClientHandler
     {
         private readonly IFakeHttpRequestHandler _handler;
 
@@ -24,7 +24,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
             Console.WriteLine($"Requested URL: {request.Method} {request.RequestUri}");
 
             string requestPath = $"{request.RequestUri.Scheme}://{request.RequestUri.Host}{request.RequestUri.LocalPath}";
-            
+
             switch (request.Method.ToString().ToUpper())
             {
                 case "GET":

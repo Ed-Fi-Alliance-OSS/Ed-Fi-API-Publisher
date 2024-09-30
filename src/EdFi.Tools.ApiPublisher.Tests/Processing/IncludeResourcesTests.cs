@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class IncludeResourcesTests
     {
         [TestFixture]
@@ -52,7 +52,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
-               
+
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
                 // Every POST succeeds
@@ -63,14 +63,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    include: new []{ "schools" });
-            
+                    include: new[] { "schools" });
+
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
-                
+
                 // -----------------------------------------------------------------
                 //                    Options and Configuration
                 // -----------------------------------------------------------------
-                
+
                 var options = TestHelpers.GetOptions();
                 options.IncludeDescriptors = false; // Shorten test execution time
 
@@ -89,8 +89,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {
@@ -135,7 +135,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
             }
-            
+
             [Test]
             public void Should_reflect_the_processing_as_an_inclusion_with_its_dependencies_in_the_log()
             {

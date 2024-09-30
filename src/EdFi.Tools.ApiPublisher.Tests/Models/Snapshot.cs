@@ -9,10 +9,10 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Models
 {
-	/// <summary>
-	/// A class which represents the changes.Snapshot table of the Snapshot aggregate in the ODS Database.
-	/// </summary>
-	public class Snapshot
+    /// <summary>
+    /// A class which represents the changes.Snapshot table of the Snapshot aggregate in the ODS Database.
+    /// </summary>
+    public class Snapshot
     {
         /// <summary>
         /// The unique identifier for the Snapshot resource.

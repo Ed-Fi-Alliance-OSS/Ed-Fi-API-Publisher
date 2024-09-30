@@ -20,7 +20,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class UnresolvedDependencyOnPrimaryRelationshipTests
     {
         [TestFixture]
@@ -36,18 +36,18 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             {
                 [JsonProperty("id")]
                 public string Id { get; set; }
-                
+
                 [JsonProperty("firstName")]
                 public string FirstName { get; set; }
-                
+
                 [JsonProperty("lastSurname")]
                 public string LastSurname { get; set; }
-                
+
                 [JsonProperty("_etag")]
                 public string ETag { get; set; }
             }
 
-            const string TestResourcePath = "/ed-fi/studentSchoolAssociations";
+            private const string TestResourcePath = "/ed-fi/studentSchoolAssociations";
 
             protected override async Task ArrangeAsync()
             {
@@ -55,7 +55,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 //                      Source Requests
                 // -----------------------------------------------------------------
                 var sourceResourceFaker = TestHelpers.GetGenericResourceFaker();
-            
+
                 var suppliedSourceResources = sourceResourceFaker.Generate(1);
 
                 // Prepare the fake source API endpoint
@@ -76,7 +76,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     LastSurname = "Jones",
                     ETag = "etagvalue"
                 };
-                
+
                 _fakeSourceRequestHandler.GetResourceDataItem(
                     $"{EdFiApiConstants.DataManagementApiSegment}{_suppliedSourceLinkHref}",
                     suppliedMissingPerson);
@@ -85,12 +85,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 //                      Target Requests
                 // -----------------------------------------------------------------
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
-                
+
                 // Override dependencies to a single resource to minimize extraneous noise
                 _fakeTargetRequestHandler.Dependencies(TestResourcePath);
-                
-                _fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{TestResourcePath}", 
-                    (HttpStatusCode.BadRequest, JObject.Parse("{\r\n  \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tSome reference could not be resolved.\\n\"\r\n}")), 
+
+                _fakeTargetRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}{TestResourcePath}",
+                    (HttpStatusCode.BadRequest, JObject.Parse("{\r\n  \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tSome reference could not be resolved.\\n\"\r\n}")),
                     (HttpStatusCode.OK, null));
 
                 // -----------------------------------------------------------------
@@ -98,10 +98,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    include: new []{ TestResourcePath });
-            
+                    include: new[] { TestResourcePath });
+
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
-                
+
                 // -----------------------------------------------------------------
                 //                    Options and Configuration
                 // -----------------------------------------------------------------
@@ -124,8 +124,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {
@@ -151,7 +151,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
             }
-            
+
             [Test]
             public void Should_attempt_to_post_the_item_obtained_from_the_source_API_for_the_unresolved_reference_to_the_target_API()
             {
@@ -161,7 +161,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.That.Matches(HasSuppliedStudentInPostRequestBody, "has supplied source item in POST request body")))
                     .MustHaveHappened();
             }
-            
+
             private bool HasSuppliedStudentInPostRequestBody(HttpRequestMessage req)
             {
                 string content = req.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
@@ -172,7 +172,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         o => o.ShouldNotBeNull(),
                         o => o.ShouldNotContainKey("id"),
                         o => o.ShouldNotContainKey("_etag"),
-                    
+
                         o => o.ShouldContainKey("firstName"),
                         o => o.ShouldContainKey("lastSurname"),
 

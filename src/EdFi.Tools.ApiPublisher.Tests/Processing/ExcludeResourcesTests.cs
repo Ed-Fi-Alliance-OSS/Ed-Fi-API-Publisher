@@ -17,7 +17,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class ExcludeResourcesTests
     {
         [TestFixture]
@@ -51,7 +51,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
-               
+
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
                 // Every POST succeeds
@@ -62,8 +62,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    exclude: new []{ "schools" });
-            
+                    exclude: new[] { "schools" });
+
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
                 // -----------------------------------------------------------------
@@ -88,8 +88,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                      _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {
@@ -162,7 +162,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.Ignored))
                     .MustNotHaveHappened();
             }
-            
+
             [TestCase("/ed-fi/assessments")] // Dependent on EducationOrganization
             [TestCase("/ed-fi/programs")] // Dependent on EducationOrganization
             [TestCase("/ed-fi/educationOrganizationNetworkAssociations")] // Dependent on EducationOrganization

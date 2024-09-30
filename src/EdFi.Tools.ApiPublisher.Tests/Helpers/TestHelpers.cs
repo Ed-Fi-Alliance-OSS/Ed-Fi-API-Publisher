@@ -34,7 +34,7 @@ using System.Net;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 {
-	public class TestHelpers
+    public class TestHelpers
     {
         public const string AnyResourcePattern = "/(ed-fi|tpdm)/\\w+";
         // public const string AnyResourcePattern = "/ed-fi/\\w+";
@@ -56,7 +56,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
         public static Faker<FakeKey> GetKeyValueFaker()
         {
             var linkValueFaker = GetLinkValueFaker();
-            
+
             // Initialize a generator for the fake natural key class
             var keyValueFaker = new Faker<FakeKey>().StrictMode(true)
                 .RuleFor(o => o.Name, f => f.Name.FirstName())
@@ -113,14 +113,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 Secret = "secret",
                 Scope = null,
                 SchoolYear = schoolYear,
-               
+
                 Include = include == null ? null : string.Join(",", include),
                 IncludeOnly = includeOnly == null ? null : string.Join(",", includeOnly),
                 Exclude = exclude == null ? null : string.Join(",", exclude),
                 ExcludeOnly = excludeOnly == null ? null : string.Join(",", excludeOnly),
 
                 IgnoreIsolation = ignoreIsolation,
-                
+
                 // LastChangeVersionProcessed = null,
                 // LastChangeVersionsProcessed = "{ 'TestTarget': 1234 }",
                 TreatForbiddenPostAsWarning = true,
@@ -146,13 +146,13 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 Include = null, // "abc,def,ghi",
                 Exclude = null,
                 ExcludeOnly = null,
-                
+
                 IgnoreIsolation = true,
-                
+
                 LastChangeVersionProcessed = null,
                 LastChangeVersionsProcessed = null,
                 TreatForbiddenPostAsWarning = true,
-                LastChangeVersionProcessedByTargetName = {},
+                LastChangeVersionProcessedByTargetName = { },
 
                 ProfileName = profileName,
             };
@@ -177,7 +177,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
             public static AuthorizationFailureHandling[] GetAuthorizationFailureHandling()
             {
-                return new []
+                return new[]
                 {
                     new AuthorizationFailureHandling
                     {
@@ -221,7 +221,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 .SetChangeQueriesUrlSegment(changeQueriesUrlSegment)
                 .OAuthToken()
                 .ApiVersionMetadata()
-                .Snapshots(new []{ new Snapshot { Id = Guid.NewGuid(), SnapshotIdentifier = "ABC123", SnapshotDateTime = DateTime.Now } })
+                .Snapshots(new[] { new Snapshot { Id = Guid.NewGuid(), SnapshotIdentifier = "ABC123", SnapshotDateTime = DateTime.Now } })
                 .LegacySnapshotsNotFound();
         }
 
@@ -301,7 +301,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
             var streamingResourceProcessor = new StreamingResourceProcessor(
                 new StreamResourceBlockFactory(
-                    (withReversePaging) ? 
+                    (withReversePaging) ?
                         new EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer(
                             new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider)) :
                         new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(
