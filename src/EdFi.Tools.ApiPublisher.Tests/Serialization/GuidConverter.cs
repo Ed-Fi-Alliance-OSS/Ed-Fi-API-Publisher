@@ -8,7 +8,7 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Serialization
 {
-	public class GuidConverter : JsonConverter
+    public class GuidConverter : JsonConverter
     {
         public override bool CanRead
         {
@@ -17,7 +17,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Serialization
 
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            writer.WriteValue(((Guid) value).ToString("N"));
+            writer.WriteValue(((Guid)value).ToString("N"));
         }
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)

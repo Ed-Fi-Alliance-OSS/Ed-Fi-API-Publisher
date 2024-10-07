@@ -9,10 +9,10 @@ using System.Threading;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 {
-	/// <summary>
-	/// Represents details needed for obtaining a page of JSON data from the source connection.
-	/// </summary>
-	public class StreamResourcePageMessage<TProcessDataMessage>
+    /// <summary>
+    /// Represents details needed for obtaining a page of JSON data from the source connection.
+    /// </summary>
+    public class StreamResourcePageMessage<TProcessDataMessage>
     {
         // ----------------------------
         // Resource-specific context
@@ -31,7 +31,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public string PartitionFrom { get; set; }
         public string PartitionUntil { get; set; }
         public bool IsFinalPage { get; set; }
-        
+
         // -------------------------------------------------
         // Source Ed-Fi ODS API processing context (shared)
         // -------------------------------------------------

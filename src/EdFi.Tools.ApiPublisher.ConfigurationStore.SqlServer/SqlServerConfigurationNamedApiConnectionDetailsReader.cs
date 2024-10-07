@@ -9,7 +9,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer
 {
-	public class SqlServerConfigurationNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
+    public class SqlServerConfigurationNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {
         public ApiConnectionDetails GetNamedApiConnectionDetails(
             string apiConnectionName,

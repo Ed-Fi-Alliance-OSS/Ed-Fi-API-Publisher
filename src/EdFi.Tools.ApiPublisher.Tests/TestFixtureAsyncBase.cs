@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
-	[TestFixture]
+    [TestFixture]
     public abstract class TestFixtureAsyncBase
     {
 

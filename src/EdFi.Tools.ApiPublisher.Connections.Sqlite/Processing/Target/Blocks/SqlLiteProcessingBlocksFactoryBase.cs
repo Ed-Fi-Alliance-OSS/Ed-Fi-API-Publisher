@@ -33,7 +33,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 
     protected abstract string TableSuffix { get; }
 
-    private readonly ConcurrentDictionary<string, (string schema, string table, string tableSuffix)> _tableTupleByResourceUrl 
+    private readonly ConcurrentDictionary<string, (string schema, string table, string tableSuffix)> _tableTupleByResourceUrl
         = new(StringComparer.OrdinalIgnoreCase);
 
     public (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
@@ -43,7 +43,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
             async msg =>
             {
                 Options options = createBlocksRequest.Options;
-                
+
                 try
                 {
                     var (schema, table, tableSuffix) = _tableTupleByResourceUrl.GetOrAdd(
@@ -80,11 +80,11 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
                     connection.Open();
 
                     int attempts = 0;
-                    
+
                     var delay = Backoff.ExponentialBackoff(
                         TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
                         options.MaxRetryAttempts);
-                    
+
                     var sqlInsertResult = await Policy
                         .Handle<Exception>()
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>

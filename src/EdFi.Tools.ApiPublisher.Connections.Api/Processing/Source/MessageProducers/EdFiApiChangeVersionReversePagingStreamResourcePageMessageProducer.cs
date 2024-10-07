@@ -32,12 +32,12 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
     {
         if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
         {
-            _logger.Information(
-                $"{message.ResourceUrl}: Retrieving total count of items in change versions {message.ChangeWindow.MinChangeVersion} to {message.ChangeWindow.MaxChangeVersion}.");
+            _logger.Information("{ResourceUrl}: Retrieving total count of items in change versions {MinChangeVersion} to {MaxChangeVersion}.",
+                message.ResourceUrl, message.ChangeWindow.MinChangeVersion, message.ChangeWindow.MaxChangeVersion);
         }
         else
-        {           
-            _logger.Information($"{message.ResourceUrl}: Retrieving total count of items.");
+        {
+            _logger.Information("{ResourceUrl}: Retrieving total count of items.", message.ResourceUrl);
         }
 
         // Get total count of items in source resource for change window (if applicable)
@@ -54,12 +54,12 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
             return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
         }
 
-        _logger.Information($"{message.ResourceUrl}: Total count = {totalCount}");
+        _logger.Information("{ResourceUrl}: Total count = {TotalCount}", message.ResourceUrl, totalCount);
 
         int limit = message.PageSize;
 
         var pageMessages = new List<StreamResourcePageMessage<TProcessDataMessage>>();
-        
+
         if (totalCount > 0)
         {
             var noOfPartitions = Math.Ceiling((decimal)(message.ChangeWindow.MaxChangeVersion - message.ChangeWindow.MinChangeVersion)
@@ -72,7 +72,7 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
             {
                 long changeVersionWindowEndValue = (changeVersionWindowStartValue > 0 ?
                     changeVersionWindowStartValue - 1 : changeVersionWindowStartValue) + options.ChangeVersionPagingWindowSize;
-               
+
                 if (changeVersionWindowEndValue > message.ChangeWindow.MaxChangeVersion)
                 {
                     changeVersionWindowEndValue = message.ChangeWindow.MaxChangeVersion;
@@ -106,7 +106,7 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
                 }
 
                 int limitOnWindow = totalCountOnWindow < limit ? (int)totalCountOnWindow : limit;
-                while ((offsetOnWindow >= 0 || isLastOne == true) && totalCountOnWindow > 0 && limitOnWindow > 0)
+                while (totalCountOnWindow > 0 && limitOnWindow > 0)
                 {
                     var pageMessage = new StreamResourcePageMessage<TProcessDataMessage>
                     {
@@ -145,7 +145,7 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
         if (pageMessages.Any())
         {
             // Page-strategy specific context
-            pageMessages.Last().IsFinalPage = true;
+            pageMessages[pageMessages.Count - 1].IsFinalPage = true;
         }
 
         return pageMessages;

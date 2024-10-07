@@ -10,7 +10,7 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.Core.Registration
 {
-	public static class AutofacRegistrationExtensions
+    public static class AutofacRegistrationExtensions
     {
         public static IRegistrationBuilder<object, ScanningActivatorData, DynamicRegistrationStyle> UsingDefaultImplementationConvention(this IRegistrationBuilder<object, ScanningActivatorData, DynamicRegistrationStyle> registrationBuilder)
         {
@@ -23,13 +23,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Registration
                     {
                         Console.WriteLine($"{t.Name} -  {@interface.Name}");
                     }
-                    
+
                     return @interface != null;
                 })
                 .AsImplementedInterfaces()
                 .SingleInstance()
                 .PreserveExistingDefaults();
         }
-    }    
+    }
 }
 

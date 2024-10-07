@@ -9,7 +9,7 @@ using System.Net.Http;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Extensions
 {
-	public static class HttpRequestMessageExtensions
+    public static class HttpRequestMessageExtensions
     {
         public static bool HasParameter(this HttpRequestMessage request, string parameterName)
         {
@@ -28,8 +28,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Extensions
             {
                 return default;
             }
-            
-            return (T) Convert.ChangeType(value, typeof(T));
+
+            return (T)Convert.ChangeType(value, typeof(T));
         }
     }
 }

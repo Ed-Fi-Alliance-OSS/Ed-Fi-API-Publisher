@@ -10,7 +10,7 @@ using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
 {
-	public class EdFiApiConnectionsConfigurationBuilderEnhancer : IConfigurationBuilderEnhancer
+    public class EdFiApiConnectionsConfigurationBuilderEnhancer : IConfigurationBuilderEnhancer
     {
         private readonly ILogger _logger = Log.Logger.ForContext(typeof(EdFiApiConnectionsConfigurationBuilderEnhancer));
         private readonly INamedApiConnectionDetailsReader _namedApiConnectionDetailsReader;
@@ -23,7 +23,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
         public void Enhance(IConfigurationRoot initialConfiguration, IConfigurationBuilder configurationBuilder)
         {
             var connectionsConfiguration = initialConfiguration.GetSection("Connections");
-            
+
             var sourceConnectionConfiguration = connectionsConfiguration.GetSection("Source");
             var sourceConnectionDetails = sourceConnectionConfiguration.Get<ApiConnectionDetails>();
 
@@ -70,31 +70,25 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
                 ApiConnectionDetails connection,
                 ConnectionRole connectionType)
             {
-                // Get additional named configuration values for source/target, if necessary
-                // if (!connection.IsFullyDefined())
-                // {
-                    _logger.Debug($"{connectionType} connection details are not fully defined.");
+                _logger.Debug("{ConnectionType} connection details are not fully defined.", connectionType);
 
-                    if (string.IsNullOrEmpty(connection.Name))
-                    {
-                        throw new ArgumentException(
+                if (string.IsNullOrEmpty(connection.Name))
+                {
+                    throw new ArgumentException(
                             $"{connectionType} connection details were not available and no connection name was supplied.");
-                    }
+                }
 
-                    var configurationValues = CreateNamedConnectionConfigurationValues(connection.Name, connectionType).ToArray();
+                var configurationValues = CreateNamedConnectionConfigurationValues(connection.Name, connectionType).ToArray();
 
-                    return configurationValues;
-                // }
-                //
-                // return Enumerable.Empty<KeyValuePair<string, string>>();
+                return configurationValues;
             }
 
             IEnumerable<KeyValuePair<string, string>> CreateNamedConnectionConfigurationValues(
                 string apiConnectionName,
                 ConnectionRole connectionRole)
             {
-                _logger.Debug(
-                    $"Obtaining {connectionRole.ToString().ToLower()} API connection details for connection '{apiConnectionName}' using '{_namedApiConnectionDetailsReader.GetType().Name}'.");
+                _logger.Debug("Obtaining {ConnectionRole} API connection details for connection '{ApiConnectionName}' using '{NamedApiConnectionDetailsReaderName}'.",
+                    connectionRole.ToString().ToLower(), apiConnectionName, _namedApiConnectionDetailsReader.GetType().Name);
 
                 var namedApiConnectionDetails =
                     _namedApiConnectionDetailsReader.GetNamedApiConnectionDetails(apiConnectionName, configurationStoreSection);

@@ -8,7 +8,7 @@ using EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql;
 // ReSharper disable once CheckNamespace
 namespace Microsoft.Extensions.Configuration
 {
-	public static class ConfigurationBuilderExtensions
+    public static class ConfigurationBuilderExtensions
     {
         public static IConfigurationBuilder AddConfigurationStoreForPostgreSql(
             this IConfigurationBuilder builder,

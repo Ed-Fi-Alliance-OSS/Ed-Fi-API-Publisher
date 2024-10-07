@@ -17,7 +17,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class IncludeOnlyResourcesTests
     {
         [TestFixture]
@@ -51,7 +51,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
-               
+
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
                 // Every POST succeeds
@@ -62,8 +62,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    includeOnly: new []{ "schools" });
-            
+                    includeOnly: new[] { "schools" });
+
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
                 // -----------------------------------------------------------------
@@ -88,8 +88,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {
@@ -134,7 +134,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
             }
-            
+
             [Test]
             public void Should_reflect_the_processing_as_an_inclusion_without_its_dependencies_in_the_log()
             {

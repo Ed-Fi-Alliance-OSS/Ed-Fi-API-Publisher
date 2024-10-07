@@ -21,13 +21,13 @@ using System.Text.RegularExpressions;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
-	public static class MockRequests
+    public static class MockRequests
     {
-        public const string SourceApiBaseUrl = "https://test.source"; 
+        public const string SourceApiBaseUrl = "https://test.source";
         public const string TargetApiBaseUrl = "https://test.target";
 
         public const string DataManagementPath = "/data/v3";
-        
+
         public static readonly string SchoolYearSpecificDataManagementPath = $"/data/v3/{SchoolYear}";
         public const int SchoolYear = 2099;
 
@@ -41,7 +41,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                     },
                 Converters = new JsonConverter[] { new Iso8601UtcDateOnlyConverter() }
             };
-        
+
         // public static void NotFound(this IFakeHttpClientHandler fakeRequestHandler, string url)
         // {
         //     A.CallTo(() => fakeRequestHandler.Get(url, A<HttpRequestMessage>.Ignored))
@@ -66,9 +66,9 @@ namespace EdFi.Tools.ApiPublisher.Tests
                     () => fakeRequestHandler.Get(
                         A<string>.Ignored,
                         A<HttpRequestMessage>.That.Matches(
-                            msg => 
-                                (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)) 
-                                && !HasTotalCountParameter(msg) 
+                            msg =>
+                                (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url))
+                                && !HasTotalCountParameter(msg)
                                 && RequestMatchesParameters(msg, parameters))))
                 .Returns(FakeResponse.OK(data));
 
@@ -87,13 +87,13 @@ namespace EdFi.Tools.ApiPublisher.Tests
             return fakeRequestHandler;
         }
 
-        private static bool RequestMatchesParameters(HttpRequestMessage request, IDictionary<string,string> parameters)
+        private static bool RequestMatchesParameters(HttpRequestMessage request, IDictionary<string, string> parameters)
         {
             if (parameters == null)
             {
                 return true;
             }
-            
+
             var queryString = request.RequestUri.ParseQueryString();
 
             foreach (var parameter in parameters)
@@ -108,8 +108,8 @@ namespace EdFi.Tools.ApiPublisher.Tests
         }
 
         public static IFakeHttpRequestHandler PostResource(
-            this IFakeHttpRequestHandler fakeRequestHandler, 
-            string url, 
+            this IFakeHttpRequestHandler fakeRequestHandler,
+            string url,
             params HttpStatusCode[] responseCodes)
         {
             var mocker = A.CallTo(
@@ -170,7 +170,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                 {
                     return new HttpResponseMessage(statusCode);
                 }
-                
+
                 // Return a stock body in the response for a 400 or 500 series status code
                 return new HttpResponseMessage(statusCode)
                 {
@@ -201,7 +201,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                         A<string>.Ignored,
                         A<HttpRequestMessage>.That.Matches(msg => HasTotalCountParameter(msg))));
             }
-            
+
             fakeCall.Returns(FakeResponse.OK("[]").AppendHeaders(("Total-Count", responseTotalCountHeader.ToString())));
 
             return fakeRequestHandler;
@@ -224,7 +224,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
 
             return fakeRequestHandler;
         }
-        
+
         public static IFakeHttpRequestHandler Dependencies(this IFakeHttpRequestHandler fakeRequestHandler, string resourcePath)
         {
             A.CallTo(
@@ -276,7 +276,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                             access_token = "TheAccessToken",
                             // scope = "255901"
                         }));
-            
+
             return fakeRequestHandler;
         }
 
@@ -284,15 +284,15 @@ namespace EdFi.Tools.ApiPublisher.Tests
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/snapshots", A<HttpRequestMessage>.Ignored))
                 .Returns(FakeResponse.OK(JsonConvert.SerializeObject(data)));
-            
+
             return fakeRequestHandler;
         }
-        
+
         public static IFakeHttpRequestHandler SnapshotsEmpty(this IFakeHttpRequestHandler fakeRequestHandler)
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/snapshots", A<HttpRequestMessage>.Ignored))
                 .Returns(FakeResponse.OK("[]"));
-            
+
             return fakeRequestHandler;
         }
 
@@ -300,15 +300,15 @@ namespace EdFi.Tools.ApiPublisher.Tests
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/snapshots", A<HttpRequestMessage>.Ignored))
                 .Returns(FakeResponse.NotFound());
-            
+
             return fakeRequestHandler;
         }
-        
+
         public static IFakeHttpRequestHandler LegacySnapshotsNotFound(this IFakeHttpRequestHandler fakeRequestHandler)
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.DataManagementUrlSegment}/publishing/snapshots", A<HttpRequestMessage>.Ignored))
                 .Returns(FakeResponse.NotFound());
-            
+
             return fakeRequestHandler;
         }
 
@@ -326,21 +326,21 @@ namespace EdFi.Tools.ApiPublisher.Tests
         public static IFakeHttpRequestHandler SetBaseUrl(this IFakeHttpRequestHandler fakeRequestHandler, string apiBaseUrl)
         {
             A.CallTo(() => fakeRequestHandler.BaseUrl).Returns(apiBaseUrl);
-            
+
             return fakeRequestHandler;
         }
 
         public static IFakeHttpRequestHandler SetDataManagementUrlSegment(this IFakeHttpRequestHandler fakeRequestHandler, string urlSegment)
         {
             A.CallTo(() => fakeRequestHandler.DataManagementUrlSegment).Returns(urlSegment);
-            
+
             return fakeRequestHandler;
         }
 
         public static IFakeHttpRequestHandler SetChangeQueriesUrlSegment(this IFakeHttpRequestHandler fakeRequestHandler, string urlSegment)
         {
             A.CallTo(() => fakeRequestHandler.ChangeQueriesUrlSegment).Returns(urlSegment);
-            
+
             return fakeRequestHandler;
         }
     }

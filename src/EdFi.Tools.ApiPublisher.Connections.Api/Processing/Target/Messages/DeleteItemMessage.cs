@@ -5,7 +5,7 @@
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
 {
-	public class DeleteItemMessage
+    public class DeleteItemMessage
     {
         /// <summary>
         /// Gets or sets the relative URL for the resource to be deleted.

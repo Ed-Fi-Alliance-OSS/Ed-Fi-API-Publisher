@@ -10,19 +10,19 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
-	public class PostgreSqlConfigurationNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
+    public class PostgreSqlConfigurationNamedApiConnectionDetailsReader : INamedApiConnectionDetailsReader
     {
         public ApiConnectionDetails GetNamedApiConnectionDetails(
             string apiConnectionName,
             IConfigurationSection configurationStoreSection)
         {
             var postgresConfiguration = configurationStoreSection.Get<PostgresConfigurationStore>().PostgreSql;
-            
-            if (string.IsNullOrWhiteSpace(postgresConfiguration?.EncryptionPassword)) 
+
+            if (string.IsNullOrWhiteSpace(postgresConfiguration?.EncryptionPassword))
             {
                 throw new Exception("The PostgreSQL Configuration Store encryption key for storing API keys and secrets was not provided.");
             }
-            
+
             // Load named connection information from PostgreSQL configuration store
             var config = new ConfigurationBuilder()
                 .AddConfigurationStoreForPostgreSql(

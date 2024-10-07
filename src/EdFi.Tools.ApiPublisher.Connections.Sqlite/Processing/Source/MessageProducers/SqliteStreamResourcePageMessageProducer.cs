@@ -21,7 +21,7 @@ public class SqliteStreamResourcePageMessageProducer : IStreamResourcePageMessag
     private readonly Func<SqliteConnection> _createConnection;
 
     private readonly ILogger _logger = Log.ForContext(typeof(SqliteStreamResourcePageMessageProducer));
-    
+
     public SqliteStreamResourcePageMessageProducer(
         ISourceTotalCountProvider sourceTotalCountProvider,
         Func<SqliteConnection> createConnection)
@@ -29,7 +29,7 @@ public class SqliteStreamResourcePageMessageProducer : IStreamResourcePageMessag
         _sourceTotalCountProvider = sourceTotalCountProvider;
         _createConnection = createConnection;
     }
-    
+
     public async Task<IEnumerable<StreamResourcePageMessage<TProcessDataMessage>>> ProduceMessagesAsync<TProcessDataMessage>(
         StreamResourceMessage message,
         Options options,
@@ -44,7 +44,7 @@ public class SqliteStreamResourcePageMessageProducer : IStreamResourcePageMessag
             message.ChangeWindow,
             errorHandlingBlock,
             cancellationToken);
-        
+
         if (!totalCountSuccess)
         {
             // Allow processing to continue without performing additional work on this resource.
@@ -57,16 +57,16 @@ public class SqliteStreamResourcePageMessageProducer : IStreamResourcePageMessag
         {
             return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
         }
-        
+
         await using var connection = _createConnection();
 
         var (schema, table, tableSuffix) = SqliteTableNameHelper.ParseDetailsFromResourcePath(message.ResourceUrl);
-        
+
         var cmd = connection.CreateCommand();
         cmd.CommandText = $"SELECT id FROM {schema}__{table}{tableSuffix} ORDER BY id";
-        
+
         await connection.OpenAsync();
-        
+
         await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection, cancellationToken);
 
         var pageMessages = new List<StreamResourcePageMessage<TProcessDataMessage>>();

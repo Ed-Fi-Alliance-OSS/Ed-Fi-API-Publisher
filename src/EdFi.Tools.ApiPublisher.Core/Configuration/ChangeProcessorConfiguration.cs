@@ -10,7 +10,7 @@ using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
-	public class ChangeProcessorConfiguration
+    public class ChangeProcessorConfiguration
     {
         private readonly ILogger _logger = Log.ForContext(typeof(ChangeProcessorConfiguration));
 

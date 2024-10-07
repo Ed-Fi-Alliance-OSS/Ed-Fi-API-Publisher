@@ -7,7 +7,7 @@ using System.Net.Http;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
-	public interface IFakeHttpRequestHandler
+    public interface IFakeHttpRequestHandler
     {
         string BaseUrl { get; }
         string DataManagementUrlSegment { get; }

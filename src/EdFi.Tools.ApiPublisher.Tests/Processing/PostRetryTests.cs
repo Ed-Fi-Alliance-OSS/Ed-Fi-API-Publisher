@@ -14,12 +14,12 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class PostRetryTests
     {
         private const string StateEducationAgencies = "/ed-fi/stateEducationAgencies";
         private const string AddressTypeDescriptors = "/ed-fi/addressTypeDescriptors";
-        
+
         #region Test Cases
         [TestCase(HttpStatusCode.OK, StateEducationAgencies)]
         [TestCase(HttpStatusCode.OK, AddressTypeDescriptors)]
@@ -106,7 +106,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             //                      Source Requests
             // -----------------------------------------------------------------
             var sourceResourceFaker = TestHelpers.GetGenericResourceFaker();
-            
+
             var suppliedSourceResources = sourceResourceFaker.Generate(1);
 
             // Prepare the fake source API endpoint
@@ -120,16 +120,16 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // -----------------------------------------------------------------
             //                      Target Requests
             // -----------------------------------------------------------------
-               
+
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
             if (initialResponseCodeOnPost == HttpStatusCode.OK)
             {
-                fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{resourcePath}", HttpStatusCode.OK);
+                fakeTargetRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}{resourcePath}", HttpStatusCode.OK);
             }
             else
             {
-                fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}{resourcePath}", initialResponseCodeOnPost, HttpStatusCode.OK);
+                fakeTargetRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}{resourcePath}", initialResponseCodeOnPost, HttpStatusCode.OK);
             }
 
             // -----------------------------------------------------------------
@@ -137,8 +137,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // -----------------------------------------------------------------
 
             var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                include: new []{ resourcePath });
-            
+                include: new[] { resourcePath });
+
             var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
             // -----------------------------------------------------------------

@@ -7,7 +7,7 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-	public class ChangeWindow
+    public class ChangeWindow
     {
         private long _minChangeVersion;
         private long _maxChangeVersion;
@@ -21,7 +21,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     throw new ArgumentOutOfRangeException(nameof(value), "Change versions must be greater than 0.");
                 }
-                
+
                 _minChangeVersion = value;
             }
         }
@@ -35,7 +35,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     throw new ArgumentOutOfRangeException(nameof(value), "Change versions must be greater than 0.");
                 }
-                
+
                 _maxChangeVersion = value;
             }
         }

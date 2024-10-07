@@ -20,7 +20,7 @@ public class NodeJsRemediationsModule : Module
     {
         this._initialConfiguration = initialConfiguration;
     }
-    
+
     protected override void Load(ContainerBuilder builder)
     {
         string remediationsScriptFile = _initialConfiguration.GetValue<string>("Options:RemediationsScriptFile");

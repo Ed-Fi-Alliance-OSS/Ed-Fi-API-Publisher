@@ -35,7 +35,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(DeleteResourceProcessingBlocksFactory));
 
-        public DeleteResourceProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter =null)
+        public DeleteResourceProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter = null)
         {
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
             _rateLimiter = rateLimiter;
@@ -89,7 +89,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         int attempts = 0;
                         // Rate Limit
                         bool isRateLimitingEnabled = options.EnableRateLimit;
-                        
+
                         var retryPolicy = Policy
                             .Handle<Exception>()
                             .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
@@ -97,12 +97,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 if (result.Exception != null)
                                 {
-                                    _logger.Warning($"{msg.ResourceUrl} (source id: {id}): GET by key for deletion of target resource attempt #{attempts}): {result.Exception}");
+                                    _logger.Warning(result.Exception, "{ResourceUrl} (source id: {Id}): GET by key for deletion of target resource attempt #{Attempts}): {Exception}",
+                                        msg.ResourceUrl, id, attempts, result.Exception);
                                 }
                                 else
                                 {
-                                    _logger.Warning(
-                                        $"{msg.ResourceUrl} (source id: {id}): GET by key for deletion of target resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                                    _logger.Warning("{ResourceUrl} (source id: {Id}): GET by key for deletion of target resource failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
+                                        msg.ResourceUrl, id, result.Result.StatusCode, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds);
                                 }
                             });
 
@@ -111,12 +112,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             attempts++;
 
-                            if (attempts > 1)
+                            if (attempts > 1 && _logger.IsEnabled(LogEventLevel.Debug))
                             {
-                                if (_logger.IsEnabled(LogEventLevel.Debug))
-                                {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {msg.Id}): GET by key for deletion of target resource (attempt #{attempts}) using '{queryString}'...");
-                                }
+                                _logger.Debug("{ResourceUrl} (source id: {Id}): GET by key for deletion of target resource (attempt #{Attempts}) using '{QueryString}'...",
+                                    msg.ResourceUrl, msg.Id, attempts, queryString);
                             }
 
                             return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}?{queryString}", ct);
@@ -128,8 +127,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                         if (!apiResponse.IsSuccessStatusCode)
                         {
-                            _logger.Error(
-                                $"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                            _logger.Error("{ResourceUrl} (source id: {Id}): GET by key returned {StatusCode}{NewLine}{ResponseContent}",
+                                msg.ResourceUrl, id, apiResponse.StatusCode, Environment.NewLine, responseContent);
 
                             var error = new ErrorItemMessage
                             {
@@ -153,13 +152,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         // Log a message if this was successful after a retry.
                         if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                         {
-                            _logger.Information(
-                                $"{msg.ResourceUrl} (source id: {id}): GET by key attempt #{attempts} returned {apiResponse.StatusCode}.");
+                            _logger.Information("{ResourceUrl} (source id: {Id}): GET by key attempt #{Attempts} returned {StatusCode}.",
+                                msg.ResourceUrl, id, attempts, apiResponse.StatusCode);
                         }
 
                         if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
-                            _logger.Debug($"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}");
+                            _logger.Debug("{ResourceUrl} (source id: {Id}): GET by key returned {StatusCode}", msg.ResourceUrl, id, apiResponse.StatusCode);
                         }
 
                         var getByKeyResults = JArray.Parse(responseContent);
@@ -169,7 +168,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             if (_logger.IsEnabled(LogEventLevel.Debug))
                             {
-                                _logger.Debug($"{msg.ResourceUrl} (source id: {msg.Id}): GET by key for deletion returned no results on target API ({queryString}).");
+                                _logger.Debug("{ResourceUrl} (source id: {Id}): GET by key for deletion returned no results on target API ({QueryString}).",
+                                    msg.ResourceUrl, msg.Id, queryString);
                             }
 
                             return Enumerable.Empty<DeleteItemMessage>();
@@ -185,16 +185,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                         };
                     }
-                    catch (RateLimitRejectedException)
+#pragma warning disable S2139
+                    catch (RateLimitRejectedException ex)
                     {
-                        _logger.Fatal($"{msg.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                        _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                         throw;
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error($"{msg.ResourceUrl} (source id: {id}): An unhandled exception occurred in the GetItemForDeletion block: {ex}");
+                        _logger.Error(ex, "{ResourceUrl} (source id: {Id}): An unhandled exception occurred in the GetItemForDeletion block: {Ex}", msg.ResourceUrl, id, ex);
                         throw;
                     }
+#pragma warning restore S2139
                 }, new ExecutionDataflowBlockOptions
                 {
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
@@ -243,7 +245,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     int attempts = 0;
                     // Rate Limit
                     bool isRateLimitingEnabled = options.EnableRateLimit;
-                    
+
                     var retryPolicy = Policy
                         .Handle<Exception>()
                         .OrResult<HttpResponseMessage>(r =>
@@ -252,12 +254,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             if (result.Exception != null)
                             {
-                                _logger.Warning($"{msg.ResourceUrl} (source id: {sourceId}): Delete resource attempt #{attempts} threw an exception: {result.Exception}");
+                                _logger.Warning(result.Exception, "{ResourceUrl} (source id: {SourceId}): Delete resource attempt #{Attempts} threw an exception: {Exception}",
+                                    msg.ResourceUrl, sourceId, attempts, result.Exception);
                             }
                             else
                             {
-                                _logger.Warning(
-                                    $"{msg.ResourceUrl} (source id: {sourceId}): Delete resource failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                                _logger.Warning(result.Exception, "{ResourceUrl} (source id: {SourceId}): Delete resource failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
+                                    msg.ResourceUrl, sourceId, result.Result.StatusCode, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds);
                             }
                         });
                     IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
@@ -265,12 +268,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             attempts++;
 
-                            if (attempts > 1)
+                            if (attempts > 1 && _logger.IsEnabled(LogEventLevel.Debug))
                             {
-                                if (_logger.IsEnabled(LogEventLevel.Debug))
-                                {
-                                    _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): DELETE request (attempt #{attempts}.");
-                                }
+                                _logger.Debug("{ResourceUrl} (source id: {SourceId}): DELETE request (attempt #{Attempts}.",
+                                    msg.ResourceUrl, sourceId, attempts);
                             }
 
                             return targetApiClient.HttpClient.DeleteAsync($"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}/{id}", ct);
@@ -281,8 +282,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     {
                         string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                        _logger.Error(
-                            $"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}");
+                        _logger.Error("{ResourceUrl} (source id: {SourceId}): DELETE returned {StatusCode}{NewLine}{ResponseContent}",
+                            msg.ResourceUrl, sourceId, apiResponse.StatusCode, Environment.NewLine, responseContent);
 
                         // Publish the failure
                         var error = new ErrorItemMessage
@@ -301,28 +302,31 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // Success
                     if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                     {
-                        _logger.Information(
-                            $"{msg.ResourceUrl} (source id: {sourceId}): DELETE attempt #{attempts} returned {apiResponse.StatusCode}.");
+                        _logger.Information("{ResourceUrl} (source id: {SourceId}): DELETE attempt #{Attempts} returned {StatusCode}.",
+                            msg.ResourceUrl, sourceId, attempts, apiResponse.StatusCode);
                     }
 
                     if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
-                        _logger.Debug($"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}");
+                        _logger.Debug("{ResourceUrl} (source id: {SourceId}): DELETE returned {StatusCode}", msg.ResourceUrl, sourceId, apiResponse.StatusCode);
                     }
 
                     // Success - no errors to publish
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
-                catch (RateLimitRejectedException)
+#pragma warning disable S2139
+                catch (RateLimitRejectedException ex)
                 {
-                    _logger.Fatal($"{msg.ResourceUrl}: Rate limit exceeded. Please try again later.");
+                    _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                     throw;
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error($"{msg.ResourceUrl} (source id: {sourceId}): An unhandled exception occurred in the DeleteResource block: {ex}");
+                    _logger.Error(ex, "{ResourceUrl} (source id: {SourceId}): An unhandled exception occurred in the DeleteResource block: {Ex}",
+                        msg.ResourceUrl, sourceId, ex);
                     throw;
                 }
+#pragma warning restore S2139
             }, new ExecutionDataflowBlockOptions
             {
                 MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
@@ -342,17 +346,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 if (message.CancellationSource.IsCancellationRequested)
                 {
                     _logger.Debug(
-                        $"{message.ResourceUrl}: Cancellation requested during item '{nameof(GetItemForDeletionMessage)}' creation.");
+                        "{ResourceUrl}: Cancellation requested during item '{NameofGetItemForDeletionMessage}' creation.", message.ResourceUrl, nameof(GetItemForDeletionMessage));
 
                     yield break;
                 }
-
-                // // Add the item to the buffer for processing into the target API
-                // if (_logger.IsEnabled(LogEventLevel.Debug))
-                // {
-                //     _logger.Debug(
-                //         $"{message.ResourceUrl}: Adding individual action message of type '{nameof(GetItemForDeletionMessage)}' for item '{item["id"]?.Value<string>() ?? "unknown"}'...");
-                // }
 
                 var itemMessage = CreateItemActionMessage(item);
 

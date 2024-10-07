@@ -21,11 +21,11 @@ public class SavePublishingOperationMetadataFinalizationActivity : IFinalization
         _publishingOperationMetadataCollector = publishingOperationMetadataCollector;
         _createConnection = createConnection;
     }
-    
+
     public async Task Execute()
     {
         await using var connection = _createConnection();
-        
+
         await connection.OpenAsync();
 
         await CreatePublishingMetadataTableAsync();
@@ -73,11 +73,11 @@ public class SavePublishingOperationMetadataFinalizationActivity : IFinalization
             INSERT INTO PublishingMetadata(CurrentChangeVersion, SourceVersionMetadata, TargetVersionMetadata, MinChangeVersion, MaxChangeVersion)
             VALUES ($changeVersion, $sourceVersionMetadata, $targetVersionMetadata, $minChangeVersion, $maxChangeVersion);";
 
-            cmd.Parameters.AddWithValue("$changeVersion", metadata.CurrentChangeVersion ?? (object) DBNull.Value);
-            cmd.Parameters.AddWithValue("$sourceVersionMetadata", metadata.SourceVersionMetadata?.ToString() ?? (object) DBNull.Value);
-            cmd.Parameters.AddWithValue("$targetVersionMetadata", metadata.TargetVersionMetadata?.ToString() ?? (object) DBNull.Value);
-            cmd.Parameters.AddWithValue("$minChangeVersion", metadata.ChangeWindow?.MinChangeVersion ?? (object) DBNull.Value);
-            cmd.Parameters.AddWithValue("$maxChangeVersion", metadata.ChangeWindow?.MaxChangeVersion ?? (object) DBNull.Value);
+            cmd.Parameters.AddWithValue("$changeVersion", metadata.CurrentChangeVersion ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("$sourceVersionMetadata", metadata.SourceVersionMetadata?.ToString() ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("$targetVersionMetadata", metadata.TargetVersionMetadata?.ToString() ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("$minChangeVersion", metadata.ChangeWindow?.MinChangeVersion ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("$maxChangeVersion", metadata.ChangeWindow?.MaxChangeVersion ?? (object)DBNull.Value);
 
             await cmd.ExecuteNonQueryAsync();
         }

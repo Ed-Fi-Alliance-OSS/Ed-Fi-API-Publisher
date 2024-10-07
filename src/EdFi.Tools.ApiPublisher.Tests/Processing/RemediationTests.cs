@@ -33,9 +33,9 @@ public class RemediationTests
         private IFakeHttpRequestHandler _fakeTargetRequestHandler;
 
         // [TestCase(HttpStatusCode.Forbidden, StaffDisciplineIncidentAssociations, true)]
-        HttpStatusCode initialResponseCodeOnPost = HttpStatusCode.Forbidden;
-        const string resourcePath = StaffDisciplineIncidentAssociations;
-        const bool shouldRetry = true;
+        private HttpStatusCode initialResponseCodeOnPost = HttpStatusCode.Forbidden;
+        private const string ResourcePath = StaffDisciplineIncidentAssociations;
+        private const bool ShouldRetry = true;
 
         protected override async Task ArrangeAsync()
         {
@@ -52,7 +52,7 @@ public class RemediationTests
                 // Test-specific mocks
                 .AvailableChangeVersions(1100)
                 .ResourceCount(responseTotalCountHeader: 1)
-                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{resourcePath}", suppliedSourceResources);
+                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{ResourcePath}", suppliedSourceResources);
 
             // -----------------------------------------------------------------
 
@@ -65,13 +65,13 @@ public class RemediationTests
             if (initialResponseCodeOnPost == HttpStatusCode.OK)
             {
                 _fakeTargetRequestHandler.PostResource(
-                    $"{EdFiApiConstants.DataManagementApiSegment}{resourcePath}",
+                    $"{EdFiApiConstants.DataManagementApiSegment}{ResourcePath}",
                     HttpStatusCode.OK);
             }
             else
             {
                 _fakeTargetRequestHandler.PostResource(
-                    $"{EdFiApiConstants.DataManagementApiSegment}{resourcePath}",
+                    $"{EdFiApiConstants.DataManagementApiSegment}{ResourcePath}",
                     initialResponseCodeOnPost,
                     HttpStatusCode.OK);
             }
@@ -80,7 +80,7 @@ public class RemediationTests
             //                  Source/Target Connection Details
             // -----------------------------------------------------------------
 
-            var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(includeOnly: new[] { resourcePath });
+            var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(includeOnly: new[] { ResourcePath });
             var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
             // -----------------------------------------------------------------
@@ -89,7 +89,7 @@ public class RemediationTests
             var options = TestHelpers.GetOptions();
 
             // Only include descriptors if our test subject resource is a descriptor (trying to avoid any dependencies to keep things simpler)
-            options.IncludeDescriptors = resourcePath.EndsWith("Descriptors");
+            options.IncludeDescriptors = ResourcePath.EndsWith("Descriptors");
             // -----------------------------------------------------------------
 
             // Initialize logging
@@ -137,8 +137,8 @@ public class RemediationTests
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler,
                 nodeJsService);
-			await Task.Yield();
-		}
+            await Task.Yield();
+        }
 
         protected override async Task ActAsync()
         {
@@ -151,18 +151,18 @@ public class RemediationTests
             // Should try POST once with original (unmodified) request body
             A.CallTo(
                     () => _fakeTargetRequestHandler.Post(
-                        $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{resourcePath}",
+                        $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{ResourcePath}",
                         A<HttpRequestMessage>.That.Matches(req => !HasModifiedRequestBody(req))))
                 .MustHaveHappened(1, Times.Exactly);
         }
-        
+
         [Test]
         public void Should_retry_request_even_after_an_otherwise_permanent_failure_with_the_modified_request_provided_by_the_remediation_extension()
         {
             // Should try POST once with modified request body, as directed by the JavaScript extension
             A.CallTo(
                     () => _fakeTargetRequestHandler.Post(
-                        $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{resourcePath}",
+                        $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{ResourcePath}",
                         A<HttpRequestMessage>.That.Matches(req => HasModifiedRequestBody(req))))
                 .MustHaveHappened(1, Times.Exactly);
         }
@@ -175,7 +175,7 @@ public class RemediationTests
 
             return (modifiedRequest.type == "modified");
         }
-        
+
         [Test]
         public void Should_process_remediation_requests_returned_from_nodejs_service_invocation_with_the_supplied_message_bodies()
         {
@@ -196,7 +196,7 @@ public class RemediationTests
                                     msg => WithMatchingBody(msg, "Staff EdOrg Assignment Request Body"))))
                         .MustHaveHappenedOnceExactly();
                 });
-        } 
+        }
 
         private bool WithMatchingBody(HttpRequestMessage msg, string expectedMessage)
         {

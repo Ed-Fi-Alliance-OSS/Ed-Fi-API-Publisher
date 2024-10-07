@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Serialization
 {
-	public class Iso8601UtcDateOnlyConverter : IsoDateTimeConverter
+    public class Iso8601UtcDateOnlyConverter : IsoDateTimeConverter
     {
         // All valid US English time formats will contain either a time separator ':' or an AM/PM designator
         private readonly Regex _timePortionRegex = new Regex(":|am|pm", RegexOptions.Compiled | RegexOptions.IgnoreCase);

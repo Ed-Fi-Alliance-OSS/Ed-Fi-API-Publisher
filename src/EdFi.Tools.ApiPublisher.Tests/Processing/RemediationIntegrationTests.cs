@@ -36,8 +36,8 @@ public class RemediationIntegrationTests
         private ChangeProcessorConfiguration _changeProcessorConfiguration;
         private IFakeHttpRequestHandler _fakeTargetRequestHandler;
 
-        const HttpStatusCode InitialResponseCodeOnPost = HttpStatusCode.BadRequest;
-        const string ResourcePath = DisciplineActionsResourcePath;
+        private const HttpStatusCode InitialResponseCodeOnPost = HttpStatusCode.BadRequest;
+        private const string ResourcePath = DisciplineActionsResourcePath;
 
         private static string DisciplineActionsItemJson = $@"
     {{
@@ -116,7 +116,7 @@ public class RemediationIntegrationTests
         private const string DisciplineIncidentActionsPostResponseErrorJson = $@"
 {{ ""message"": ""Validation of 'DisciplineAction' failed.\\r\\n\\tValidation of 'DisciplineActionStaffs' failed.\\n\\t\\tDisciplineActionStaff[0]: Staff reference could not be resolved.\\n\\t\\tDisciplineActionStaff[2]: Staff reference could not be resolved.\\n""}}";
 
-        readonly Func<string> _remediationJavaScriptModuleFactory = () => @$"
+        private readonly Func<string> _remediationJavaScriptModuleFactory = () => @$"
          module.exports = {{
              '/ed-fi/disciplineActions/400': async (failureContext) => {{
                  // Parse the request/response data
@@ -165,8 +165,8 @@ public class RemediationIntegrationTests
                 // Test-specific mocks
                 .AvailableChangeVersions(1100)
                 .ResourceCount(responseTotalCountHeader: 1)
-                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{ResourcePath}", 
-                    new [] { JObject.Parse(DisciplineActionsItemJson) })
+                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{ResourcePath}",
+                    new[] { JObject.Parse(DisciplineActionsItemJson) })
                 .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AssessmentsResourcePath}",
                     suppliedSourceResources);
 
@@ -227,8 +227,8 @@ public class RemediationIntegrationTests
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler,
                 nodeJsService);
-			await Task.Yield();
-		}
+            await Task.Yield();
+        }
 
         protected override async Task ActAsync()
         {
@@ -281,7 +281,7 @@ public class RemediationIntegrationTests
                         .MustHaveHappenedOnceExactly();
                 });
         }
-        
+
         [Test]
         public void Should_NOT_perform_remediation_for_items_WITHOUT_error_messages()
         {
@@ -301,7 +301,7 @@ public class RemediationIntegrationTests
             {
                 return false;
             }
-            
+
             var data = JObject.Parse(content);
 
             return data["staffUniqueId"].Value<string>() == studentUniqueId;
@@ -314,8 +314,8 @@ public class RemediationIntegrationTests
         private ChangeProcessorConfiguration _changeProcessorConfiguration;
         private IFakeHttpRequestHandler _fakeTargetRequestHandler;
 
-        const HttpStatusCode InitialResponseCodeOnPost = HttpStatusCode.BadRequest;
-        const string ResourcePath = DisciplineActionsResourcePath;
+        private const HttpStatusCode InitialResponseCodeOnPost = HttpStatusCode.BadRequest;
+        private const string ResourcePath = DisciplineActionsResourcePath;
 
         private static string DisciplineActionsItemJson = $@"
     {{
@@ -396,7 +396,7 @@ public class RemediationIntegrationTests
 
         private const string AssessmentsResourcePath = "/ed-fi/assessments";
 
-        readonly Func<string> _remediationJavaScriptModuleFactory = () => @$"
+        private readonly Func<string> _remediationJavaScriptModuleFactory = () => @$"
          module.exports = {{
              '/ed-fi/disciplineActions/400': async (failureContext) => {{
                  // Parse the request/response data
@@ -437,8 +437,8 @@ public class RemediationIntegrationTests
                 // Test-specific mocks
                 .AvailableChangeVersions(1100)
                 .ResourceCount(responseTotalCountHeader: 1)
-                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{ResourcePath}", 
-                    new [] { JObject.Parse(DisciplineActionsItemJson) })
+                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{ResourcePath}",
+                    new[] { JObject.Parse(DisciplineActionsItemJson) })
                 .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{AssessmentsResourcePath}",
                     suppliedSourceResources);
 
@@ -495,8 +495,8 @@ public class RemediationIntegrationTests
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler,
                 nodeJsService);
-			await Task.Yield();
-		}
+            await Task.Yield();
+        }
 
         protected override async Task ActAsync()
         {
@@ -556,9 +556,9 @@ public class RemediationIntegrationTests
             {
                 return false;
             }
-            
-            return ((IEnumerable<dynamic>) data.staffs)
-                .All(s => requiredStaffUniqueIds.Contains((string) s.staffReference.staffUniqueId));
+
+            return ((IEnumerable<dynamic>)data.staffs)
+                .All(s => requiredStaffUniqueIds.Contains((string)s.staffReference.staffUniqueId));
         }
     }
 
@@ -572,7 +572,7 @@ public class RemediationIntegrationTests
         {
             _testCacheIdentifier = testCacheIdentifier;
         }
-        
+
         public Task<T> InvokeFromStringAsync<T>(
             Func<string> moduleFactory,
             string cacheIdentifier,

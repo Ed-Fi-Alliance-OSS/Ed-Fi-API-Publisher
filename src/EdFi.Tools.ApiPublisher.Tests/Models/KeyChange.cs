@@ -9,7 +9,7 @@ using System.Collections.Generic;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Models
 {
-	public class KeyChange<TKey>
+    public class KeyChange<TKey>
     {
         public string Id { get; set; }
 

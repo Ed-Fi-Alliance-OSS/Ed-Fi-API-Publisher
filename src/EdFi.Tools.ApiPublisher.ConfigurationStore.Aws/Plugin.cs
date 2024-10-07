@@ -14,7 +14,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.Aws;
 public class Plugin : IPlugin
 {
     private const string ConfigurationProviderName = "awsParameterStore";
-        
+
     public void ApplyConfiguration(string[] args, IConfigurationBuilder configBuilder)
     {
         // Nothing to do

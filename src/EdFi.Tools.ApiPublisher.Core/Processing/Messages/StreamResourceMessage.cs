@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 {
-	public class StreamResourceMessage
+    public class StreamResourceMessage
     {
         // ----------------------------
         // Resource-specific context
@@ -26,10 +26,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // Source Ed-Fi ODS API processing context (shared)
         // -------------------------------------------------
         // public EdFiApiClient EdFiApiClient { get; set; }
-        
+
         // NOTE: This is potentially not Ed-Fi ODs API-specific, but likely so
         public int PageSize { get; set; }
-        
+
         // ----------------------------
         // Global processing context
         // ----------------------------

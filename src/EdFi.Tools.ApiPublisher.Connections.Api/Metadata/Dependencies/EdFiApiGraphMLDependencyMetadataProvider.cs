@@ -17,7 +17,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Dependencies;
 public class EdFiApiGraphMLDependencyMetadataProvider : IGraphMLDependencyMetadataProvider
 {
     private readonly IEdFiApiClientProvider _edFiApiClientProvider;
-        
+
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiGraphMLDependencyMetadataProvider));
 
     public EdFiApiGraphMLDependencyMetadataProvider(IEdFiApiClientProvider edFiApiClientProvider)
@@ -28,12 +28,13 @@ public class EdFiApiGraphMLDependencyMetadataProvider : IGraphMLDependencyMetada
     public async Task<(XElement, XNamespace)> GetDependencyMetadataAsync()
     {
         var edFiApiClient = _edFiApiClientProvider.GetApiClient();
-            
+
         string dependenciesRequestUri = $"metadata/{edFiApiClient.DataManagementApiSegment}/dependencies";
 
         // Get the resource dependencies from the target
-        _logger.Information($"Getting dependencies from API at {edFiApiClient.HttpClient.BaseAddress}{dependenciesRequestUri}...");
-            
+        _logger.Information("Getting dependencies from API at {BaseAddress}{DependenciesRequestUri}...",
+            edFiApiClient.HttpClient.BaseAddress, dependenciesRequestUri);
+
         var dependencyRequest = new HttpRequestMessage(HttpMethod.Get, dependenciesRequestUri);
         dependencyRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/graphml"));
         var dependencyResponse = await edFiApiClient.HttpClient.SendAsync(dependencyRequest).ConfigureAwait(false);
@@ -42,10 +43,11 @@ public class EdFiApiGraphMLDependencyMetadataProvider : IGraphMLDependencyMetada
 
         if (!dependencyResponse.IsSuccessStatusCode)
         {
-            _logger.Error($"Ed-Fi ODS API request for dependencies to '{dependencyRequest.RequestUri}' returned '{dependencyResponse.StatusCode}' with content:{Environment.NewLine}{dependencyResponseContent}");
+            _logger.Error("Ed-Fi ODS API request for dependencies to '{RequestUri}' returned '{StatusCode}' with content:{NewLine}{DependencyResponseContent}",
+                dependencyRequest.RequestUri, dependencyResponse.StatusCode, Environment.NewLine, dependencyResponseContent);
             throw new Exception("Resource dependencies could not be obtained.");
         }
-            
+
         XNamespace ns = "http://graphml.graphdrawing.org/xmlns";
 
         try
@@ -55,7 +57,8 @@ public class EdFiApiGraphMLDependencyMetadataProvider : IGraphMLDependencyMetada
         }
         catch (Exception ex)
         {
-            _logger.Error($"Unable to parse dependency response as GraphML: {dependencyResponseContent}{Environment.NewLine}{ex}");
+            _logger.Error(ex, "Unable to parse dependency response as GraphML: {DependencyResponseContent}{NewLine}{Ex}",
+                dependencyResponseContent, Environment.NewLine, ex);
             throw new Exception("Resource dependencies could not be obtained.");
         }
     }

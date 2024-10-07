@@ -18,6 +18,6 @@ public abstract class ResourceJsonMessage
     public string Json { get; set; }
 }
 
-public class KeyChangesJsonMessage : ResourceJsonMessage {}
-public class UpsertsJsonMessage : ResourceJsonMessage {}
-public class DeletesJsonMessage : ResourceJsonMessage {}
+public class KeyChangesJsonMessage : ResourceJsonMessage { }
+public class UpsertsJsonMessage : ResourceJsonMessage { }
+public class DeletesJsonMessage : ResourceJsonMessage { }

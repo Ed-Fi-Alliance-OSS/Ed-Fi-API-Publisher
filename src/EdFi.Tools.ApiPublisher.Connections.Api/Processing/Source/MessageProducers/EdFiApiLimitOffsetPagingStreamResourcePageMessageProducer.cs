@@ -15,29 +15,29 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProdu
 public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStreamResourcePageMessageProducer
 {
     private readonly ISourceTotalCountProvider _sourceTotalCountProvider;
-    
+
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer));
-    
+
     public EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(ISourceTotalCountProvider sourceTotalCountProvider)
     {
         _sourceTotalCountProvider = sourceTotalCountProvider;
     }
-    
+
     public async Task<IEnumerable<StreamResourcePageMessage<TProcessDataMessage>>> ProduceMessagesAsync<TProcessDataMessage>(
-        StreamResourceMessage message, 
+        StreamResourceMessage message,
         Options options,
-        ITargetBlock<ErrorItemMessage> errorHandlingBlock, 
+        ITargetBlock<ErrorItemMessage> errorHandlingBlock,
         Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
         CancellationToken cancellationToken)
     {
         if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
         {
-            _logger.Information(
-                $"{message.ResourceUrl}: Retrieving total count of items in change versions {message.ChangeWindow.MinChangeVersion} to {message.ChangeWindow.MaxChangeVersion}.");
+            _logger.Information("{ResourceUrl}: Retrieving total count of items in change versions {MinChangeVersion} to {MaxChangeVersion}.",
+                message.ResourceUrl, message.ChangeWindow.MinChangeVersion, message.ChangeWindow.MaxChangeVersion);
         }
         else
         {
-            _logger.Information($"{message.ResourceUrl}: Retrieving total count of items.");
+            _logger.Information("{ResourceUrl}: Retrieving total count of items.", message.ResourceUrl);
         }
 
         // Get total count of items in source resource for change window (if applicable)
@@ -47,14 +47,14 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
             message.ChangeWindow,
             errorHandlingBlock,
             cancellationToken);
-        
+
         if (!totalCountSuccess)
         {
             // Allow processing to continue without performing additional work on this resource.
             return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
         }
 
-        _logger.Information($"{message.ResourceUrl}: Total count = {totalCount}");
+        _logger.Information("{ResourceUrl}: Total count = {TotalCount}", message.ResourceUrl, totalCount);
 
         long offset = 0;
         int limit = message.PageSize;
@@ -72,14 +72,14 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
                 // Page-strategy specific context
                 Limit = limit,
                 Offset = offset,
-                
+
                 // Source Ed-Fi ODS API processing context (shared)
                 // EdFiApiClient = message.EdFiApiClient,
 
                 // Global processing context
                 ChangeWindow = message.ChangeWindow,
                 CreateProcessDataMessages = createProcessDataMessages,
-                
+
                 CancellationSource = message.CancellationSource,
             };
 
@@ -92,7 +92,7 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
         if (pageMessages.Any())
         {
             // Page-strategy specific context
-            pageMessages.Last().IsFinalPage = true;
+            pageMessages[pageMessages.Count - 1].IsFinalPage = true;
         }
 
         return pageMessages;

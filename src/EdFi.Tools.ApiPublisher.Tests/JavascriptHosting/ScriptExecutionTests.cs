@@ -11,24 +11,24 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.JavascriptHosting
 {
-	[TestFixture]
+    [TestFixture]
     public class ScriptExecutionTests
     {
-        class Result
+        private class Result
         {
             public string? greeting { get; set; }
         }
 
-        class Person
+        private class Person
         {
             public string? name { get; set; }
             public int age { get; set; }
         }
-        
+
         [Test]
         public async Task Should_execute_JavaScript()
         {
-            
+
             var result = await StaticNodeJSService.InvokeFromStringAsync<Result>(
                 @"
 module.exports = (callback, name) => {
@@ -42,7 +42,7 @@ module.exports = (callback, name) => {
             result!.greeting.ShouldBe("Hello Bob!");
         }
 
-        const string HelloNameSource = @"
+        private const string HelloNameSource = @"
 module.exports = {
     sayHello: async (name) => {
         const result = { greeting: `Hello ${name}!` };
@@ -60,19 +60,19 @@ module.exports = {
         public async Task Should_execute_JavaScript_object_with_functions()
         {
             var result = await StaticNodeJSService.InvokeFromStringAsync<Result>(
-                HelloNameSource, 
+                HelloNameSource,
                 cacheIdentifier: "helloNameModule",
-                exportName: "sayHello", 
+                exportName: "sayHello",
                 args: new object?[] { "Bob" });
-            
+
             result!.greeting.ShouldBe("Hello Bob!");
 
             var result2 = await StaticNodeJSService.InvokeFromStringAsync<Result>(
-                HelloNameSource, 
+                HelloNameSource,
                 cacheIdentifier: "helloNameModule",
-                exportName: "sayGoodbye", 
+                exportName: "sayGoodbye",
                 args: new object?[] { "Bob" });
-            
+
             result2!.greeting.ShouldBe("Goodbye Bob!");
         }
 
@@ -89,11 +89,11 @@ module.exports = {
                         args: new object?[] { "Bob" });
                 });
         }
-        
+
         [Test]
         public async Task Should_execute_JavaScript_object_with_object_argument()
         {
-            const string helloPersonSource = @"
+            const string HelloPersonSource = @"
 module.exports = {
     sayHello: async (person) => {
         const result = { greeting: `Hello ${person.name}! You are ${person.age} years old already!` };
@@ -107,26 +107,26 @@ module.exports = {
 ";
 
             var results = await StaticNodeJSService.InvokeFromStringAsync<Result>(
-                helloPersonSource,
+                HelloPersonSource,
                 cacheIdentifier: "helloPersonModule",
                 exportName: "sayHello",
-                args: new object?[] { new Person { name = "Bob", age = 42 }});
+                args: new object?[] { new Person { name = "Bob", age = 42 } });
 
             results?.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
-            
+
             var results2 = await StaticNodeJSService.InvokeFromStringAsync<Result>(
-                helloPersonSource,
+                HelloPersonSource,
                 cacheIdentifier: "helloPersonModule",
                 exportName: "sayGoodbye",
-                args: new object?[] { new Person { name = "Bob", age = 42 }});
+                args: new object?[] { new Person { name = "Bob", age = 42 } });
 
             results2?.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
         }
-        
+
         [Test]
         public async Task Should_execute_JavaScript_object_with_status_codes_with_object_argument()
         {
-            const string helloPersonSource2 = @"
+            const string HelloPersonSource2 = @"
 module.exports = {
     200: async (person) => {
         const result = { greeting: `Hello ${person.name}! You are ${person.age} years old already!` };
@@ -140,18 +140,18 @@ module.exports = {
 ";
 
             var results = await StaticNodeJSService.InvokeFromStringAsync<Result>(
-                helloPersonSource2,
+                HelloPersonSource2,
                 cacheIdentifier: "helloPersonModule2",
                 exportName: "200",
-                args: new object?[] { new Person { name = "Bob", age = 42 }});
+                args: new object?[] { new Person { name = "Bob", age = 42 } });
 
             results?.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
-            
+
             var results2 = await StaticNodeJSService.InvokeFromStringAsync<Result>(
-                helloPersonSource2,
+                HelloPersonSource2,
                 cacheIdentifier: "helloPersonModule2",
                 exportName: "500",
-                args: new object?[] { new Person { name = "Bob", age = 42 }});
+                args: new object?[] { new Person { name = "Bob", age = 42 } });
 
             results2?.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
         }
@@ -159,7 +159,7 @@ module.exports = {
         [Test]
         public async Task Should_execute_JavaScript_object_with_resource_paths_with_object_argument()
         {
-            const string helloPersonSource3 = @"
+            const string HelloPersonSource3 = @"
 module.exports = {
     '/ed-fi/students/200': async (person) => {
         const result = { greeting: `Hello ${person.name}! You are ${person.age} years old already!` };
@@ -173,18 +173,18 @@ module.exports = {
 ";
 
             var results = await StaticNodeJSService.InvokeFromStringAsync<Result>(
-                helloPersonSource3,
+                HelloPersonSource3,
                 cacheIdentifier: "helloPersonModule3",
                 exportName: "/ed-fi/students/200",
-                args: new object?[] { new Person { name = "Bob", age = 42 }});
+                args: new object?[] { new Person { name = "Bob", age = 42 } });
 
             results?.greeting.ShouldBe("Hello Bob! You are 42 years old already!");
-            
+
             var results2 = await StaticNodeJSService.InvokeFromStringAsync<Result>(
-                helloPersonSource3,
+                HelloPersonSource3,
                 cacheIdentifier: "helloPersonModule3",
                 exportName: "/ed-fi/students/500",
-                args: new object?[] { new Person { name = "Bob", age = 42 }});
+                args: new object?[] { new Person { name = "Bob", age = 42 } });
 
             results2?.greeting.ShouldBe("Goodbye Bob! You are 42 years old already!");
         }

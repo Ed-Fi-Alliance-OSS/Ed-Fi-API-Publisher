@@ -21,9 +21,9 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
     private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
     private readonly Options _options;
-        
+
     private readonly ILogger _logger = Log.ForContext(typeof(ApiSourceResourceItemProvider));
-        
+
     public ApiSourceResourceItemProvider(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider, Options options, IRateLimiting<HttpResponseMessage> rateLimiter = null)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
@@ -51,8 +51,8 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                 getByIdDelay,
                 (result, ts, retryAttempt, ctx) =>
                 {
-                    _logger.Warning(
-                        $"Retrying GET for resource item '{resourceItemUrl}' from source failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {_options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
+                    _logger.Warning("Retrying GET for resource item '{ResourceItemUrl}' from source failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
+                        resourceItemUrl, result.Result.StatusCode, retryAttempt, _options.MaxRetryAttempts, ts.TotalSeconds);
                 });
         IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
         try
@@ -62,13 +62,10 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                     {
                         getByIdAttempts++;
 
-                        if (getByIdAttempts > 1)
+                        if (getByIdAttempts > 1 && _logger.IsEnabled(LogEventLevel.Debug))
                         {
-                            if (_logger.IsEnabled(LogEventLevel.Debug))
-                            {
-                                _logger.Debug(
-                                    $"GET for missing dependency '{resourceItemUrl}' reference from source attempt #{getByIdAttempts}.");
-                            }
+                            _logger.Debug("GET for missing dependency '{ResourceItemUrl}' reference from source attempt #{GetByIdAttempts}.",
+                                resourceItemUrl, getByIdAttempts);
                         }
 
                         return sourceEdFiApiClient.HttpClient.GetAsync(
@@ -91,83 +88,19 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
             if (getByIdResponse.StatusCode == HttpStatusCode.OK)
             {
                 return (true, responseContent);
-
-                // string missingItemJson = await getByIdResponse.Content.ReadAsStringAsync();
-                //
-                // return missingItemJson;
-
-                /*
-                var missingItemDelay = Backoff.ExponentialBackoff(
-                    TimeSpan.FromMilliseconds(_options.RetryStartingDelayMilliseconds),
-                    _options.MaxRetryAttempts);
-
-                if (_logger.IsEnabled(LogEventLevel.Debug))
-                {
-                    _logger.Debug(
-                        $"{resourceUrl}: Attempting to POST missing '{referencedResourceName}' reference to the target.");
-                }
-
-                // Post the resource to target now
-                var missingItemPostResponse = await Policy
-                    .HandleResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
-                    .WaitAndRetryAsync(
-                        missingItemDelay,
-                        (result, ts, retryAttempt, ctx) =>
-                        {
-                            _logger.Warning(
-                                $"{resourceUrl}: Retrying POST for missing '{referencedResourceName}' reference against target failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {_options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay)");
-                        })
-                    .ExecuteAsync(
-                        (ctx, ct) =>
-                        {
-                            getByIdAttempts++;
-
-                            if (getByIdAttempts > 1)
-                            {
-                                if (_logger.IsEnabled(LogEventLevel.Debug))
-                                {
-                                    _logger.Debug(
-                                        $"{resourceUrl}: GET for missing '{referencedResourceName}' reference from source attempt #{getByIdAttempts}.");
-                                }
-                            }
-
-                            return targetEdFiApiClient.HttpClient.PostAsync(
-                                $"{targetEdFiApiClient.DataManagementApiSegment}{missingDependencyResourcePath}",
-                                new StringContent(
-                                    missingItem.ToString(Formatting.None),
-                                    Encoding.UTF8,
-                                    "application/json"),
-                                ct);
-                        },
-                        new Context(),
-                        CancellationToken.None);
-
-                if (!missingItemPostResponse.IsSuccessStatusCode)
-                {
-                    string responseContent =
-                        await getByIdResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                    _logger.Error(
-                        $"{resourceUrl}: POST of missing '{referencedResourceName}' reference to the target returned status '{missingItemPostResponse.StatusCode}': {responseContent}.");
-                }
-                else
-                {
-                    _logger.Information(
-                        $"{resourceUrl}: POST of missing '{referencedResourceName}' reference to the target returned status '{missingItemPostResponse.StatusCode}'.");
-                }
-                */
             }
             else
             {
-                _logger.Warning(
-                    $"GET request from source API for '{resourceItemUrl}' reference failed with status '{getByIdResponse.StatusCode}': {responseContent}");
+                _logger.Warning("GET request from source API for '{ResourceItemUrl}' reference failed with status '{StatusCode}': {ResponseContent}",
+                    resourceItemUrl, getByIdResponse.StatusCode, responseContent);
 
                 return (false, null);
             }
         }
-        catch (RateLimitRejectedException)
+        catch (RateLimitRejectedException ex)
         {
-            _logger.Fatal($"{sourceEdFiApiClient.DataManagementApiSegment}{resourceItemUrl}: Rate limit exceeded. Please try again later.");
+            _logger.Fatal(ex, "{DataManagementApiSegment}{ResourceItemUrl}: Rate limit exceeded. Please try again later.",
+                sourceEdFiApiClient.DataManagementApiSegment, resourceItemUrl);
             return (false, null);
         }
         //----------------------------------------------------------------------------------------------

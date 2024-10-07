@@ -18,7 +18,7 @@ public class FallbackGraphMLDependencyMetadataProvider : IGraphMLDependencyMetad
     {
         _options = options;
     }
-    
+
     public Task<(XElement, XNamespace)> GetDependencyMetadataAsync()
     {
         if (!_options.UseSourceDependencyMetadata)

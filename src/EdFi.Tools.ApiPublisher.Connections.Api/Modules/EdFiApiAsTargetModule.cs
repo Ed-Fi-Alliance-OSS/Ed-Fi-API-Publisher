@@ -28,11 +28,11 @@ public class EdFiApiAsTargetModule : Module
     {
         _finalConfiguration = finalConfiguration;
     }
-    
+
     protected override void Load(ContainerBuilder builder)
     {
         var options = _finalConfiguration.Get<ApiPublisherSettings>().Options;
-        
+
         // Initialize source/target API clients
         var connectionsConfiguration = _finalConfiguration.GetSection("Connections");
         var targetConnectionConfiguration = connectionsConfiguration.GetSection("Target");
@@ -40,7 +40,7 @@ public class EdFiApiAsTargetModule : Module
         var rateLimiter = new PollyRateLimiter<HttpResponseMessage>(options);
 
         builder.RegisterInstance(targetApiConnectionDetails).As<ITargetConnectionDetails>();
-        
+
         var targetEdFiApiClient = new Lazy<EdFiApiClient>(
             () => new EdFiApiClient(
                 "Target",
@@ -51,7 +51,7 @@ public class EdFiApiAsTargetModule : Module
         builder.RegisterInstance(new EdFiApiClientProvider(targetEdFiApiClient))
             .As<ITargetEdFiApiClientProvider>()
             .SingleInstance();
-        
+
         // Version metadata for a Target API
         builder.RegisterType<TargetEdFiApiVersionMetadataProvider>()
             .As<ITargetEdFiApiVersionMetadataProvider>()
@@ -84,7 +84,7 @@ public class EdFiApiAsTargetModule : Module
             .As<IProcessingBlocksFactory<GetItemForDeletionMessage>>()
             .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
-        
+
         // Register the processing stage initiators
         builder.RegisterType<KeyChangePublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.KeyChanges);
         builder.RegisterType<UpsertPublishingStageInitiator>().Keyed<IPublishingStageInitiator>(PublishingStage.Upserts);

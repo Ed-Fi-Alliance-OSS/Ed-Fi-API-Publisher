@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
 using Newtonsoft.Json.Linq;
 using Serilog;
+using System.Globalization;
 using System.Net;
 using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
@@ -18,7 +19,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
 
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceIsolationApplicator));
-    
+
     public EdFiApiSourceIsolationApplicator(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
@@ -28,7 +29,8 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
     {
         var sourceApiClient = _sourceEdFiApiClientProvider.GetApiClient();
         var sourceApiConnectionDetails = sourceApiClient.ConnectionDetails;
-        if (sourceApiVersion.Major >= 7) {
+        if (sourceApiVersion.Major >= 7)
+        {
             sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Use-Snapshot", "true");
         }
         else
@@ -47,7 +49,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 
             // Configure source HTTP client to add the snapshot identifier header to every request against the source API
             sourceApiClient.HttpClient.DefaultRequestHeaders.Add("Snapshot-Identifier", snapshotIdentifier);
-        }        
+        }
     }
 
     private async Task<string> GetSourceSnapshotIdentifierAsync(EdFiApiClient sourceApiClient, Version sourceApiVersion)
@@ -68,16 +70,16 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 
         if (snapshotsResponse.StatusCode == HttpStatusCode.NotFound)
         {
-            _logger.Warning(
-                $"Source API at '{sourceApiClient.HttpClient.BaseAddress}' does not support the necessary isolation for reliable API publishing. Errors may occur, or some data may not be published without causing failures.");
+            _logger.Warning("Source API at '{BaseAddress}' does not support the necessary isolation for reliable API publishing. Errors may occur, or some data may not be published without causing failures.",
+                sourceApiClient.HttpClient.BaseAddress);
 
             return null;
         }
 
         if (snapshotsResponse.StatusCode == HttpStatusCode.Forbidden)
         {
-            _logger.Warning(
-                $"The API publisher does not have permissions to access the source API's 'snapshots' resource at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Make sure that the source API is using a correctly configured claim set for your API Publisher's API client.");
+            _logger.Warning("The API publisher does not have permissions to access the source API's 'snapshots' resource at '{BaseAddress}{SnapshotsRelativePath}'. Make sure that the source API is using a correctly configured claim set for your API Publisher's API client.",
+                sourceApiClient.HttpClient.BaseAddress, snapshotsRelativePath);
 
             return null;
         }
@@ -98,8 +100,8 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
             if (!snapshotResponseArray.Any())
             {
                 // No snapshots available.
-                _logger.Warning(
-                    $"Snapshots are supported, but no snapshots are available from source API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'.");
+                _logger.Warning("Snapshots are supported, but no snapshots are available from source API at '{BaseAddress}{SnapshotsRelativePath}'.",
+                    sourceApiClient.HttpClient.BaseAddress, snapshotsRelativePath);
 
                 return null;
             }
@@ -110,7 +112,7 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
                         string snapshotIdentifier = jt["snapshotIdentifier"].Value<string>();
                         string snapshotDateTimeText = jt["snapshotDateTime"].Value<string>();
 
-                        if (!DateTime.TryParse(snapshotDateTimeText, out var snapshotDateTimeValue))
+                        if (!DateTime.TryParse(snapshotDateTimeText, new CultureInfo("en-US"), out var snapshotDateTimeValue))
                         {
                             snapshotDateTimeValue = DateTime.MinValue;
                         }
@@ -125,15 +127,16 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
                 .OrderByDescending(x => x.SnapshotDateTime)
                 .First();
 
-            _logger.Information($"Using snapshot identifier '{snapshot.SnapshotIdentifier}' created at '{snapshot.SnapshotDateTime}'.");
+            _logger.Information("Using snapshot identifier '{SnapshotIdentifier}' created at '{SnapshotDateTime}'.",
+                snapshot.SnapshotIdentifier, snapshot.SnapshotDateTime);
 
             return snapshot.SnapshotIdentifier;
         }
 
         string errorResponseText = await snapshotsResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-        _logger.Error(
-            $"Unable to get snapshot identifier from API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Request for available snapshots returned status '{snapshotsResponse.StatusCode}' with message body: {errorResponseText}");
+        _logger.Error("Unable to get snapshot identifier from API at '{BaseAddress}{SnapshotsRelativePath}'. Request for available snapshots returned status '{StatusCode}' with message body: {ErrorResponseText}",
+            sourceApiClient.HttpClient.BaseAddress, snapshotsRelativePath, snapshotsResponse.StatusCode, errorResponseText);
 
         return null;
     }

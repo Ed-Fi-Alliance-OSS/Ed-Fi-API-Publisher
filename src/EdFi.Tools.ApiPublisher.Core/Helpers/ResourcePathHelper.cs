@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Core.Helpers
 {
-	public static class ResourcePathHelper
+    public static class ResourcePathHelper
     {
         /// <summary>
         /// Parses the supplied text as CSV (comma separated values) into an array, removing

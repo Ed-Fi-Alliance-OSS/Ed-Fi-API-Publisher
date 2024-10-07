@@ -14,7 +14,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql;
 public class Plugin : IPlugin
 {
     private const string ConfigurationProviderName = "postgreSql";
-        
+
     public void ApplyConfiguration(string[] args, IConfigurationBuilder configBuilder)
     {
         // Nothing to do

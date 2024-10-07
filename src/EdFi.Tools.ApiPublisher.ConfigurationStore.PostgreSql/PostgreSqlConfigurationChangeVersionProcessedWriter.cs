@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
 {
-	public class PostgreSqlConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
+    public class PostgreSqlConfigurationChangeVersionProcessedWriter : IChangeVersionProcessedWriter
     {
         public async Task SetProcessedChangeVersionAsync(
             string sourceConnectionName,
@@ -25,7 +25,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
             var postgresConfiguration = configurationStoreSection.Get<PostgresConfigurationStore>().PostgreSql;
 
             // Make sure Postgres configuration has encryption key provided
-            if (string.IsNullOrWhiteSpace(postgresConfiguration?.EncryptionPassword)) 
+            if (string.IsNullOrWhiteSpace(postgresConfiguration?.EncryptionPassword))
             {
                 throw new Exception("The PostgreSQL Configuration Store encryption key for storing API keys and secrets was not provided.");
             }
@@ -37,7 +37,7 @@ namespace EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql
                         postgresConfiguration.ConnectionString,
                         postgresConfiguration.EncryptionPassword,
                         ConfigurationStoreHelper.Key(sourceConnectionName));
-                
+
                 var currentParameter = new JObject();
 
                 if (configurationValues.TryGetValue("lastChangeVersionsProcessed", out string changeVersionsJson))

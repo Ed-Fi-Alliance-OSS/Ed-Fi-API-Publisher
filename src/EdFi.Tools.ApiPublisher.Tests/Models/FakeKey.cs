@@ -8,14 +8,14 @@ using System;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Models
 {
-	public class FakeKey
+    public class FakeKey
     {
         [JsonProperty("name")]
         public string Name { get; set; }
-        
+
         [JsonProperty("birthDate")]
         public DateTime BirthDate { get; set; }
-        
+
         [JsonProperty("retirementAge")]
         public int RetirementAge { get; set; }
 
@@ -27,7 +27,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Models
     {
         [JsonProperty("rel")]
         public string Rel { get; set; }
-        
+
         [JsonProperty("href")]
         public string Href { get; set; }
     }

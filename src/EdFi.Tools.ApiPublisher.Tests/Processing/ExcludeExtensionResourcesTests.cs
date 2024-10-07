@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class ExcludeExtensionResourcesTests
     {
         [TestFixture]
@@ -52,7 +52,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
-               
+
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
                 // Every POST succeeds
@@ -63,8 +63,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                    exclude: new []{ "assessments", "/ed-fi/sections", "/tpdm/candidates" });
-            
+                    exclude: new[] { "assessments", "/ed-fi/sections", "/tpdm/candidates" });
+
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
                 // -----------------------------------------------------------------

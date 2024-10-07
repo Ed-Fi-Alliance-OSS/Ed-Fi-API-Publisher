@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Licensed to the Ed-Fi Alliance under one or more agreements.
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
@@ -24,7 +24,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Configuration.Serilog;
 public class TextFormatterTests
 {
     [TestFixture]
-    public class When_use_the_TextFormatter_in_Serilog 
+    public class When_use_the_TextFormatter_in_Serilog
     {
         private const string Message = "My text format message";
         private const string LevelInfoPlain = "INFO";
@@ -72,7 +72,7 @@ public class TextFormatterTests
                 textWriter.ToString().ShouldContain(logEvent.Timestamp.ToString("yyyy-MM-dd HH:mm:ss,fff"));
             }
         }
-        
+
         [TestCase("[{Level}] - {Message}")]
         public void Should_display_the_messages_with_custom_format(string format)
         {
@@ -155,6 +155,4 @@ public class TextFormatterTests
             return logEvent;
         }
     }
-
-   
 }

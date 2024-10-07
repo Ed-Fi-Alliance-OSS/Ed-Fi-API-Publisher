@@ -18,14 +18,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Source.MessageHa
 public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessageHandler
 {
     private readonly Func<SqliteConnection> _createConnection;
-    
+
     private readonly ILogger _logger = Log.ForContext(typeof(SqliteStreamResourcePageMessageHandler));
 
     public SqliteStreamResourcePageMessageHandler(Func<SqliteConnection> createConnection)
     {
         _createConnection = createConnection;
     }
-    
+
     public async Task<IEnumerable<TProcessDataMessage>> HandleStreamResourcePageAsync<TProcessDataMessage>(
         StreamResourcePageMessage<TProcessDataMessage> message,
         Options options,

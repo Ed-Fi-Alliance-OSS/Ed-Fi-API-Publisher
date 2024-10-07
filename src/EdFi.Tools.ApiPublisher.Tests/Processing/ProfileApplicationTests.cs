@@ -29,7 +29,7 @@ public class ProfileApplicationTests
         private IFakeHttpRequestHandler _fakeTargetRequestHandler;
         private IFakeHttpRequestHandler _fakeSourceRequestHandler;
         private ChangeProcessorConfiguration _changeProcessorConfiguration;
-        
+
         private const string TestWritableProfileName = "Unit-Test-Target-Profile";
         private const string TestReadableProfileName = "Unit-Test-Source-Profile";
 
@@ -54,7 +54,7 @@ public class ProfileApplicationTests
             //                      Target Requests
             // -----------------------------------------------------------------
             _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
-                
+
             // Every POST succeeds
             _fakeTargetRequestHandler.EveryDataManagementPostReturns200Ok();
 
@@ -80,10 +80,10 @@ public class ProfileApplicationTests
 
             // Initialize logging
             TestHelpers.InitializeLogging();
-            
+
             // Configuration
             _changeProcessorConfiguration = TestHelpers.CreateChangeProcessorConfiguration(options);
-            
+
             // Create change processor with dependencies
             _changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
                 options,
@@ -91,8 +91,8 @@ public class ProfileApplicationTests
                 _fakeSourceRequestHandler,
                 targetApiConnectionDetails,
                 _fakeTargetRequestHandler);
-			await Task.Yield();
-		}
+            await Task.Yield();
+        }
 
         protected override async Task ActAsync()
         {
@@ -107,7 +107,7 @@ public class ProfileApplicationTests
                     A<HttpRequestMessage>.That.Matches(msg => DoesNotUseProfileContentType(msg))))
                 .MustHaveHappenedTwiceExactly(); // Once for count, once for data
         }
-        
+
         [Test]
         public void Should_NOT_apply_profile_content_types_to_descriptors_POST_requests()
         {
@@ -116,7 +116,7 @@ public class ProfileApplicationTests
                     A<HttpRequestMessage>.That.Matches(msg => DoesNotUseProfileContentType(msg))))
                 .MustHaveHappened(3, Times.Exactly);
         }
-        
+
         [Test]
         public void Should_apply_readable_profile_content_type_to_count_requests()
         {
@@ -162,7 +162,7 @@ public class ProfileApplicationTests
         {
             return msgRequestUri?.ParseQueryString().AllKeys.Contains("totalCount", StringComparer.OrdinalIgnoreCase) ?? false;
         }
-        
+
         private bool UsesReadableContentType(HttpRequestMessage requestMessage)
         {
             var match = Regex.Match(
@@ -173,7 +173,7 @@ public class ProfileApplicationTests
             {
                 return false;
             }
-            
+
             return match.Groups["ProfileName"].Value == TestReadableProfileName.ToLower();
         }
 
@@ -187,11 +187,11 @@ public class ProfileApplicationTests
             {
                 return false;
             }
-            
+
             return match.Groups["ProfileName"].Value == TestWritableProfileName.ToLower();
         }
     }
-    
+
     [TestFixture]
     public class When_applying_a_profile_to_the_source_and_not_to_the_target_connections
     {
@@ -199,7 +199,7 @@ public class ProfileApplicationTests
         private IFakeHttpRequestHandler _fakeTargetRequestHandler;
         private IFakeHttpRequestHandler _fakeSourceRequestHandler;
         private ChangeProcessorConfiguration _changeProcessorConfiguration;
-        
+
         private const string TestReadableProfileName = "Unit-Test-Source-Profile";
 
         [Test]
@@ -224,7 +224,7 @@ public class ProfileApplicationTests
             //                      Target Requests
             // -----------------------------------------------------------------
             _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
-                
+
             // Every POST succeeds
             _fakeTargetRequestHandler.EveryDataManagementPostReturns200Ok();
 
@@ -251,12 +251,12 @@ public class ProfileApplicationTests
 
             // Initialize logging
             TestHelpers.InitializeLogging();
-            
+
             // Configuration
             _changeProcessorConfiguration = TestHelpers.CreateChangeProcessorConfiguration(options);
-            
+
             Should.Throw<Exception>(
-                () => 
+                () =>
                     // Create change processor with dependencies
                     _changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
                         options,
@@ -265,7 +265,7 @@ public class ProfileApplicationTests
                         targetApiConnectionDetails,
                         _fakeTargetRequestHandler))
                 .Message.ShouldBe("The source API connection has a ProfileName specified, but the target API connection does not. POST requests against a target API without the Profile-based context of the source data can lead to accidental data loss.");
-			await Task.Yield();
-		}
+            await Task.Yield();
+        }
     }
 }

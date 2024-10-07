@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
-	[TestFixture]
+    [TestFixture]
     public class SchoolYearSpecificClientTests
     {
         [TestFixture]
@@ -26,7 +26,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             private IFakeHttpRequestHandler _fakeTargetRequestHandler;
             private IFakeHttpRequestHandler _fakeSourceRequestHandler;
             private ChangeProcessorConfiguration _changeProcessorConfiguration;
-            
+
             private const int SuppliedSchoolYear = MockRequests.SchoolYear;
 
             protected override async Task ArrangeAsync()
@@ -68,7 +68,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                    Options and Configuration
                 // -----------------------------------------------------------------
-                
+
                 var options = TestHelpers.GetOptions();
                 options.IncludeDescriptors = false; // Shorten test execution time
 
@@ -87,8 +87,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {
@@ -104,7 +104,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
             }
-            
+
             [Test]
             public void Should_attempt_to_read_resources_WITHOUT_schoolyear_in_the_source_path()
             {
@@ -164,14 +164,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 //                      Target Requests
                 // -----------------------------------------------------------------
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
-                
+
                 // Every POST succeeds
-                _fakeTargetRequestHandler.PostResource( $"{TestHelpers.AnyResourcePattern}", HttpStatusCode.OK);
+                _fakeTargetRequestHandler.PostResource($"{TestHelpers.AnyResourcePattern}", HttpStatusCode.OK);
                 // -----------------------------------------------------------------
 
                 var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(schoolYear: SuppliedSchoolYear);
                 var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
-                
+
                 // -----------------------------------------------------------------
                 //                    Options and Configuration
                 // -----------------------------------------------------------------
@@ -194,8 +194,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
-			}
+                await Task.Yield();
+            }
 
             protected override async Task ActAsync()
             {
@@ -211,7 +211,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
             }
-            
+
             [Test]
             public void Should_attempt_to_read_resources_WITH_schoolyear_in_the_source_path()
             {
@@ -272,9 +272,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 _fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler(
                     $"{EdFiApiConstants.DataManagementApiSegment}/{SuppliedSchoolYear}");
-                
+
                 // Every POST succeeds
-                _fakeTargetRequestHandler.PostResource( $"{EdFiApiConstants.DataManagementApiSegment}/{SuppliedSchoolYear}{TestHelpers.AnyResourcePattern}", HttpStatusCode.OK);
+                _fakeTargetRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}/{SuppliedSchoolYear}{TestHelpers.AnyResourcePattern}", HttpStatusCode.OK);
 
                 // -----------------------------------------------------------------
                 //                  Source/Target Connection Details
@@ -305,9 +305,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     _fakeSourceRequestHandler,
                     targetApiConnectionDetails,
                     _fakeTargetRequestHandler);
-				await Task.Yield();
+                await Task.Yield();
 
-			}
+            }
 
             protected override async Task ActAsync()
             {
@@ -323,7 +323,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
             }
-            
+
             [Test]
             public void Should_attempt_to_read_resources_WITH_schoolyear_in_the_source_path()
             {

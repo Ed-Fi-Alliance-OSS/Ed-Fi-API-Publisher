@@ -29,13 +29,13 @@ using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
-	public enum PublishingStage
+    public enum PublishingStage
     {
         KeyChanges,
         Upserts,
         Deletes
     }
-    
+
     public class ChangeProcessor
     {
         private ILogger _logger = Log.ForContext(typeof(ChangeProcessor));
@@ -80,13 +80,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _publishingStageInitiatorByStage = publishingStageInitiatorByStage;
             _finalizationActivities = finalizationActivities;
         }
-        
+
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
         {
             var processStopwatch = new Stopwatch();
             processStopwatch.Start();
-            
-            var authorizationFailureHandling= configuration.AuthorizationFailureHandling;
+
+            var authorizationFailureHandling = configuration.AuthorizationFailureHandling;
             var options = configuration.Options;
             var javascriptModuleFactory = configuration.JavascriptModuleFactory;
 
@@ -109,7 +109,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 ChangeWindow changeWindow = null;
 
                 // Only named (managed) connections can use a Change Window for processing.
-                if ((!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Name) 
+                if ((!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Name)
                     && !string.IsNullOrWhiteSpace(_targetConnectionDetails.Name))
                     || options.UseChangeVersionPaging)
                 {
@@ -133,7 +133,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     return;
                 }
-                
+
                 // Create the shared error processing block
                 var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) = _publishErrorsBlocksFactory.CreateBlocks(options);
 
@@ -147,21 +147,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     publishErrorsIngestionBlock,
                     cancellationToken)
                     .ConfigureAwait(false);
-                
+
                 // Process all the "Upserts"
                 var postTaskStatuses = ProcessUpsertsToCompletion(
-                    dependencyKeysByResourceKey, 
+                    dependencyKeysByResourceKey,
                     options,
                     authorizationFailureHandling,
-                    changeWindow, 
+                    changeWindow,
                     publishErrorsIngestionBlock,
                     javascriptModuleFactory,
                     cancellationToken);
 
                 // Process all the deletions
                 var deleteTaskStatuses = await ProcessDeletesToCompletionAsync(
-                    changeWindow, 
-                    dependencyKeysByResourceKey, 
+                    changeWindow,
+                    dependencyKeysByResourceKey,
                     options,
                     authorizationFailureHandling,
                     publishErrorsIngestionBlock,
@@ -170,7 +170,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 // Indicate to the error handling that we're done feeding it errors.
                 publishErrorsIngestionBlock.Complete();
-                
+
                 // Wait for all errors to be published.
                 _logger.Debug($"Waiting for all errors to be published.");
                 publishErrorsCompletionBlock.Completion.Wait();
@@ -210,14 +210,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         }
 
         private async Task UpdateChangeVersionAsync(
-            ChangeProcessorConfiguration configuration, 
+            ChangeProcessorConfiguration configuration,
             ChangeWindow changeWindow)
         {
             var sourceDetails = _sourceConnectionDetails;
             var sinkDetails = _targetConnectionDetails;
-            
+
             var configurationStoreSection = configuration.ConfigurationStoreSection;
-            
+
             // If we have a name for source and target connections, write the change version
             if (!string.IsNullOrEmpty(sourceDetails.Name)
                 && !string.IsNullOrEmpty(sinkDetails.Name))
@@ -253,7 +253,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     {
                         _logger.Information($"Unable to update the last change version processed because no name was provided for the target.");
                     }
-                    
+
                     _logger.Information($"Last Change Version Processed for source to target: {changeWindow.MaxChangeVersion}");
                 }
             }
@@ -264,14 +264,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             AuthorizationFailureHandling[] authorizationFailureHandling)
         {
             // Get the dependencies
-            var postDependencyKeysByResourceKey = 
+            var postDependencyKeysByResourceKey =
                 await _resourceDependencyProvider.GetDependenciesByResourcePathAsync(options.IncludeDescriptors)
                 .ConfigureAwait(false);
 
             // Ensure the Publishing extension is not present in dependencies -- we don't want to publish snapshots as a resource
             // NOTE: This logic is unnecessary starting with Ed-Fi ODS API v5.2
             postDependencyKeysByResourceKey.Remove("/publishing/snapshots");
-            
+
             AdjustDependenciesForConfiguredAuthorizationConcerns();
 
             // Filter resources down to just those requested, if an explicit inclusion list provided
@@ -282,18 +282,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 var includeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.Include);
                 var includeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.IncludeOnly);
-                
+
                 // Evaluate whether any of the included resources have a "retry" dependency
                 var retryDependenciesForIncludeResourcePaths = includeResourcePaths
                     .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{Conventions.RetryKeySuffix}"))
                     .Select(p => $"{p}{Conventions.RetryKeySuffix}")
                     .ToArray();
-                
+
                 var retryDependenciesForIncludeOnlyResourcePaths = includeOnlyResourcePaths
                     .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{Conventions.RetryKeySuffix}"))
                     .Select(p => $"{p}{Conventions.RetryKeySuffix}")
                     .ToArray();
-                
+
                 postDependencyKeysByResourceKey = ApplyResourceInclusionsToDependencies(
                     postDependencyKeysByResourceKey,
                     includeResourcePaths.Concat(retryDependenciesForIncludeResourcePaths).ToArray(),
@@ -314,7 +314,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 //     _logger.Debug(resourceListMessage);
                 // }
             }
-            
+
             if (!string.IsNullOrWhiteSpace(_sourceConnectionDetails.Exclude) || !string.IsNullOrWhiteSpace(_sourceConnectionDetails.ExcludeOnly))
             {
                 _logger.Information("Applying resource exclusions...");
@@ -322,7 +322,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 var excludeResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.Exclude);
                 var excludeOnlyResourcePaths = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.ExcludeOnly);
-                
+
                 // Evaluate whether any of the included resources have a "retry" dependency
                 var retryDependenciesForExcludeResourcePaths = excludeResourcePaths
                     .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{Conventions.RetryKeySuffix}"))
@@ -333,7 +333,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     .Where(p => postDependencyKeysByResourceKey.ContainsKey($"{p}{Conventions.RetryKeySuffix}"))
                     .Select(p => $"{p}{Conventions.RetryKeySuffix}")
                     .ToArray();
-                
+
                 postDependencyKeysByResourceKey = ApplyResourceExclusionsToDependencies(
                     postDependencyKeysByResourceKey,
                     excludeResourcePaths.Concat(retryDependenciesForExcludeResourcePaths).ToArray(),
@@ -380,18 +380,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
 
             _logger.Information($"{postDependencyKeysByResourceKey.Count} resources to be processed after applying configuration for source API resource inclusions and/or exclusions.");
-            
+
             var reportableResources = GetReportableResources();
-            
+
             var resourceListMessage = $"The following resources are to be published:{Environment.NewLine}{string.Join(Environment.NewLine, reportableResources.Select(kvp => kvp.Key + string.Join(string.Empty, kvp.Value.Select(x => Environment.NewLine + "\t" + x))))}";
-            
+
             // if (options.WhatIf)
             // {
-                _logger.Information(resourceListMessage);
+            _logger.Information(resourceListMessage);
             // }
             // else
             // {
-                // _logger.Debug(resourceListMessage);
+            // _logger.Debug(resourceListMessage);
             // }
 
             return postDependencyKeysByResourceKey;
@@ -420,7 +420,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     {
                         postDependencyKeysByResourceKey[dependencyEntryKey] =
                             postDependencyKeysByResourceKey[dependencyEntryKey]
-                                .Concat(new[] {dependencyAdjustment.RetryResourceKey})
+                                .Concat(new[] { dependencyAdjustment.RetryResourceKey })
                                 .ToArray();
                     }
 
@@ -432,7 +432,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             IDictionary<string, string[]> ApplyResourceExclusionsToDependencies(
                 IDictionary<string, string[]> dependenciesByResourcePath,
-                string[] excludeResourcePaths, 
+                string[] excludeResourcePaths,
                 string[] excludeOnlyResourcePaths)
             {
                 var resourcesToInclude = new HashSet<string>(dependenciesByResourcePath.Keys, StringComparer.OrdinalIgnoreCase);
@@ -442,9 +442,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     allExclusionTraceEntries.Add(
                         $"Excluding resource '{excludedResourcePath}' and its dependents...");
-                    
+
                     var exclusionTraceEntries = new List<string>();
-                    
+
                     RemoveDependentResources(excludedResourcePath, exclusionTraceEntries);
 
                     allExclusionTraceEntries.AddRange(exclusionTraceEntries.Distinct());
@@ -454,10 +454,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     allExclusionTraceEntries.Add(
                         $"Excluding resource '{excludeOnlyResourcePath}' leaving dependents intact...");
-                    
+
                     resourcesToInclude.Remove(excludeOnlyResourcePath);
                 }
-                
+
                 var filteredResources = new Dictionary<string, string[]>(
                     dependenciesByResourcePath.Where(kvp => resourcesToInclude.Contains(kvp.Key)),
                     StringComparer.OrdinalIgnoreCase);
@@ -491,7 +491,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     var dependentResourcePaths = dependenciesByResourcePath
                         .Where(kvp => kvp.Value.Contains(resourcePath))
                         .Select(kvp => kvp.Key);
-                    
+
                     foreach (string dependentResourcePath in dependentResourcePaths)
                     {
                         if (!dependentResourcePath.EndsWith("Descriptors"))
@@ -504,7 +504,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     }
                 }
             }
-            
+
             IDictionary<string, string[]> ApplyResourceInclusionsToDependencies(
                 IDictionary<string, string[]> dependenciesByResourcePath,
                 string[] includeResourcePaths, string[] includeOnlyResourcePaths)
@@ -528,7 +528,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 foreach (string includeOnlyResourcePath in includeOnlyResourcePaths)
                 {
                     allInclusionTraceEntries.Add($"Including resource '{includeOnlyResourcePath}' without its dependencies...");
-                    
+
                     resourcesToInclude.Add(includeOnlyResourcePath);
                 }
 
@@ -542,7 +542,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     filteredResources[resourceItem.Key] =
                         resourceItem.Value.Where(dp => filteredResources.ContainsKey(dp)).ToArray();
                 }
-                
+
                 if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     if (allInclusionTraceEntries.Count > 0)
@@ -612,7 +612,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             {
                 return _sourceConnectionDetails.LastChangeVersionProcessed.Value;
             }
-            
+
             // Fall back to using the pre-configured change version
             return _sourceConnectionDetails
                 .LastChangeVersionProcessedByTargetName
@@ -644,7 +644,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 Array.Empty<string>(),
                 javascriptModuleFactory,
                 null);
-            
+
             // Start processing resources in dependency order
             var streamingPagesOfPostsByResourcePath = initiator.Start(processingContext, cancellationToken);
 
@@ -654,7 +654,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 streamingPagesOfPostsByResourcePath,
                 processingSemaphore,
                 options);
-            
+
             return postTaskStatuses;
         }
 
@@ -678,11 +678,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 _logger.Information($"Change window starting value indicates all values are being published, and so there is no need to perform delete processing.");
                 return Array.Empty<TaskStatus>();
             }
-            
+
             TaskStatus[] deleteTaskStatuses = Array.Empty<TaskStatus>();
-            
+
             // Invert the dependencies for use in deletion, excluding descriptors (if present) and the special #Retry nodes
-            var deleteDependenciesByResourcePath = InvertDependencies(postDependenciesByResourcePath, 
+            var deleteDependenciesByResourcePath = InvertDependencies(postDependenciesByResourcePath,
                 path => path.EndsWith("Descriptors") || path.EndsWith(Conventions.RetryKeySuffix));
 
             if (deleteDependenciesByResourcePath.Any())
@@ -769,7 +769,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
 
                 var supportsKeyChanges = await _sourceCapabilities.SupportsKeyChangesAsync(probeResourceKey);
-                
+
                 if (supportsKeyChanges)
                 {
                     _logger.Debug($"Source supports key changes. Initiating key changes processing.");
@@ -821,10 +821,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         {
             // Copy the dependencies before modifying them
             var keyChangeDependenciesByResourcePath = new Dictionary<string, string[]>(postDependenciesByResourcePath);
-            
+
             int infiniteLoopProtectionThreshold = keyChangeDependenciesByResourcePath.Count();
             int i = 0;
-    
+
             while (i < infiniteLoopProtectionThreshold)
             {
                 // Identify all resources that have no more dependencies (except retained dependencies)
@@ -834,32 +834,32 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     .Select(kvp => kvp.Key)
                     .Except(resourcesWithUpdatableKeys)
                     .ToArray();
-        
+
                 // Exit processing if there are no more resources that can be removed from the dependency graph
                 if (!resourcesWithoutRetainedDependencies.Any())
                 {
                     break;
                 }
-        
+
                 var retainedDependenciesByResourcePath = new Dictionary<string, string[]>();
-        
+
                 // Iterate through all the resources that have no more dependencies (except retain dependencies)
                 foreach (var resourcePathToBeRemoved in resourcesWithoutRetainedDependencies)
                 {
                     var dependenciesWithUpdatableKeys = keyChangeDependenciesByResourcePath[resourcePathToBeRemoved]
                         .Intersect(resourcesWithUpdatableKeys)
                         .ToArray();
-            
+
                     if (dependenciesWithUpdatableKeys.Any())
                     {
                         // Capture the dependencies of this resource that must be retained (used in place of dependencies on the resource being removed)
                         retainedDependenciesByResourcePath.Add(resourcePathToBeRemoved, dependenciesWithUpdatableKeys);
                     }
-            
+
                     // Remove the resource from the graph
                     keyChangeDependenciesByResourcePath.Remove(resourcePathToBeRemoved);
                 }
-        
+
                 // Iterate through the remaining graph resources
                 foreach (var kvp in keyChangeDependenciesByResourcePath.ToArray())
                 {
@@ -868,14 +868,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     {
                         continue;
                     }
-            
+
                     // Identify dependencies of the current resource on any of the resources that were just removed that have retained dependencies (dependencies with updatable keys)
                     var dependenciesNeedingFlattening = retainedDependenciesByResourcePath.Keys.Intersect(kvp.Value).ToArray();
-            
+
                     foreach (var dependencyToFlatten in dependenciesNeedingFlattening)
                     {
                         // Rebuild the array of dependencies...
-                        keyChangeDependenciesByResourcePath[kvp.Key] = 
+                        keyChangeDependenciesByResourcePath[kvp.Key] =
                             // Starting with all the current dependencies
                             kvp.Value
                             // Exclude the dependency for the resource that was removed from the graph
@@ -884,11 +884,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                             .Concat(retainedDependenciesByResourcePath[dependencyToFlatten])
                             .ToArray();
                     }
-            
+
                     // Ensure all the dependencies for resources being removed have been removed
                     keyChangeDependenciesByResourcePath[kvp.Key] = kvp.Value.Except(resourcesWithoutRetainedDependencies).ToArray();
                 }
-        
+
                 i++;
             }
 
@@ -908,7 +908,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             TaskStatus[] deleteTaskStatuses)
         {
             bool success = true;
-            
+
             long publishedErrorCount = _errorPublisher.GetPublishedErrorCount();
 
             if (publishedErrorCount > 0)
@@ -962,24 +962,24 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 postDependenciesByResourcePath
                     .SelectMany(kvp => kvp.Value.Select(x => (x, kvp.Key)))
                     .Where(tuple => !excludeResourcePath(tuple.Key) && !excludeResourcePath(tuple.x));
-                
+
             var allResourceTuples =
                 postDependenciesByResourcePath
                     .Select(kvp => (kvp.Key, null as string))
                     .Where(tuple => !excludeResourcePath(tuple.Key));
-                
+
             var deleteDependenciesByResourcePath =
                 reverseDependencyTuples
                     .Concat(allResourceTuples)
                     .GroupBy(x => x.Item1)
                     .ToDictionary(
-                        g => g.Key, 
+                        g => g.Key,
                         g => g
                             .Where(x => !string.IsNullOrEmpty(x.Item2))
                             .Select(x => x.Item2)
-                            .ToArray(), 
+                            .ToArray(),
                         StringComparer.OrdinalIgnoreCase);
-            
+
             return deleteDependenciesByResourcePath;
         }
 
@@ -995,7 +995,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _logger.Information($"Waiting for {streamingPagesByResourcePath.Count} {activityDescription} streaming sources to complete...");
 
             var lastProgressUpdate = DateTime.Now;
-            
+
             while (streamingPagesByResourcePath.Any())
             {
                 string[] resourcePaths = streamingPagesByResourcePath.Keys.OrderBy(x => x).ToArray();
@@ -1005,10 +1005,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     int paddedDisplayLength = resourcePaths.Max(x => x.Length) + 2;
 
                     var remainingResources = resourcePaths.Select(rp => new
-                        {
-                            ResourcePath = rp, 
-                            DependentItems = streamingPagesByResourcePath[rp].DependencyPaths.Where(streamingPagesByResourcePath.ContainsKey).ToArray()
-                        })
+                    {
+                        ResourcePath = rp,
+                        DependentItems = streamingPagesByResourcePath[rp].DependencyPaths.Where(streamingPagesByResourcePath.ContainsKey).ToArray()
+                    })
                         .Select(x => new
                         {
                             ResourcePath = x.ResourcePath,
@@ -1020,17 +1020,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         .Where(x => x.Count == 0)
                         .OrderBy(x => x.ResourcePath)
                         .ToArray();
-                    
+
                     var itemsMessage = new StringBuilder();
 
                     itemsMessage.AppendLine($"The following {resourcesBeingProcessed.Length} resources are processing (or ready for processing):");
-                    
+
                     foreach (var resource in resourcesBeingProcessed)
                     {
                         itemsMessage.Append("    ");
                         itemsMessage.AppendLine($"{GetResourcePathDisplayText(resource.ResourcePath)}");
                     }
-                    
+
                     var resourcesWaiting = remainingResources
                         .Where(x => x.Count > 0)
                         .OrderBy(x => x.ResourcePath)
@@ -1047,7 +1047,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                             itemsMessage.AppendLine($"{GetResourcePathDisplayText(resource.ResourcePath, paddedDisplayLength)} ({resource.DependentItems.Length} dependencies remaining --> {Truncate(string.Join(", ", resource.DependentItems.Select(x => GetResourcePathDisplayText(x))), 50)})");
                         }
                     }
-                    
+
                     string Truncate(string text, int length)
                     {
                         if (text.Length <= length)
@@ -1063,7 +1063,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         string[] parts = resourcePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
                         string displayName;
-                        
+
                         if (parts[0] == "ed-fi")
                         {
                             displayName = parts[1];
@@ -1077,24 +1077,24 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         {
                             return displayName;
                         }
-                        
+
                         return $"{displayName}{new string(' ', (padToLength + 2) - displayName.Length)}";
                     }
-                    
+
                     string logMessage = $"Waiting for the {activityDescription} streaming of {resourcePaths.Length} resources to complete...{Environment.NewLine}{itemsMessage}";
-                    
+
                     if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
                         _logger.Debug(logMessage);
                     }
-                    else 
+                    else
                     {
                         _logger.Information(logMessage);
                     }
-                    
+
                     lastProgressUpdate = DateTime.Now;
                 }
-                
+
                 int completedIndex = Task.WaitAny(
                     resourcePaths.Select(k => streamingPagesByResourcePath[k].CompletionBlock.Completion).ToArray(),
                     TimeSpan.FromSeconds(options.StreamingPagesWaitDurationSeconds));
@@ -1104,20 +1104,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     // Check for unhandled task failure
                     var resourcePath = resourcePaths.ElementAt(completedIndex);
                     var streamingPagesItem = streamingPagesByResourcePath[resourcePath];
-                    
+
                     var blockCompletion = streamingPagesItem.CompletionBlock.Completion;
-                    
+
                     if (blockCompletion.IsFaulted)
                     {
                         _logger.Fatal($"Streaming task failure for {resourcePath}: {blockCompletion.Exception}");
                     }
-                    
+
                     completedStreamingPagesByResourcePath.Add(
                         resourcePaths[completedIndex],
                         streamingPagesByResourcePath[resourcePaths[completedIndex]].CompletionBlock.Completion.Status);
 
                     streamingPagesItem.CompletionBlock = null;
-                    
+
                     streamingPagesByResourcePath.Remove(resourcePaths[completedIndex]);
 
                     if (_logger.IsEnabled(LogEventLevel.Debug))

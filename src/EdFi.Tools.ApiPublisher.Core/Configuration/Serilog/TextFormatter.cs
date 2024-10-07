@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Licensed to the Ed-Fi Alliance under one or more agreements.
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
@@ -44,7 +44,7 @@ public class LogEventFormatValues
 {
     private const string ThreadIdSerilogPropertyName = "ThreadId";
     private const string SourceContextSerilogPropertyName = "SourceContext";
-    
+
     public DateTime Timestamp => _logEvent.Timestamp.DateTime;
     public string Level => GetShortFormatLevel(_logEvent.Level);
     public string SourceContext => GetStringValueFromProperty(_logEvent.Properties.GetValueOrDefault(SourceContextSerilogPropertyName));

@@ -10,7 +10,7 @@ using System.Text;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
-	public static class FakeResponse
+    public static class FakeResponse
     {
         public static HttpResponseMessage OK(string content) =>
             new HttpResponseMessage(HttpStatusCode.OK)
@@ -25,11 +25,6 @@ namespace EdFi.Tools.ApiPublisher.Tests
             };
 
         public static HttpResponseMessage NotFound() => new HttpResponseMessage(HttpStatusCode.NotFound);
-
-        // public static HttpResponseMessage StatusCodeResult(HttpStatusCode responseCode)
-        // {
-        //     return new HttpResponseMessage(responseCode);
-        // }
     }
 
     public static class HttpResponseMessageExtensions
