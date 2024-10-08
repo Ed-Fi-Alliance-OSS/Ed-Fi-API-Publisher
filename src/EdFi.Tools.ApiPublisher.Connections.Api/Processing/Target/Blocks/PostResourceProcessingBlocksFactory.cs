@@ -207,8 +207,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                             remediationResult.ModifiedRequestBody,
                                             new JsonSerializerOptions { WriteIndented = true });
 
-                                        _logger.Debug("{ResourceUrl} (source id: {Id}): Remediation plan provided a modified request body: {ModifiedRequestBodyJson} ",
-                                            postItemMessage.ResourceUrl, id, modifiedRequestBodyJson);
+                                        var message = $"{postItemMessage.ResourceUrl} (source id: {id}): Remediation plan provided a modified request body: {modifiedRequestBodyJson}";
+                                        _logger.Debug(message);
                                     }
 
                                     ctx["ModifiedRequestBody"] = remediationResult.ModifiedRequestBody;
@@ -224,8 +224,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 string responseContent = await result.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                                _logger.Warning("{ResourceUrl} (source id: {Id}): POST attempt #{Attempts} failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay):{NewLine}{ResponseContent}",
-                                    postItemMessage.ResourceUrl, id, attempts, result.Result.StatusCode, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds, Environment.NewLine, responseContent);
+                                var message = $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}";
+                                _logger.Warning(message);
                             }
                         });
                 IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
@@ -352,6 +352,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     }
 
                     string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    var message = string.Empty;
 
                     // If the failure is Forbidden, and we should treat it as a warning
                     if (apiResponse.StatusCode == HttpStatusCode.Forbidden
@@ -359,8 +360,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         && targetEdFiApiClient.ConnectionDetails?.TreatForbiddenPostAsWarning == true)
                     {
                         // Warn and ignore all future data for this resource
-                        _logger.Warning("{ResourceUrl} (source id: {Id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {StatusCode}{NewLine}{ResponseContent}",
-                            postItemMessage.ResourceUrl, id, apiResponse.StatusCode, Environment.NewLine, responseContent);
+                        message = $"{postItemMessage.ResourceUrl} (source id: {id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
+                        _logger.Warning(message);
 
                         ignoredResourceByUrl.TryAdd(postItemMessage.ResourceUrl, true);
 
@@ -368,8 +369,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     }
 
                     // Error is final, log it and indicate failure for processing
-                    _logger.Error("{ResourceUrl} (source id: {Id}): POST attempt #{Attempts} failed with status '{StatusCode}':{NewLine}{ResponseContent}",
-                        postItemMessage.ResourceUrl, id, attempts, apiResponse.StatusCode, Environment.NewLine, responseContent);
+                    message = $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{apiResponse.StatusCode}':{Environment.NewLine}{responseContent}";
+                    _logger.Error(message);
 
                     // Publish the failed data
                     var error = new ErrorItemMessage
@@ -677,8 +678,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                     if (_logger.IsEnabled(LogEventLevel.Debug))
                     {
-                        _logger.Debug("{ResourceUrl} (source id: {SourceId}): Remediating request with POST request to '{RemediationRequestResource}' on target API: {RemediationRequestBodyJson}",
-                            resourceUrl, sourceId, remediationRequest.resource, remediationRequestBodyJson);
+                        var message = $"{resourceUrl} (source id: {sourceId}): Remediating request with POST request to '{remediationRequest.resource}' on target API: {remediationRequestBodyJson}";
+                        _logger.Debug(message);
                     }
 
                     var remediationResponse = await RequestHelpers.SendPostRequestAsync(

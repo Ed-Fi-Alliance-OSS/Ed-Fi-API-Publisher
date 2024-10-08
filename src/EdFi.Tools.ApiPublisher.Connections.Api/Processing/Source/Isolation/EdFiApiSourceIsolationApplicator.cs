@@ -135,8 +135,8 @@ public class EdFiApiSourceIsolationApplicator : ISourceIsolationApplicator
 
         string errorResponseText = await snapshotsResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-        _logger.Error("Unable to get snapshot identifier from API at '{BaseAddress}{SnapshotsRelativePath}'. Request for available snapshots returned status '{StatusCode}' with message body: {ErrorResponseText}",
-            sourceApiClient.HttpClient.BaseAddress, snapshotsRelativePath, snapshotsResponse.StatusCode, errorResponseText);
+        var message = $"Unable to get snapshot identifier from API at '{sourceApiClient.HttpClient.BaseAddress}{snapshotsRelativePath}'. Request for available snapshots returned status '{snapshotsResponse.StatusCode}' with message body: {errorResponseText}";
+        _logger.Error(message);
 
         return null;
     }

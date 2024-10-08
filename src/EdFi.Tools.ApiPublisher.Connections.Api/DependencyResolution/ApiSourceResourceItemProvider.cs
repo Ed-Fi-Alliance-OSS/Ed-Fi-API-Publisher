@@ -91,16 +91,16 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
             }
             else
             {
-                _logger.Warning("GET request from source API for '{ResourceItemUrl}' reference failed with status '{StatusCode}': {ResponseContent}",
-                    resourceItemUrl, getByIdResponse.StatusCode, responseContent);
+                var message = $"GET request from source API for '{resourceItemUrl}' reference failed with status '{getByIdResponse.StatusCode}': {responseContent}";
+                _logger.Warning(message);
 
                 return (false, null);
             }
         }
         catch (RateLimitRejectedException ex)
         {
-            _logger.Fatal(ex, "{DataManagementApiSegment}{ResourceItemUrl}: Rate limit exceeded. Please try again later.",
-                sourceEdFiApiClient.DataManagementApiSegment, resourceItemUrl);
+            var message = $"{sourceEdFiApiClient.DataManagementApiSegment}{resourceItemUrl}: Rate limit exceeded. Please try again later.";
+            _logger.Fatal(ex, message);
             return (false, null);
         }
         //----------------------------------------------------------------------------------------------

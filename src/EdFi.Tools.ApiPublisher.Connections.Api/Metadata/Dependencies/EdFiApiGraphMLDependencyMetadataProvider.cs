@@ -43,8 +43,8 @@ public class EdFiApiGraphMLDependencyMetadataProvider : IGraphMLDependencyMetada
 
         if (!dependencyResponse.IsSuccessStatusCode)
         {
-            _logger.Error("Ed-Fi ODS API request for dependencies to '{RequestUri}' returned '{StatusCode}' with content:{NewLine}{DependencyResponseContent}",
-                dependencyRequest.RequestUri, dependencyResponse.StatusCode, Environment.NewLine, dependencyResponseContent);
+            var message = $"Ed-Fi ODS API request for dependencies to '{dependencyRequest.RequestUri}' returned '{dependencyResponse.StatusCode}' with content:{Environment.NewLine}{dependencyResponseContent}";
+            _logger.Error(message);
             throw new Exception("Resource dependencies could not be obtained.");
         }
 
@@ -57,8 +57,8 @@ public class EdFiApiGraphMLDependencyMetadataProvider : IGraphMLDependencyMetada
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Unable to parse dependency response as GraphML: {DependencyResponseContent}{NewLine}{Ex}",
-                dependencyResponseContent, Environment.NewLine, ex);
+            var message = $"Unable to parse dependency response as GraphML: {dependencyResponseContent}{Environment.NewLine}{ex}";
+            _logger.Error(ex, message);
             throw new Exception("Resource dependencies could not be obtained.");
         }
     }

@@ -127,8 +127,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                         if (!apiResponse.IsSuccessStatusCode)
                         {
-                            _logger.Error("{ResourceUrl} (source id: {Id}): GET by key returned {StatusCode}{NewLine}{ResponseContent}",
-                                msg.ResourceUrl, id, apiResponse.StatusCode, Environment.NewLine, responseContent);
+                            var message = $"{msg.ResourceUrl} (source id: {id}): GET by key returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
+                            _logger.Error(message);
 
                             var error = new ErrorItemMessage
                             {
@@ -282,8 +282,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     {
                         string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                        _logger.Error("{ResourceUrl} (source id: {SourceId}): DELETE returned {StatusCode}{NewLine}{ResponseContent}",
-                            msg.ResourceUrl, sourceId, apiResponse.StatusCode, Environment.NewLine, responseContent);
+                        var message = $"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
+                        _logger.Error(message);
 
                         // Publish the failure
                         var error = new ErrorItemMessage
