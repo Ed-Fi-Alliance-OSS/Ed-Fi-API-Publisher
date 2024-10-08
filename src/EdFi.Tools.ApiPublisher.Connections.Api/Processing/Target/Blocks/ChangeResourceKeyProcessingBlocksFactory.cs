@@ -19,7 +19,6 @@ using Polly.RateLimiting;
 using Polly.Retry;
 using Serilog;
 using Serilog.Events;
-using SmartFormat.Core.Extensions;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks.Dataflow;
