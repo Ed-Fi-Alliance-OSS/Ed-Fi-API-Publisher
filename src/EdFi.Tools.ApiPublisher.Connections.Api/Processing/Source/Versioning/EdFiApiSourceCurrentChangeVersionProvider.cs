@@ -41,8 +41,8 @@ public class EdFiApiSourceCurrentChangeVersionProvider : ISourceCurrentChangeVer
 
         string versionResponseText = await versionResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-        _logger.Debug("Available change versions request from {BaseAddress}{AvailableChangeVersionsRelativePath} returned {StatusCode}: {VersionResponseText}",
-            sourceApiClient.HttpClient.BaseAddress, availableChangeVersionsRelativePath, versionResponse.StatusCode, versionResponseText);
+        var message = $"Available change versions request from {sourceApiClient.HttpClient.BaseAddress}{availableChangeVersionsRelativePath} returned {versionResponse.StatusCode}: {versionResponseText}";
+        _logger.Debug(message);
 
         try
         {

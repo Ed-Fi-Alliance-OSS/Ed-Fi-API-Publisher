@@ -171,8 +171,8 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         // Publish the failure
                         errorHandlingBlock.Post(error);
 
-                        _logger.Error(ex, "{ResourceUrl}: JSON parsing of source page data failed: {Ex}{NewLine}{ResponseContent}",
-                            message.ResourceUrl, ex, Environment.NewLine, responseContent);
+                        var logMessage = $"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}";
+                        _logger.Error(ex, logMessage);
 
                         break;
                     }

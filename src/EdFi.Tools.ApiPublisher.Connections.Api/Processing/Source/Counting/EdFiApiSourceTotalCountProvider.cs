@@ -3,6 +3,7 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System;
 using System.Net;
 using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
@@ -116,12 +117,8 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
 
             if (!apiResponse.IsSuccessStatusCode)
             {
-                _logger.Error(
-                    "{Url}: Count request returned {StatusCode}\r{Content}",
-                    resourceUrl,
-                    apiResponse.StatusCode,
-                    responseContent
-                );
+                var messge = $"{resourceUrl}: Count request returned {apiResponse.StatusCode}\r{responseContent}";
+                _logger.Error(messge);
 
                 await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
                     .ConfigureAwait(false);
@@ -198,6 +195,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
     )
     {
         string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+        string message = string.Empty;
 
         // Was this an authorization failure?
         var authFailure = apiResponse.StatusCode == HttpStatusCode.Forbidden;
@@ -207,18 +205,14 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
             // Being denied read access to descriptors is potentially problematic, but is not considered
             // to be breaking in its own right for change processing. We'll fail downstream
             // POSTs if descriptors haven't been initialized correctly on the target.
-            _logger.Warning(
-                "{Url}: {StatusCode} - Unable to obtain total count for descriptor due to authorization failure. Descriptor values will not be published to the target, but processing will continue.\rResponse content: {Content}",
-                resourceUrl, apiResponse.StatusCode, responseContent
-            );
+            message = $"{resourceUrl}: {apiResponse.StatusCode} - Unable to obtain total count for descriptor due to authorization failure. Descriptor values will not be published to the target, but processing will continue.\rResponse content: {responseContent}";
+            _logger.Warning(message);
 
             return;
         }
 
-        _logger.Error(
-            "{Url}: {StatusCode} - Unable to obtain total count due to request failure. This resource will not be processed. Downstream failures are possible.\rResponse content: {Content}",
-            resourceUrl, apiResponse.StatusCode, responseContent
-        );
+        message = $"{resourceUrl}: {apiResponse.StatusCode} - Unable to obtain total count due to request failure. This resource will not be processed. Downstream failures are possible.\rResponse content: {responseContent}";
+        _logger.Error(message);
 
         // Publish an error for the resource to allow processing to continue, but to force failure.
         errorHandlingBlock.Post(
