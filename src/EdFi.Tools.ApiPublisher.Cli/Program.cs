@@ -319,4 +319,3 @@ namespace EdFi.Tools.ApiPublisher.Cli
         }
     }
 }
-
