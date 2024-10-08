@@ -352,6 +352,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     }
 
                     string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    var message = string.Empty;
 
                     // If the failure is Forbidden, and we should treat it as a warning
                     if (apiResponse.StatusCode == HttpStatusCode.Forbidden
@@ -359,7 +360,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         && targetEdFiApiClient.ConnectionDetails?.TreatForbiddenPostAsWarning == true)
                     {
                         // Warn and ignore all future data for this resource
-                        var message = $"{postItemMessage.ResourceUrl} (source id: {id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
+                        message = $"{postItemMessage.ResourceUrl} (source id: {id}): Authorization failed on POST of resource with no authorization failure handling defined. Remaining resource items will be ignored. Response status: {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
                         _logger.Warning(message);
 
                         ignoredResourceByUrl.TryAdd(postItemMessage.ResourceUrl, true);
@@ -368,7 +369,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     }
 
                     // Error is final, log it and indicate failure for processing
-                    var message = $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{apiResponse.StatusCode}':{Environment.NewLine}{responseContent}";
+                    message = $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{apiResponse.StatusCode}':{Environment.NewLine}{responseContent}";
                     _logger.Error(message);
 
                     // Publish the failed data
