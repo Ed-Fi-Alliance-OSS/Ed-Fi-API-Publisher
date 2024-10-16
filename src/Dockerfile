@@ -22,7 +22,7 @@ COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnect
 COPY ./Docker/run.sh /app/run.sh
 
 RUN apk update && \
-    apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 postgresql13-client=~13 icu=~74 curl=~8 && \
+    apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 postgresql15-client=~15 icu=~74 curl=~8 && \
     apk add --upgrade openssl=3.1.7-r0 && \
     wget -nv -O /app/ApiPublisher.zip https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.ApiPublisher/versions/${VERSION}/content && \
     unzip /app/ApiPublisher.zip 'EdFi.ApiPublisher/**' -d /app/ && \
