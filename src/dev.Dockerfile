@@ -5,7 +5,7 @@
 
 
 # tag sdk:8.0 alpine
-FROM mcr.microsoft.com/dotnet/sdk:8.0.203-alpine3.19@sha256:b1275049a8fe922cbc9f1d173ffec044664f30b94e99e2c85dd9b7454fbf596c AS build
+FROM mcr.microsoft.com/dotnet/sdk@sha256:df89fa1f564c4cffe3fea9a2082c50f141f0c709560fdcfc483a2d9b9c8399b4 AS build
 WORKDIR /source
 
 COPY ./.editorconfig .editorconfig
