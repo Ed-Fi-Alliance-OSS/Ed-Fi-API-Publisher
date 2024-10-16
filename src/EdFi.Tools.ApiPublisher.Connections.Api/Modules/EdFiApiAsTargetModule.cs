@@ -60,7 +60,7 @@ public class EdFiApiAsTargetModule : Module
         // API dependency metadata from Ed-Fi ODS API (using Target API)
         if (!options.UseSourceDependencyMetadata)
         {
-            builder.RegisterType<EdFiApiGraphMLDependencyMetadataProvider>()
+            _ = builder.RegisterType<EdFiApiGraphMLDependencyMetadataProvider>()
                 .As<IGraphMLDependencyMetadataProvider>()
                 .WithParameter(
                     // Configure to use with Target API

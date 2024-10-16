@@ -46,13 +46,12 @@ public class EdFiApiSourceCurrentChangeVersionProvider : ISourceCurrentChangeVer
 
         try
         {
-            long maxChangeVersion =
-
+            long maxChangeVersion
+            =
                 // Versions of Ed-Fi API through at least v3.4
                 (JObject.Parse(versionResponseText)["NewestChangeVersion"]
-
-                    // Enhancements/fixes applied introduced as part of API Publisher work
-                    ?? JObject.Parse(versionResponseText)["newestChangeVersion"]).Value<long>();
+               // Enhancements/fixes applied introduced as part of API Publisher work
+               ?? JObject.Parse(versionResponseText)["newestChangeVersion"]).Value<long>();
 
             return maxChangeVersion;
         }
