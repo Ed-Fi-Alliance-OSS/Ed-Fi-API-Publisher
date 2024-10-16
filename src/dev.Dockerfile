@@ -37,7 +37,7 @@ RUN dotnet publish -c Release -o /app/EdFi.Tools.ApiPiblisher.Cli --no-build --n
 
 
 # Tag aspnet:8.0 alpine
-FROM mcr.microsoft.com/dotnet/aspnet@sha256:ba398f8c6a0469436cc115bfbd278002baf4ce9423b6d8a9e904da6adc31a23d
+FROM mcr.microsoft.com/dotnet/aspnet@sha256:1d9e1eb36eb822e7be487e7a11cd2350529e14e5e91484a08b501c9822867be4
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
 # Alpine image does not contain Globalization Cultures library so we need to install ICU library to get fopr LINQ expression to work
@@ -53,7 +53,7 @@ COPY ./Docker/logging.template.json /app/logging.template.json
 COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnections.template.json
 COPY ./Docker/run.sh /app/run.sh
 
-RUN apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 icu=~74 curl=~8 && \
+RUN apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 openssl=3.3.2-r0 gettext=~0 icu=~74 curl=~8 && \
     dos2unix /app/*.json && \
     dos2unix /app/*.sh && \
     chmod 700 /app/*.sh -- ** && \
