@@ -5,7 +5,7 @@
 
 
 # tag sdk:8.0 alpine
-FROM mcr.microsoft.com/dotnet/sdk@sha256:91cb46b0ee207d0df53e2e38f2e4013fe2668ab52dcca13c971afbbef94c83ef AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine3.20@sha256:07cb8622ca6c4d7600b42b2eccba968dff4b37d41b43a9bf4bd800aa02fab117 AS build
 WORKDIR /source
 
 COPY ./.editorconfig .editorconfig
@@ -37,7 +37,7 @@ RUN dotnet publish -c Release -o /app/EdFi.Tools.ApiPiblisher.Cli --no-build --n
 
 
 # Tag aspnet:8.0 alpine
-FROM mcr.microsoft.com/dotnet/aspnet@sha256:ba398f8c6a0469436cc115bfbd278002baf4ce9423b6d8a9e904da6adc31a23d
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.20@sha256:b5b7dec8006fe016cc864f618cf60eab24fb7d7a28c8ecf4f6b90ceeaa5cf9f2
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
 # Alpine image does not contain Globalization Cultures library so we need to install ICU library to get fopr LINQ expression to work
@@ -53,7 +53,7 @@ COPY ./Docker/logging.template.json /app/logging.template.json
 COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnections.template.json
 COPY ./Docker/run.sh /app/run.sh
 
-RUN apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 icu=~74 curl=~8 && \
+RUN apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 openssl=3.3.2-r0 gettext=~0 icu=~74 curl=~8 && \
     dos2unix /app/*.json && \
     dos2unix /app/*.sh && \
     chmod 700 /app/*.sh -- ** && \

@@ -333,7 +333,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // Gracefully handle authorization errors by using the retry action delegate
                     // (if present) to post the message to the retry "resource" queue 
                     if (apiResponse.StatusCode == HttpStatusCode.Forbidden
-
                         // Determine if current resource has an authorization retry queue
                         && postItemMessage.PostAuthorizationFailureRetry != null)
                     {
@@ -446,10 +445,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             bool IsBadRequestForUnresolvedReferenceOfPrimaryRelationship(HttpResponseMessage postItemResponse, PostItemMessage msg)
             {
                 // If response is a Bad Request, check for need to explicitly fetch dependencies
-                if (postItemResponse.StatusCode == HttpStatusCode.BadRequest &&
-
+                if (postItemResponse.StatusCode == HttpStatusCode.BadRequest
                     // If resource is a "primary relationship" configured in authorization failure handling
-                    missingDependencyByResourcePath.TryGetValue(msg.ResourceUrl, out string missingDependencyResourcePath))
+                    && missingDependencyByResourcePath.TryGetValue(msg.ResourceUrl, out string missingDependencyResourcePath))
                 {
                     string responseMessageText = GetResponseMessageText(postItemResponse);
 
@@ -487,10 +485,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             {
                 // If response is a Bad Request (which is the API's error response for missing Staff/Student/Parent), check for need to explicitly fetch dependencies
                 // NOTE: If support is expanded for other missing dependencies, the response code from the API (currently) will be a 409 Conflict status.
-                if (postItemResponse.StatusCode == HttpStatusCode.BadRequest &&
-
+                if (postItemResponse.StatusCode == HttpStatusCode.BadRequest
                     // If resource is a "primary relationship" configured in authorization failure handling
-                    missingDependencyByResourcePath.TryGetValue(msg.ResourceUrl, out string missingDependencyResourcePath))
+                    && missingDependencyByResourcePath.TryGetValue(msg.ResourceUrl, out string missingDependencyResourcePath))
                 {
                     string responseMessageText = await GetResponseMessageTextAsync(postItemResponse);
 

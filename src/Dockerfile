@@ -3,8 +3,8 @@
 # The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 # See the LICENSE and NOTICES files in the project root for more information.
 
-# Tag aspnet:8.0-alpine
-FROM mcr.microsoft.com/dotnet/aspnet@sha256:ba398f8c6a0469436cc115bfbd278002baf4ce9423b6d8a9e904da6adc31a23d
+# Tag aspnet:8.0-alpine3.20
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.20@sha256:b5b7dec8006fe016cc864f618cf60eab24fb7d7a28c8ecf4f6b90ceeaa5cf9f2
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
 ARG VERSION="1.2.1"
@@ -21,7 +21,8 @@ COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnect
 
 COPY ./Docker/run.sh /app/run.sh
 
-RUN apk --no-cache add unzip=~6 dos2unix=~7 bash=~5 gettext=~0 postgresql13-client=~13 icu=~74 curl=~8 && \
+RUN apk update && \
+    apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 gettext=~0 openssl=3.3.2-r0 postgresql16-client=~16 icu=~74 curl=~8 && \
     wget -nv -O /app/ApiPublisher.zip https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.ApiPublisher/versions/${VERSION}/content && \
     unzip /app/ApiPublisher.zip 'EdFi.ApiPublisher/**' -d /app/ && \
     mv /app/EdFi.ApiPublisher/* /app/ && \
