@@ -29,9 +29,14 @@ What they propose to fix the problem is to execute the Offset-Limit pagination i
 
 Reproducing this problem seemed to be trick. But the help of Visual Studio and the execution in Debug mode (with break points, etc.) we accomplish to reproduce it, so the problem does exist.
 
-## In relation to how to implement this on Publisher
+## Using in API Publisher
 
-1. We will add a flag (on false by default) where the user will be able to decide if he wants to execute Publisher in reverse paging mode.
+1. Full configuration instruction are available here:  https://github.com/Ed-Fi-Alliance-OSS/Ed-Fi-API-Publisher/blob/main/docs/API-Publisher-Configuration.md
+
+2. The configuration section of note is below:
+
+![image](https://github.com/user-attachments/assets/d6ff0f43-67fc-4266-a09f-22435a75efcc)
+
 
 ## Other notes
 
