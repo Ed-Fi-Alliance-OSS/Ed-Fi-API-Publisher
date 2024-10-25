@@ -31,7 +31,7 @@ Reproducing this problem seemed to be trick. But the help of Visual Studio and t
 
 ## Using in API Publisher
 
-1. Full configuration instruction are available here:  https://github.com/Ed-Fi-Alliance-OSS/Ed-Fi-API-Publisher/blob/main/docs/API-Publisher-Configuration.md
+1. Full configuration instructions are available here:  https://github.com/Ed-Fi-Alliance-OSS/Ed-Fi-API-Publisher/blob/main/docs/API-Publisher-Configuration.md
 
 2. The configuration section of note is below:
 
