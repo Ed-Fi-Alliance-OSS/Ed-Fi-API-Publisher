@@ -178,6 +178,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         delay,
                         async (result, ts, retryAttempt, ctx) =>
                         {
+                            if (result.Exception != null)
+                            {
+                                _logger.Warning(result.Exception, "{ResourceUrl} (source id: {Id}): POST attempt #{Attempts} failed with an exception. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay):{NewLine}{Exception}",
+                                    postItemMessage.ResourceUrl, id, attempts, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds, Environment.NewLine, result.Exception);
+                            }
+                            else
+                            {
                             if (javaScriptModuleFactory != null)
                             {
                                 var remediationResult = await TryRemediateFailureAsync(
@@ -215,13 +222,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 }
                             }
 
-                            if (result.Exception != null)
-                            {
-                                _logger.Warning(result.Exception, "{ResourceUrl} (source id: {Id}): POST attempt #{Attempts} failed with an exception. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay):{NewLine}{Exception}",
-                                    postItemMessage.ResourceUrl, id, attempts, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds, Environment.NewLine, result.Exception);
-                            }
-                            else
-                            {
+                            
                                 string responseContent = await result.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                                 var message = $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}";
