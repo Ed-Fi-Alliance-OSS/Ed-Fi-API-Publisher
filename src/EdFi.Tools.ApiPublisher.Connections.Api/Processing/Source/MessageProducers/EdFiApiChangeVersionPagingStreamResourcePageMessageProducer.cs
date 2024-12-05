@@ -41,90 +41,83 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
             _logger.Information("{ResourceUrl}: Retrieving total count of items.", message.ResourceUrl);
         }
 
-        // Get total count of items in source resource for change window (if applicable)
-        var (totalCountSuccess, totalCount) = await _sourceTotalCountProvider.TryGetTotalCountAsync(
-            message.ResourceUrl,
-            options,
-            message.ChangeWindow,
-            errorHandlingBlock,
-            cancellationToken);
-
-        if (!totalCountSuccess)
-        {
-            // Allow processing to continue without performing additional work on this resource.
-            return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
-        }
-
-        _logger.Information("{ResourceUrl}: Total count = {TotalCount}", message.ResourceUrl, totalCount);
-
         int limit = message.PageSize;
 
         var pageMessages = new List<StreamResourcePageMessage<TProcessDataMessage>>();
 
-        if (totalCount > 0)
+        var noOfPartitions = Math.Ceiling((decimal)(message.ChangeWindow.MaxChangeVersion - message.ChangeWindow.MinChangeVersion)
+                        / options.ChangeVersionPagingWindowSize);
+
+        // There must be at least 1 partition.
+        // APIPUB-84, Success ticket 2783
+        if (noOfPartitions == 0)
         {
-            var noOfPartitions = Math.Ceiling((decimal)(message.ChangeWindow.MaxChangeVersion - message.ChangeWindow.MinChangeVersion)
-                            / options.ChangeVersionPagingWindowSize);
-
-            int changeVersionWindow = 0;
-            long changeVersionWindowStartValue = message.ChangeWindow.MinChangeVersion;
-
-            while (changeVersionWindow < noOfPartitions)
-            {
-                long changeVersionWindowEndValue = (changeVersionWindowStartValue > 0 ?
-                    changeVersionWindowStartValue - 1 : changeVersionWindowStartValue) + options.ChangeVersionPagingWindowSize;
-
-                if (changeVersionWindowEndValue > message.ChangeWindow.MaxChangeVersion)
-                {
-                    changeVersionWindowEndValue = message.ChangeWindow.MaxChangeVersion;
-                }
-                var changeWindow = new ChangeWindow
-                {
-                    MinChangeVersion = changeVersionWindowStartValue,
-                    MaxChangeVersion = changeVersionWindowEndValue
-                };
-                changeVersionWindowStartValue = changeVersionWindowEndValue + 1;
-
-                // Get total count of items in source resource for change window (if applicable)
-                var (totalCountOnWindowSuccess, totalCountOnWindow) = await _sourceTotalCountProvider.TryGetTotalCountAsync(
-                    message.ResourceUrl,
-                    options,
-                    changeWindow,
-                    errorHandlingBlock,
-                    cancellationToken);
-
-                if (!totalCountOnWindowSuccess)
-                {
-                    continue;
-                }
-
-                int offsetOnWindow = 0;
-                while (offsetOnWindow < totalCountOnWindow)
-                {
-                    var pageMessage = new StreamResourcePageMessage<TProcessDataMessage>
-                    {
-                        // Resource-specific context
-                        ResourceUrl = message.ResourceUrl,
-                        PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
-
-                        // Page-strategy specific context
-                        Limit = limit,
-                        Offset = offsetOnWindow,
-
-                        // Global processing context                   
-                        ChangeWindow = changeWindow,
-                        CreateProcessDataMessages = createProcessDataMessages,
-
-                        CancellationSource = message.CancellationSource,
-                    };
-
-                    pageMessages.Add(pageMessage);
-                    offsetOnWindow += limit;
-                }
-                changeVersionWindow++;
-
-            }
+            noOfPartitions = 1;
         }
+
+        int changeVersionWindow = 0;
+        long changeVersionWindowStartValue = message.ChangeWindow.MinChangeVersion;
+        long totalCount = 0;
+
+        while (changeVersionWindow < noOfPartitions)
+        {
+            long changeVersionWindowEndValue = (changeVersionWindowStartValue > 0 ?
+                changeVersionWindowStartValue - 1 : changeVersionWindowStartValue) + options.ChangeVersionPagingWindowSize;
+
+            if (changeVersionWindowEndValue > message.ChangeWindow.MaxChangeVersion)
+            {
+                changeVersionWindowEndValue = message.ChangeWindow.MaxChangeVersion;
+            }
+            var changeWindow = new ChangeWindow
+            {
+                MinChangeVersion = changeVersionWindowStartValue,
+                MaxChangeVersion = changeVersionWindowEndValue
+            };
+            changeVersionWindowStartValue = changeVersionWindowEndValue + 1;
+
+            // Get total count of items in source resource for change window (if applicable)
+            var (totalCountOnWindowSuccess, totalCountOnWindow) = await _sourceTotalCountProvider.TryGetTotalCountAsync(
+                message.ResourceUrl,
+                options,
+                changeWindow,
+                errorHandlingBlock,
+                cancellationToken);
+
+            if (!totalCountOnWindowSuccess)
+            {
+                // Allow processing to continue without performing additional work on this resource.
+                return Enumerable.Empty<StreamResourcePageMessage<TProcessDataMessage>>();
+            }
+
+            totalCount += totalCountOnWindow;
+            int offsetOnWindow = 0;
+            while (offsetOnWindow < totalCountOnWindow)
+            {
+                var pageMessage = new StreamResourcePageMessage<TProcessDataMessage>
+                {
+                    // Resource-specific context
+                    ResourceUrl = message.ResourceUrl,
+                    PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
+
+                    // Page-strategy specific context
+                    Limit = limit,
+                    Offset = offsetOnWindow,
+
+                    // Global processing context                   
+                    ChangeWindow = changeWindow,
+                    CreateProcessDataMessages = createProcessDataMessages,
+
+                    CancellationSource = message.CancellationSource,
+                };
+
+                pageMessages.Add(pageMessage);
+                offsetOnWindow += limit;
+            }
+            changeVersionWindow++;
+
+        }
+
+        _logger.Information($"{message.ResourceUrl}: Total count = {totalCount}");
 
         // Flag the last page for special "continuation" processing
         if (pageMessages.Any())
