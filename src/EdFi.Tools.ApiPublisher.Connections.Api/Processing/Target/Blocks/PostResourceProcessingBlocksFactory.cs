@@ -185,43 +185,42 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
                             else
                             {
-                            if (javaScriptModuleFactory != null)
-                            {
-                                var remediationResult = await TryRemediateFailureAsync(
-                                    javaScriptModuleFactory,
-                                    retryAttempt,
-                                    targetEdFiApiClient,
-                                    _sourceConnectionDetails.Name,
-                                    postItemMessage.ResourceUrl,
-                                    id,
-                                    result.Result,
-                                    postItemMessage.Item.ToString());
-
-                                if (!remediationResult.FoundRemediation)
+                                if (javaScriptModuleFactory != null)
                                 {
-                                    knownUnremediatedRequests.Add((postItemMessage.ResourceUrl, result.Result.StatusCode));
+                                    var remediationResult = await TryRemediateFailureAsync(
+                                        javaScriptModuleFactory,
+                                        retryAttempt,
+                                        targetEdFiApiClient,
+                                        _sourceConnectionDetails.Name,
+                                        postItemMessage.ResourceUrl,
+                                        id,
+                                        result.Result,
+                                        postItemMessage.Item.ToString());
 
-                                    return;
-                                }
-
-                                // Check for a modified request body, and save it to the context
-                                if (remediationResult.ModifiedRequestBody is JsonElement modifiedRequestBody
-                                    && modifiedRequestBody.ValueKind != JsonValueKind.Null)
-                                {
-                                    if (_logger.IsEnabled(LogEventLevel.Debug))
+                                    if (!remediationResult.FoundRemediation)
                                     {
-                                        string modifiedRequestBodyJson = JsonSerializer.Serialize(
-                                            remediationResult.ModifiedRequestBody,
-                                            new JsonSerializerOptions { WriteIndented = true });
+                                        knownUnremediatedRequests.Add((postItemMessage.ResourceUrl, result.Result.StatusCode));
 
-                                        var message = $"{postItemMessage.ResourceUrl} (source id: {id}): Remediation plan provided a modified request body: {modifiedRequestBodyJson}";
-                                        _logger.Debug(message);
+                                        return;
                                     }
 
-                                    ctx["ModifiedRequestBody"] = remediationResult.ModifiedRequestBody;
-                                }
-                            }
+                                    // Check for a modified request body, and save it to the context
+                                    if (remediationResult.ModifiedRequestBody is JsonElement modifiedRequestBody
+                                        && modifiedRequestBody.ValueKind != JsonValueKind.Null)
+                                    {
+                                        if (_logger.IsEnabled(LogEventLevel.Debug))
+                                        {
+                                            string modifiedRequestBodyJson = JsonSerializer.Serialize(
+                                                remediationResult.ModifiedRequestBody,
+                                                new JsonSerializerOptions { WriteIndented = true });
 
+                                            var message = $"{postItemMessage.ResourceUrl} (source id: {id}): Remediation plan provided a modified request body: {modifiedRequestBodyJson}";
+                                            _logger.Debug(message);
+                                        }
+
+                                        ctx["ModifiedRequestBody"] = remediationResult.ModifiedRequestBody;
+                                    }
+                                }
                             
                                 string responseContent = await result.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
 
