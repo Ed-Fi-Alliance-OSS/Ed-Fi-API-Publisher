@@ -214,14 +214,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                                 remediationResult.ModifiedRequestBody,
                                                 new JsonSerializerOptions { WriteIndented = true });
 
-                                            var message = $"{postItemMessage.ResourceUrl} (source id: {id}): Remediation plan provided a modified request body: {modifiedRequestBodyJson}";
-                                            _logger.Debug(message);
+                                            _logger.Debug("{ResourceUrl} (source id: {Id}): Remediation plan provided a modified request body: {ModifiedRequestBodyJson}",
+                                                postItemMessage.ResourceUrl,
+                                                id,
+                                                modifiedRequestBodyJson);
                                         }
 
                                         ctx["ModifiedRequestBody"] = remediationResult.ModifiedRequestBody;
                                     }
                                 }
-                            
                                 string responseContent = await result.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                                 var message = $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}";
