@@ -117,7 +117,9 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
 
         }
 
-        _logger.Information($"{message.ResourceUrl}: Total count = {totalCount}");
+        _logger.Information("{ResourceUrl}: Total count = {TotalCount}",
+            message.ResourceUrl,
+            totalCount);
 
         // Flag the last page for special "continuation" processing
         if (pageMessages.Any())
