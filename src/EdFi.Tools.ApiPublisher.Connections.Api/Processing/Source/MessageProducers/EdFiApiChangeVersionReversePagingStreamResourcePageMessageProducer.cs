@@ -16,7 +16,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProdu
 public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer : IStreamResourcePageMessageProducer
 {
     private readonly ISourceTotalCountProvider _sourceTotalCountProvider;
-    private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer));
+    private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer));
 
     public EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer(ISourceTotalCountProvider sourceTotalCountProvider)
     {
