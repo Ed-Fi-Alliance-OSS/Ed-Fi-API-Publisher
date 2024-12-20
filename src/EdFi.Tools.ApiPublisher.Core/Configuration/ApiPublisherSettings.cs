@@ -98,5 +98,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public int RateLimitMaxRetries { get; set; } = 5;
 
         public bool UseReversePaging { get; set; } = false;
+
+        public string LastChangeVersionProcessedNamespace { get; set; }
     }
 }
