@@ -52,6 +52,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly PublishErrorsBlocksFactory _publishErrorsBlocksFactory;
         private readonly IIndex<PublishingStage, IPublishingStageInitiator> _publishingStageInitiatorByStage;
         private readonly IFinalizationActivity[] _finalizationActivities;
+        private string _lcvpTargetName;
 
         public ChangeProcessor(
             IResourceDependencyProvider resourceDependencyProvider,
@@ -113,13 +114,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     && !string.IsNullOrWhiteSpace(_targetConnectionDetails.Name))
                     || options.UseChangeVersionPaging)
                 {
+                    _lcvpTargetName = _targetConnectionDetails.Name;
+                    if (!string.IsNullOrEmpty(options.LastChangeVersionProcessedNamespace))
+                    {
+                        _lcvpTargetName = $"{options.LastChangeVersionProcessedNamespace}:{_targetConnectionDetails.Name}";
+                    }
                     changeWindow = await EstablishChangeWindowAsync().ConfigureAwait(false);
                 }
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
                 {
-                    _logger.Information($"Last change version processed of '{GetLastChangeVersionProcessed()}' for target '{_targetConnectionDetails.Name}' indicates that all available changes have already been published.");
+                    _logger.Information($"Last change version processed of '{GetLastChangeVersionProcessed()}' for target '{_lcvpTargetName}' indicates that all available changes have already been published.");
                     return;
                 }
 
@@ -230,12 +236,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 else if (GetLastChangeVersionProcessed() != changeWindow.MaxChangeVersion)
                 {
                     _logger.Information(
-                        $"Updating last processed change version from '{GetLastChangeVersionProcessed()}' to '{changeWindow.MaxChangeVersion}' for target connection '{sinkDetails.Name}'.");
+                        $"Updating last processed change version from '{GetLastChangeVersionProcessed()}' to '{changeWindow.MaxChangeVersion}' for target connection '{_lcvpTargetName}'.");
 
                     // Record the successful completion of the change window
                     await _changeVersionProcessedWriter.SetProcessedChangeVersionAsync(
                         sourceDetails.Name,
-                        sinkDetails.Name,
+                        _lcvpTargetName,
                         changeWindow.MaxChangeVersion,
                         configurationStoreSection)
                         .ConfigureAwait(false);
@@ -616,7 +622,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             // Fall back to using the pre-configured change version
             return _sourceConnectionDetails
                 .LastChangeVersionProcessedByTargetName
-                .GetValueOrDefault(_targetConnectionDetails.Name);
+                .GetValueOrDefault(_lcvpTargetName);
         }
 
         private TaskStatus[] ProcessUpsertsToCompletion(

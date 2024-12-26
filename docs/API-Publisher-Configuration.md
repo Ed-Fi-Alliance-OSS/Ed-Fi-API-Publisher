@@ -31,6 +31,7 @@ Defines general behavior of the Ed-Fi API Publisher.
 | Options:RateLimitTimeSeconds<br/>`--rateLimitTimeSeconds`                                                 | Indicates the  the time span for the rate limit in seconds.<br/>(_Default value: 1_) |
 | Options:RateLimitMaxRetries<br/>`--rateLimitMaxRetries`                                                   | Indicates the number of times the Ed-Fi API publisher will attempt to _resend_ a request, rejected by rate limiting, to the source or destination APIs before determining that the failure is permanent.<br/>(_Default value: 10_) |
 | Options:useReversePaging<br/>`--useReversePaging`                                                         | Indicates whether or not to use reverse paging mode. For more information about this feature read [here](Reverse-Paging.md).<br/>(_Default value: false_) |
+| Options:LastChangeVersionProcessedNamespace<br />`--lastChangeVersionProcessedNamespace`                  | Indicates the namespace for change version tracking.  If provided, this string will be prepended to the target name when reading and writing the lastChangeVersionsProcessed named connection parameter. |
 
 ## API Connections
 
