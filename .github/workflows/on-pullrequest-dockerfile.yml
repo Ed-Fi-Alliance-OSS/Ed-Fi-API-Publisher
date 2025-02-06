@@ -48,7 +48,7 @@ jobs:
         run: |
             FEED="9f7770ac-66d9-4fbc-b81e-b5ad79002b62"
             PACKAGE="2d9cb68f-2115-4791-a207-c6ae35d71e8d"
-  
+
             VERSIONS=$(curl https://feeds.dev.azure.com/ed-fi-alliance/$FEED/_apis/Packaging/Feeds/EdFi/Packages/$PACKAGE)
             LATEST=$(echo $VERSIONS | jq '.versions[] | select(.isLatest == true) | .version')
             echo "latest version: $LATEST"
@@ -61,7 +61,7 @@ jobs:
           failure-threshold: error
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_HUB_TOKEN }}
@@ -86,6 +86,6 @@ jobs:
       - name: Upload SARIF result
         id: upload-sarif
         if: ${{ github.event_name != 'pull_request_target' }}
-        uses: github/codeql-action/upload-sarif@cf7e9f23492505046de9a37830c3711dd0f25bb3 #codeql-bundle-v2.16.2
+        uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 #codeql-bundle-v3.28.0
         with:
           sarif_file: sarif-${{ matrix.dockerfile.name }}.output.json
