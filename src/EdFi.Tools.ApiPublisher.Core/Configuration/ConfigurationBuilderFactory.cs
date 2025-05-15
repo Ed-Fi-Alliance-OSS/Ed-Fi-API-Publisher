@@ -3,9 +3,9 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 
 namespace EdFi.Tools.ApiPublisher.Core.Configuration
 {
@@ -30,6 +30,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
                     // Source API connection configuration
                     ["--sourceUrl"] = "Connections:Source:Url",
+                    ["--sourceAuthUrl"] = "Connections:Source:AuthUrl",
                     ["--sourceKey"] = "Connections:Source:Key",
                     ["--sourceSecret"] = "Connections:Source:Secret",
                     ["--sourceScope"] = "Connections:Source:Scope",
@@ -45,6 +46,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
                     // Target API connection configuration
                     ["--targetUrl"] = "Connections:Target:Url",
+                    ["--targetAuthUrl"] = "Connections:Target:AuthUrl",
                     ["--targetKey"] = "Connections:Target:Key",
                     ["--targetSecret"] = "Connections:Target:Secret",
                     ["--targetScope"] = "Connections:Target:Scope",

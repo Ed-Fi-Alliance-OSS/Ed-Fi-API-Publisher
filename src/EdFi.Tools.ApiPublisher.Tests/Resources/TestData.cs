@@ -22,6 +22,41 @@ namespace EdFi.Tools.ApiPublisher.Tests.Resources
 
                 return sr.ReadToEnd();
             }
+
+            public static string V62_GraphML()
+            {
+                using var stream = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("EdFi.Tools.ApiPublisher.Tests.Resources.v6.1-Dependencies-GraphML.xml");
+
+                using var sr = new StreamReader(stream);
+
+                return sr.ReadToEnd();
+            }
+
+            public static string V62_Json()
+            {
+                using var stream = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("EdFi.Tools.ApiPublisher.Tests.Resources.v6.1-Dependencies-Json.json");
+
+                using var sr = new StreamReader(stream);
+
+                return sr.ReadToEnd();
+            }
         }
+
+
+        public static string EdFiLandingPage_v61
+        {
+            get
+            {
+                using var stream = Assembly.GetExecutingAssembly()
+                            .GetManifestResourceStream("EdFi.Tools.ApiPublisher.Tests.Resources.v6.1-Version.json");
+
+                using var sr = new StreamReader(stream);
+
+                return sr.ReadToEnd();
+            }
+        }
+
     }
 }

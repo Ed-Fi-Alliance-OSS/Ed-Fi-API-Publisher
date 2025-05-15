@@ -3,6 +3,12 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Text.RegularExpressions;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using EdFi.Tools.ApiPublisher.Tests.Resources;
@@ -12,21 +18,22 @@ using FakeItEasy.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Text;
-using System.Text.RegularExpressions;
 
 namespace EdFi.Tools.ApiPublisher.Tests
 {
     public static class MockRequests
     {
         public const string SourceApiBaseUrl = "https://test.source";
+        public const string SourceAuthenticateServiceUrl = "https://test.source.auth.provider.url";
+
         public const string TargetApiBaseUrl = "https://test.target";
 
         public const string DataManagementPath = "/data/v3";
+
+        public const string OdsApiToken = "TheAccessToken";
+        public const string AuthServiceToken = "AuthServiceAccessToken";
+
+
 
         public static readonly string SchoolYearSpecificDataManagementPath = $"/data/v3/{SchoolYear}";
         public const int SchoolYear = 2099;
@@ -266,6 +273,34 @@ namespace EdFi.Tools.ApiPublisher.Tests
             return fakeRequestHandler;
         }
 
+        public static IFakeHttpRequestHandler ApiVersionMetadataUrls(
+            this IFakeHttpRequestHandler fakeRequestHandler,
+            string apiVersion,
+            string edfiVersion,
+            Dictionary<string, string> urls
+            )
+        {
+            A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(
+                    FakeResponse.OK(
+                        new
+                        {
+                            version = apiVersion,
+                            dataModels = new[]
+                            {
+                                new
+                                {
+                                    name = "Ed-Fi",
+                                    version = edfiVersion
+                                }
+                            },
+                            urls = JObject.FromObject(urls)
+                        }));
+
+            return fakeRequestHandler;
+        }
+
+
         public static IFakeHttpRequestHandler OAuthToken(this IFakeHttpRequestHandler fakeRequestHandler)
         {
             A.CallTo(() => fakeRequestHandler.Post($"{fakeRequestHandler.BaseUrl}/oauth/token", A<HttpRequestMessage>.Ignored))
@@ -273,12 +308,28 @@ namespace EdFi.Tools.ApiPublisher.Tests
                     FakeResponse.OK(
                         new
                         {
-                            access_token = "TheAccessToken",
+                            access_token = OdsApiToken,
                             // scope = "255901"
                         }));
 
             return fakeRequestHandler;
         }
+
+        public static IFakeHttpRequestHandler SeparateAuthServiceToken(this IFakeHttpRequestHandler fakeRequestHandler)
+        {
+            A.CallTo(() => fakeRequestHandler.Post($"{SourceAuthenticateServiceUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(
+                    FakeResponse.OK(
+                        new
+                        {
+                            access_token = AuthServiceToken,
+                            // scope = "255901"
+                        }));
+
+
+            return fakeRequestHandler;
+        }
+
 
         public static IFakeHttpRequestHandler Snapshots(this IFakeHttpRequestHandler fakeRequestHandler, Snapshot[] data)
         {

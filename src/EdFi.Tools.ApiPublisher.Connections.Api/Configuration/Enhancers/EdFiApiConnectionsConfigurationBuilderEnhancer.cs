@@ -105,6 +105,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
                     namedApiConnectionDetails.Url);
 
                 yield return new KeyValuePair<string, string>(
+                    $"Connections:{connectionRole}:AuthUrl",
+                    namedApiConnectionDetails.AuthUrl);
+
+                yield return new KeyValuePair<string, string>(
                     $"Connections:{connectionRole}:Key",
                     namedApiConnectionDetails.Key);
 

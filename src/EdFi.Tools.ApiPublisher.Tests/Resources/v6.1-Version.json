@@ -1,0 +1,28 @@
+{
+    "version": "6.1",
+    "informationalVersion": "6.1",
+    "suite": "3",
+    "build": "6.1.901.0",
+    "apiMode": "Year Specific",
+    "dataModels": [
+        {
+            "name": "Ed-Fi",
+            "version": "4.0.0",
+            "informationalVersion": "The Ed-Fi Data Model 4.0"
+        },
+        {
+            "name": "TPDM",
+            "version": "1.1.0",
+            "informationalVersion": "TPDM-Core"
+        }
+    ],
+    "urls": {
+        "dependencies": "https://localhost/v6.1/WebApi/metadata/data/v3/2025/dependencies",
+        "openApiMetadata": "https://localhost/v6.1/WebApi/metadata/2025",
+        "oauth": "https://localhost/v6.1/WebApi/oauth/token",
+        "dataManagementApi": "https://localhost/v6.1/WebApi/data/v3/2025",
+        "xsdMetadata": "https://localhost/v6.1/WebApi/metadata/2025/xsd",
+        "changeQueries": "https://localhost/v6.1/WebApi/changeQueries/v1/2025",
+        "composites": "https://localhost/v6.1/WebApi/composites/v1/2025"
+    }
+}

@@ -3,13 +3,12 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System.Linq;
+using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using Newtonsoft.Json.Linq;
 using Serilog;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Core.Versioning;
@@ -83,8 +82,8 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
         }
         else
         {
-            throw new NotSupportedException("The Ed-Fi API Publisher is not compatible with Ed-Fi ODS API versions prior to v3.1.");
-            // Consider: _logger.Warning("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
+            // throw new NotSupportedException("The Ed-Fi API Publisher is not compatible with Ed-Fi ODS API versions prior to v3.1.");
+            _logger.Warning("Unable to verify Ed-Fi Standard versions between the source and target API since data model version information isn't available for one or both of the APIs.");
         }
 
         string GetEdFiStandardVersion(JObject jObject)

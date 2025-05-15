@@ -9,6 +9,7 @@
     <PackageReference Include="FluentAssertions" Version="6.12.1" />
     <PackageReference Include="Jering.Javascript.NodeJS" Version="7.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="NUnit" Version="4.2.2" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
     <PackageReference Include="Serilog.Sinks.TestCorrelator" Version="4.0.0" />
@@ -25,6 +26,9 @@
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Resources\v6.1-Dependencies-Json.json" />
+    <EmbeddedResource Include="Resources\v6.1-Version.json" />
+    <EmbeddedResource Include="Resources\v6.1-Dependencies-GraphML.xml" />
     <EmbeddedResource Include="Resources\Dependencies-GraphML-v5.2.xml" />
   </ItemGroup>
 </Project>
