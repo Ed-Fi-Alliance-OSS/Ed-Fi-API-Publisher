@@ -23,7 +23,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Resources
                 return sr.ReadToEnd();
             }
 
-            public static string V62_GraphML()
+            public static string V61_GraphML()
             {
                 using var stream = Assembly.GetExecutingAssembly()
                     .GetManifestResourceStream("EdFi.Tools.ApiPublisher.Tests.Resources.v6.1-Dependencies-GraphML.xml");
@@ -33,7 +33,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Resources
                 return sr.ReadToEnd();
             }
 
-            public static string V62_Json()
+            public static string V61_Json()
             {
                 using var stream = Assembly.GetExecutingAssembly()
                     .GetManifestResourceStream("EdFi.Tools.ApiPublisher.Tests.Resources.v6.1-Dependencies-Json.json");

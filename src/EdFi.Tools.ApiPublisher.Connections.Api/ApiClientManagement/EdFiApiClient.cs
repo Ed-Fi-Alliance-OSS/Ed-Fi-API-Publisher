@@ -143,7 +143,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     key[..3]
                 );
 
-            var authRequest = new HttpRequestMessage(HttpMethod.Post, isOdsApiAuth ? "oauth/token" : "");
+            var authRequest = new HttpRequestMessage(HttpMethod.Post, isOdsApiAuth ? "oauth/token" : string.Empty);
             string encodedKeyAndSecret = Base64Encode($"{key}:{secret}");
 
             string bodyContent =

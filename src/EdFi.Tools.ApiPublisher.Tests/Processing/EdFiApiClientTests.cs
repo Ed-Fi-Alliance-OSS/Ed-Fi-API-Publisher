@@ -16,7 +16,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
 
         [Test]
-        public void TokenRequequest_ShouldAuthenticateWithAPIBaseUrl()
+        public void TokenRequest_ShouldAuthenticateWithAPIBaseUrl()
         {
             // Arrange
             // No Auth Url
