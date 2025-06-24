@@ -3,6 +3,11 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System.Collections.Concurrent;
+using System.Net;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks.Dataflow;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
@@ -19,15 +24,8 @@ using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 using Polly.RateLimit;
-using Polly.RateLimiting;
-using Polly.Retry;
 using Serilog;
 using Serilog.Events;
-using System.Collections.Concurrent;
-using System.Net;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks.Dataflow;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks

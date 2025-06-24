@@ -17,7 +17,7 @@ public class EdFiApiVersionMetadataProviderBase
 
     private readonly ILogger _logger;
 
-    protected EdFiApiVersionMetadataProviderBase(string role, IEdFiApiClientProvider edFiApiClientProvider)
+    public EdFiApiVersionMetadataProviderBase(string role, IEdFiApiClientProvider edFiApiClientProvider)
     {
         _role = role;
         _edFiApiClientProvider = edFiApiClientProvider;
