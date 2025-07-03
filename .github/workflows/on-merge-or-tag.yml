@@ -21,11 +21,13 @@ jobs:
   create-pre-releases:
     name: Create Pre-Releases
     # Was not successful filtering out alpha in on.push.tags, so try filtering at the job level
-    if: "! contains(github.ref_name, 'alpha')"
+    if: ${{ ! contains(github.ref_name, 'alpha') }}
     runs-on: ubuntu-latest
     defaults:
       run:
         shell: pwsh
+    permissions:
+      contents: write
     steps:
       - name: Checkout the Repo
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
@@ -52,7 +54,7 @@ jobs:
           $tag = $version -replace "v","Pre-Release-v"
 
           $body = @{
-            tag_name = "$tag"
+            tag_name = $tag
             target_commitish = "main"
             name = $version
             body = ""
@@ -64,6 +66,16 @@ jobs:
           $headers = @{
             Accept = "application/vnd.github+json"
             Authorization = "Bearer ${{ env.TOKEN }}"
+            "X-GitHub-Api-Version" = "2022-11-28"
           }
 
-          Invoke-RestMethod -Method POST -Uri ${{ env.API_URL }}/releases -Body $body -Headers $headers
+          try {
+            $response = Invoke-RestMethod -Method POST -Uri "${{ env.API_URL }}/releases" -Body $body -Headers $headers -ContentType "application/json"
+            Write-Host "Release created successfully: $($response.html_url)"
+          }
+          catch {
+            Write-Host "Error creating release: $($_.Exception.Message)"
+            Write-Host "Status Code: $($_.Exception.Response.StatusCode)"
+            Write-Host "Response: $($_.Exception.Response)"
+            throw
+          }
