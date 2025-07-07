@@ -5,7 +5,7 @@
 
 
 # tag sdk:8.0 alpine
-FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine3.20@sha256:07cb8622ca6c4d7600b42b2eccba968dff4b37d41b43a9bf4bd800aa02fab117 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine3.22@sha256:071ec6075f01f91ceaef8f1eaed5d43873635d46441f99221473c456f37f8c20 AS build
 WORKDIR /source
 
 COPY ./.editorconfig .editorconfig
@@ -37,7 +37,7 @@ RUN dotnet publish -c Release -o /app/EdFi.Tools.ApiPiblisher.Cli --no-build --n
 
 
 # Tag aspnet:8.0 alpine
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.20@sha256:b5b7dec8006fe016cc864f618cf60eab24fb7d7a28c8ecf4f6b90ceeaa5cf9f2
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.22@sha256:46be98e65c56f07528fd70dcd0e684b9fe762f4c7256402fcabb8daf45076ddf
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
 # Alpine image does not contain Globalization Cultures library so we need to install ICU library to get fopr LINQ expression to work

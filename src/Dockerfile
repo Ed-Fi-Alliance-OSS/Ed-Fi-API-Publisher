@@ -4,7 +4,7 @@
 # See the LICENSE and NOTICES files in the project root for more information.
 
 # Tag aspnet:8.0-alpine3.20
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.20@sha256:b5b7dec8006fe016cc864f618cf60eab24fb7d7a28c8ecf4f6b90ceeaa5cf9f2
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.22@sha256:46be98e65c56f07528fd70dcd0e684b9fe762f4c7256402fcabb8daf45076ddf
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
 ARG VERSION="1.2.1"
@@ -24,9 +24,8 @@ COPY ./Docker/run.sh /app/run.sh
 # Security packages are pinned to exact versions to prevent automatic minor upgrades
 # that could introduce breaking changes. Update manually when security patches are available:
 # - openssl: Currently pinned to 3.3.3-r0 (latest as of Alpine 3.20)
-# - musl: Pinned to 1.2.5-r1 to address CVE-2025-26519
 RUN apk update && \
-    apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 gettext=~0 openssl=3.3.3-r0 postgresql16-client=~16 icu=~74 curl=~8 musl=1.2.5-r1 && \
+    apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 gettext=~0 openssl=3.3.3-r0 postgresql16-client=~16 icu=~74 curl=~8 && \
     wget -nv -O /app/ApiPublisher.zip https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.ApiPublisher/versions/${VERSION}/content && \
     unzip /app/ApiPublisher.zip 'EdFi.ApiPublisher/**' -d /app/ && \
     mv /app/EdFi.ApiPublisher/* /app/ && \
