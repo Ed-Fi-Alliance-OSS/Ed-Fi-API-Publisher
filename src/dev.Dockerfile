@@ -58,6 +58,7 @@ COPY ./Docker/run.sh /app/run.sh
 # - openssl: Currently pinned to 3.3.3-r0 (latest as of Alpine 3.20)
 # - musl: Pinned to 1.2.5-r1 to address CVE-2025-26519
 RUN apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 openssl=3.3.3-r0 gettext=~0 icu=~74 curl=~8 musl=1.2.5-r1 && \
+RUN apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 openssl gettext=~0 icu curl=~8 && \
     dos2unix /app/*.json && \
     dos2unix /app/*.sh && \
     chmod 700 /app/*.sh -- ** && \
