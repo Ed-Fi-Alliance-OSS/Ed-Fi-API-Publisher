@@ -35,6 +35,7 @@ jobs:
 
           $page = 1
           $release_list = @()
+          $tagsToDelete = @()
 
           Do {
 
@@ -49,11 +50,28 @@ jobs:
             $release_list | ForEach-Object {
                 if ($_.tag_name -like "Pre-Release-*" -and $_.prerelease) {
                     "Deleting pre-release $($_.tag_name)" | Write-Output
+                    # Store tag name for later deletion
+                    $tagsToDelete += $_.tag_name
+                    # Delete the release
                     Invoke-RestMethod -Method Delete -Uri $_.url -Headers $gh_headers
                 }
             }
 
             $page += 1
           } While ($release_list.count -gt 0)
+
+          # Delete the git tags for the pre-releases
+          $tagsToDelete | ForEach-Object {
+              $tagName = $_
+              "Deleting git tag $tagName" | Write-Output
+              $tagUrl = "https://api.github.com/repos/$repo/git/refs/tags/$tagName"
+              try {
+                  Invoke-RestMethod -Method Delete -Uri $tagUrl -Headers $gh_headers
+                  "Successfully deleted tag $tagName" | Write-Output
+              }
+              catch {
+                  "Warning: Could not delete tag $tagName - $_" | Write-Output
+              }
+          }
 
  # Manually doing promote packages to release on azure artifacts
