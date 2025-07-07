@@ -26,6 +26,7 @@ COPY ./Docker/run.sh /app/run.sh
 # - openssl: Currently pinned to 3.3.3-r0 (latest as of Alpine 3.20)
 RUN apk update && \
     apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 gettext=~0 openssl postgresql16-client=~16 icu curl=~8 && \
+    apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 gettext=~0 openssl postgresql16-client=~16 icu=76.1-r0 curl=~8 && \
     wget -nv -O /app/ApiPublisher.zip https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.ApiPublisher/versions/${VERSION}/content && \
     unzip /app/ApiPublisher.zip 'EdFi.ApiPublisher/**' -d /app/ && \
     mv /app/EdFi.ApiPublisher/* /app/ && \
