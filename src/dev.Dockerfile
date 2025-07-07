@@ -53,9 +53,6 @@ COPY ./Docker/logging.template.json /app/logging.template.json
 COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnections.template.json
 COPY ./Docker/run.sh /app/run.sh
 
-# Security packages are pinned to exact versions to prevent automatic minor upgrades
-# that could introduce breaking changes. Update manually when security patches are available:
-# - openssl: Currently pinned to 3.3.3-r0 (latest as of Alpine 3.20)
 RUN apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 openssl=3.5.1-r0 gettext=~0 icu=76.1-r0 curl=~8 && \
     dos2unix /app/*.json && \
     dos2unix /app/*.sh && \
