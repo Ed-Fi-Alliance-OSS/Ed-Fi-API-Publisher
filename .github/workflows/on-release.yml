@@ -70,7 +70,7 @@ jobs:
                   "Successfully deleted tag $tagName" | Write-Output
               }
               catch {
-                  "Warning: Could not delete tag $tagName - $_" | Write-Output
+                  "Warning: Could not delete tag $tagName - $($_.Exception.Message)" | Write-Output
               }
           }
 
