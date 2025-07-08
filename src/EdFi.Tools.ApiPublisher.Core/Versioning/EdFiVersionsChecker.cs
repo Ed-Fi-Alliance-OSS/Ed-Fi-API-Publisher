@@ -30,7 +30,7 @@ public class EdFiVersionsChecker : IEdFiVersionsChecker
 
     public async Task CheckApiVersionsAsync(ChangeProcessorConfiguration configuration)
     {
-        _logger.Debug($"Loading source and target API version information...");
+        _logger.Debug($"Loading source and target API version information... DO NOT MERGE THIS CHANGE");
 
         var sourceVersionTask = _sourceEdFiApiVersionMetadataProvider.GetVersionMetadata();
         var targetVersionTask = _targetEdFiApiVersionMetadataProvider.GetVersionMetadata();
