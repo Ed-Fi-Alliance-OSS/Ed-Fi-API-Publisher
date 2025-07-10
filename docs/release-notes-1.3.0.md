@@ -95,5 +95,3 @@ No new known issues have been introduced in this release. For existing known iss
 For support with the API Publisher, please use [Ed-Fi Support](https://support.ed-fi.org/) to open a support case and/or feature request.
 
 ---
-
-*Release Date: July 8, 2025*
