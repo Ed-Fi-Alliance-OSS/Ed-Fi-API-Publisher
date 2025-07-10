@@ -92,6 +92,6 @@ No new known issues have been introduced in this release. For existing known iss
 
 ## Support
 
-For support with the API Publisher, please use [Ed-Fi Support](https://support.ed-fi.org/) to open a support case and/or feature request.
+For support with the API Publisher, please use [Ed-Fi Community Hub](https://community.ed-fi.org/) to open a support case and/or feature request.
 
 ---
