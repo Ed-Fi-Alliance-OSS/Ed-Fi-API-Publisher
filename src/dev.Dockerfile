@@ -53,7 +53,7 @@ COPY ./Docker/logging.template.json /app/logging.template.json
 COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnections.template.json
 COPY ./Docker/run.sh /app/run.sh
 
-RUN apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 openssl=3.5.1-r0 gettext=~0 icu=76.1-r0 curl=~8 && \
+RUN apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 openssl=3.5.1-r0 gettext=~0 icu=76.1-r1 curl=~8 && \
     dos2unix /app/*.json && \
     dos2unix /app/*.sh && \
     chmod 700 /app/*.sh -- ** && \
