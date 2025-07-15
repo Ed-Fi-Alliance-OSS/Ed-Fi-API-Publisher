@@ -8,8 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Autofac.Extensions.DependencyInjection" Version="10.0.0" />
-    <PackageReference Include="AWSSDK.CloudWatchLogs" Version="4.0.5.1" />
-    <PackageReference Include="AWSSDK.Core" Version="4.0.0.14" />
+    <PackageReference Include="AWSSDK.CloudWatchLogs" Version="4.0.5.2" />
+    <PackageReference Include="AWSSDK.Core" Version="4.0.0.15" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.AwsCloudWatch" Version="4.4.42" />
