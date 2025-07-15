@@ -164,7 +164,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 var retryPolicy = Policy.Handle<Exception>()
                     .OrResult<HttpResponseMessage>(
                         r =>
-                            // Descriptor Conflicts are not to be retried
+                            // Descriptor Conflicts are not to be retried 
                             (r.StatusCode == HttpStatusCode.Conflict
                                 && !postItemMessage.ResourceUrl.EndsWith("Descriptors", StringComparison.OrdinalIgnoreCase))
                             || r.StatusCode.IsPotentiallyTransientFailure()
@@ -443,10 +443,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
             bool IsBadRequestForUnresolvedReferenceOfPrimaryRelationship(HttpResponseMessage postItemResponse, PostItemMessage msg)
             {
-                // If response is a Bad Request, check for need to explicitly fetch dependencies
+                // If response is a Bad Request, check for need to explicitly fetch dependencies  
                 if (postItemResponse.StatusCode == HttpStatusCode.BadRequest
-                    // If resource is a "primary relationship" configured in authorization failure handling
-                    && missingDependencyByResourcePath.TryGetValue(msg.ResourceUrl, out string missingDependencyResourcePath))
+                    // If resource is a "primary relationship" configured in authorization failure handling  
+                    && missingDependencyByResourcePath.ContainsKey(msg.ResourceUrl))
                 {
                     string responseMessageText = GetResponseMessageText(postItemResponse);
 
@@ -482,17 +482,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
             async Task<(bool success, MissingDependencyDetails)> TryGetMissingDependencyDetailsAsync(HttpResponseMessage postItemResponse, PostItemMessage msg)
             {
-                // If response is a Bad Request (which is the API's error response for missing Staff/Student/Parent), check for need to explicitly fetch dependencies
-                // NOTE: If support is expanded for other missing dependencies, the response code from the API (currently) will be a 409 Conflict status.
+                // If response is a Bad Request (which is the API's error response for missing Staff/Student/Parent), check for need to explicitly fetch dependencies  
+                // NOTE: If support is expanded for other missing dependencies, the response code from the API (currently) will be a 409 Conflict status.  
                 if (postItemResponse.StatusCode == HttpStatusCode.BadRequest
-                    // If resource is a "primary relationship" configured in authorization failure handling
-                    && missingDependencyByResourcePath.TryGetValue(msg.ResourceUrl, out string missingDependencyResourcePath))
+                    // If resource is a "primary relationship" configured in authorization failure handling  
+                    && missingDependencyByResourcePath.ContainsKey(msg.ResourceUrl))
                 {
                     string responseMessageText = await GetResponseMessageTextAsync(postItemResponse);
 
                     if (responseMessageText?.Contains("reference could not be resolved.") == true)
                     {
-                        // Infer reference name from message. This is a bit fragile, but no other choice here.
+                        // Infer reference name from message. This is a bit fragile, but no other choice here.  
                         var referenceNameMatch = Regex.Match(
                             responseMessageText,
                             @"(?<ReferencedResourceName>\w+) reference could not be resolved.");
@@ -502,7 +502,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             string referencedResourceName = referenceNameMatch.Groups["ReferencedResourceName"].Value;
                             string referenceName = referencedResourceName.ToCamelCase() + "Reference";
 
-                            // Get the missing reference's source URL
+                            // Get the missing reference's source URL  
                             string dependencyItemUrl = msg.Item.SelectToken($"{referenceName}.link.href")?.Value<string>();
 
                             if (dependencyItemUrl == null)
@@ -512,7 +512,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 return (false, null);
                             }
 
-                            // URL is expected to be of the format of 
+                            // URL is expected to be of the format of   
                             var parts = dependencyItemUrl.Split('/');
 
                             if (parts.Length < 3)
