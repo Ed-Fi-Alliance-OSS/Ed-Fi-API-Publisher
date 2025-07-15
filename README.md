@@ -37,13 +37,13 @@ The API Publisher has three options to use the product.  The API Publisher requi
 
 #### Option 1 - From binaries
 
- 1. Download the latest published API Publisher package here:  [Ed-Fi API Publisher v1.2.1](https://dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_artifacts/feed/EdFi/NuGet/EdFi.ApiPublisher/overview/1.2.1).  Visit the page and click download.
- 2. This will download a NuGet package to your computer.  Rename this file, `EdFi.ApiPublisher.1.2.1.nupkg`, to include .zip extension: `EdFi.ApiPublisher.1.2.1.zip`.
+ 1. Download the latest published API Publisher package here:  [Ed-Fi API Publisher v1.3.0](https://dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_artifacts/feed/EdFi/NuGet/EdFi.ApiPublisher/overview/1.3.0.  Visit the page and click download.
+ 2. This will download a NuGet package to your computer.  Rename this file, `EdFi.ApiPublisher.1.3.0.nupkg`, to include .zip extension: `EdFi.ApiPublisher.1.3.0.zip`.
  3. The binary mentioned below is in the `EdFi.ApiPublisher.Win64` folder, as `EdFiApiPublisher.exe`.
 
 #### Option 2 - From Docker images
 
-The Docker image for the Ed-Fi API Publisher is available here: [Ed-Fi API Publisher tag v1.2.1 on Docker Hub](https://hub.docker.com/r/edfialliance/ods-api-publisher/tags).  Use this to include in your Docker environment and alongside other components of the Ed-Fi stack.
+The Docker image for the Ed-Fi API Publisher is available here: [Ed-Fi API Publisher tag v1.3.0 on Docker Hub](https://hub.docker.com/r/edfialliance/ods-api-publisher/tags).  Use this to include in your Docker environment and alongside other components of the Ed-Fi stack.
 
 #### Option 3 - Build the API Publisher from source code
 
