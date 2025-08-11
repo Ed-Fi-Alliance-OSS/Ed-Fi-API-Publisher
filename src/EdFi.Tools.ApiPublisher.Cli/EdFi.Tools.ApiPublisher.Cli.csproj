@@ -8,8 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Autofac.Extensions.DependencyInjection" Version="10.0.0" />
-    <PackageReference Include="AWSSDK.CloudWatchLogs" Version="4.0.5.1" />
-    <PackageReference Include="AWSSDK.Core" Version="4.0.0.14" />
+    <PackageReference Include="AWSSDK.CloudWatchLogs" Version="4.0.7.3" />
+    <PackageReference Include="AWSSDK.Core" Version="4.0.0.21" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.AwsCloudWatch" Version="4.4.42" />
@@ -44,6 +44,11 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.2.1" />
+    <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="4.0.2.7" />
+  <PackageReference Include="Azure.Identity" Version="1.14.2" />
+  <PackageReference Include="Polly" Version="8.6.2" />
+  <PackageReference Include="Polly.RateLimiting" Version="8.6.2" />
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.Aws\EdFi.Tools.ApiPublisher.ConfigurationStore.Aws.csproj" />
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext\EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext.csproj" />
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql\EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql.csproj" />

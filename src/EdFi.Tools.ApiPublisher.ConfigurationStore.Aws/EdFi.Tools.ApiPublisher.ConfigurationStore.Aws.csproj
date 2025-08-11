@@ -5,12 +5,15 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Amazon.Extensions.Configuration.SystemsManager" Version="7.0.0" />
-    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.0" />
-    <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="4.0.0" />
+    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.2.1" />
+    <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="4.0.2.7" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.7" />
     <PackageReference Include="System.Text.Json" Version="9.0.7" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="AWSSDK.Core" Version="4.0.0.21" />
+    <PackageReference Include="Polly" Version="8.6.2" />
+  <PackageReference Include="Polly.RateLimiting" Version="8.6.2" />
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj" />
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj" />
   </ItemGroup>
