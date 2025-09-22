@@ -18,7 +18,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="System.Text.Json" Version="9.0.7" />
+    <PackageReference Include="System.Text.Json" Version="9.0.9" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj" />
