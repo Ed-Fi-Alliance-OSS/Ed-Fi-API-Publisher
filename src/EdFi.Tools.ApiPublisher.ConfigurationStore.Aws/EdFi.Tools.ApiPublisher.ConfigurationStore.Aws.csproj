@@ -11,6 +11,7 @@
     <PackageReference Include="System.Text.Json" Version="9.0.7" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="AWSSDK.Core" Version="4.0.3.3" />
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj" />
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj" />
   </ItemGroup>
