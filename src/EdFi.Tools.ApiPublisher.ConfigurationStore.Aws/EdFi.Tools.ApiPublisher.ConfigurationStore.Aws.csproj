@@ -4,11 +4,11 @@
     <LangVersion>10</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Amazon.Extensions.Configuration.SystemsManager" Version="7.0.0" />
-    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.0" />
-    <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="4.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.7" />
-    <PackageReference Include="System.Text.Json" Version="9.0.7" />
+    <PackageReference Include="Amazon.Extensions.Configuration.SystemsManager" Version="7.0.1" />
+    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.3.20" />
+    <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="4.0.6.10" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.12" />
+    <PackageReference Include="System.Text.Json" Version="9.0.12" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj" />
