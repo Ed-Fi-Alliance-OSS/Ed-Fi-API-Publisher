@@ -74,7 +74,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         public (ITargetBlock<PostItemMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
-            var knownUnremediatedRequests = new HashSet<(string resourceUrl, HttpStatusCode statusCode)>();
+            var knownUnremediatedRequests = new ConcurrentDictionary<(string resourceUrl, HttpStatusCode statusCode), byte>();
 
             var options = createBlocksRequest.Options;
 
@@ -120,7 +120,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             Options options,
             Func<string> javaScriptModuleFactory,
             EdFiApiClient targetEdFiApiClient,
-            HashSet<(string resourceUrl, HttpStatusCode statusCode)> knownUnremediatedRequests,
+            ConcurrentDictionary<(string resourceUrl, HttpStatusCode statusCode), byte> knownUnremediatedRequests,
             Dictionary<string, string> missingDependencyByResourcePath)
         {
             if (ignoredResourceByUrl.ContainsKey(postItemMessage.ResourceUrl))
@@ -197,7 +197,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                                     if (!remediationResult.FoundRemediation)
                                     {
-                                        knownUnremediatedRequests.Add((postItemMessage.ResourceUrl, result.Result.StatusCode));
+                                        knownUnremediatedRequests.TryAdd((postItemMessage.ResourceUrl, result.Result.StatusCode), 0);
 
                                         return;
                                     }
@@ -461,7 +461,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
             bool MayHaveRemediation(string resourceUrl, HttpStatusCode statusCode)
             {
-                return !knownUnremediatedRequests.Contains((resourceUrl, statusCode));
+                return !knownUnremediatedRequests.ContainsKey((resourceUrl, statusCode));
             }
 
             async Task<string> GetResponseMessageTextAsync(HttpResponseMessage response)
