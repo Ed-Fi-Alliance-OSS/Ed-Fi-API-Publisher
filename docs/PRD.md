@@ -21,13 +21,15 @@ The publisher is subject to all authorization rules enforced by the Ed-Fi API on
 
 ### Deployment Drivers
 
-Three primary operational patterns drive the product:
+Two primary operational patterns drive the product:
 
-| Pattern     | Description                                                                     |
-|-------------|---------------------------------------------------------------------------------|
-| **Pull**    | Deployed alongside a central (target) API; pulls from multiple source APIs.    |
-| **Push**    | Deployed alongside source APIs; pushes data to a central target.               |
-| **Publish** | Deployed alongside a single source; fans out data to multiple target APIs.     |
+| Pattern     | Description                                                                 |
+| ----------- | --------------------------------------------------------------------------- |
+| **Pull**    | Deployed alongside a central (target) API; pulls from multiple source APIs. |
+| **Push**    | Deployed alongside source APIs; pushes data to a central target.            |
+
+A third operational pattern is to publish to multiple targets from a single source. This requires separate application runs with the same source and different targets; there is no capability to read once and publish to multiple sources in a single run.
+
 
 ## 1.3. User Personas
 
@@ -49,7 +51,7 @@ Three primary operational patterns drive the product:
 - May extend the publisher with custom configuration store or error publisher implementations.
 - Pain points: unresolvable reference errors, partial data transfer, descriptor synchronization.
 
-## 1.4. Jobs to Be Done
+### 1.4. Jobs to Be Done
 
 #### JTBD 1: Full Data Replication on First Sync
 
@@ -107,6 +109,14 @@ When deploying in a container environment, I want to configure all settings via 
 
 **How API Publisher Helps**: The publisher accepts all configuration through environment variables (using the `EdFi__Publisher__` prefix on Linux) and supports `.env` file loading, with configuration precedence: CLI arguments > environment variables > `publisherSettings.json`. The official Docker image is available on Docker Hub and ready for orchestration platforms.
 
+#### JTBD 8: Read Once, Publish to Multiple Targets
+
+**Personas**: Data Integration Developer, Ed-Fi Technical Administrator
+
+When I have a single source API and multiple target APIs, I want to run the publisher once per target without re-reading from the source each time, so that I can efficiently replicate data to multiple destinations.
+
+**How API Publisher Helps**: The publisher supports writing JSON records to an intermediate Sqlite database instead of a target API, allowing a single read from the source API and multiple subsequent runs to publish to different targets from the same intermediate data store.
+
 ## 2. Enterprise Architecture
 
 ```mermaid
@@ -156,7 +166,7 @@ The publisher has no persistent HTTP service; it is invoked as a one-shot CLI pr
 - **FR-PUB-8:** The publisher SHALL update `lastChangeVersionsProcessed` in the Configuration Store after a successful incremental publishing run.
 - **FR-PUB-9:** The publisher SHALL support year-specific ODS deployments via `--sourceSchoolYear` and `--targetSchoolYear` parameters.
 - **FR-PUB-10:** The publisher SHALL support EducationOrganization scoped access tokens via `--sourceScope` and `--targetScope`.
-- **FR-PUB-11:** The publisher SHALL support API Profiles via `--sourceProfileName` and `--targetProfileName`; both parameters MUST be provided together.
+- **FR-PUB-11:** The publisher SHALL support API Profiles via `--sourceProfileName` and `--targetProfileName`. If `--sourceProfileName` is specified, `--targetProfileName` MUST also be specified to prevent accidental data loss on POST. The two profile names may differ; the source profile is applied as a readable content type on GET requests and the target profile as a writable content type on POST/PUT requests.
 
 ### FR-CHANGES: Change Query and Version Paging
 
@@ -212,6 +222,7 @@ The publisher has no persistent HTTP service; it is invoked as a one-shot CLI pr
 - **NFR-COMPAT-1:** The publisher SHALL require source and target ODS/API instances to be the same Ed-Fi version.
 - **NFR-COMPAT-2:** The publisher SHALL target .NET 8.0.
 - **NFR-COMPAT-3:** The publisher SHALL support deployment on Windows (x64 native binary) and Linux (via Docker).
+- **NFR-COMPAT-4:** The publisher SHOULD support reading from or writing to a Sqlite database as an alternative to an Ed-Fi API, for testing or non-API data movement scenarios.
 
 ### NFR-PERF: Performance
 
@@ -235,17 +246,17 @@ The publisher has no persistent HTTP service; it is invoked as a one-shot CLI pr
 
 ### Components
 
-| Component                                      | Role |
-|------------------------------------------------|------|
-| `EdFi.Tools.ApiPublisher.Cli`                  | CLI entry point; parses arguments, wires up DI, initiates publishing. |
-| `EdFi.Tools.ApiPublisher.Core`                 | Core publishing engine, pagination, retry, authorization failure handling, remediations, logging. |
-| `EdFi.Tools.ApiPublisher.Connections.Api`      | HTTP client logic for communicating with Ed-Fi ODS/API REST endpoints. |
-| `EdFi.Tools.ApiPublisher.Connections.Sqlite`   | SQLite-backed connection store _(inferred from project name)_. |
-| `EdFi.Tools.ApiPublisher.ConfigurationStore.Aws`       | AWS Parameter Store configuration provider. |
-| `EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext` | Plain-text configuration provider (development only). |
-| `EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql`| PostgreSQL configuration provider with `pgcrypto` encryption. |
-| `EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer` | SQL Server configuration provider with AES-256 encryption. |
-| `EdFi.Tools.ApiPublisher.Tests`                | Integration/unit test suite. |
+| Component                                               | Role                                                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `EdFi.Tools.ApiPublisher.Cli`                           | CLI entry point; parses arguments, wires up DI, initiates publishing.                             |
+| `EdFi.Tools.ApiPublisher.Core`                          | Core publishing engine, pagination, retry, authorization failure handling, remediations, logging. |
+| `EdFi.Tools.ApiPublisher.Connections.Api`               | HTTP client logic for communicating with Ed-Fi ODS/API REST endpoints.                            |
+| `EdFi.Tools.ApiPublisher.Connections.Sqlite`            | Alternative logic using Sqlite as data source or target                                           |
+| `EdFi.Tools.ApiPublisher.ConfigurationStore.Aws`        | AWS Parameter Store configuration provider.                                                       |
+| `EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext`  | Plain-text configuration provider (development only).                                             |
+| `EdFi.Tools.ApiPublisher.ConfigurationStore.PostgreSql` | PostgreSQL configuration provider with `pgcrypto` encryption.                                     |
+| `EdFi.Tools.ApiPublisher.ConfigurationStore.SqlServer`  | SQL Server configuration provider with AES-256 encryption.                                        |
+| `EdFi.Tools.ApiPublisher.Tests`                         | Integration/unit test suite.                                                                      |
 
 ### Runtime Targets
 
@@ -263,12 +274,12 @@ The publisher does not own any persistent data storage. The Configuration Store 
 
 ### Current Limitations
 
-| Limitation | Detail | Resolution Status |
-|------------|--------|-------------------|
-| Delete publishing (ODS 5.1–5.3) | The ODS/API change deletes endpoint only returns resource IDs, which are not portable between ODS instances. Deletes cannot be replicated. | Resolved in ODS 5.3-cqe and 6.1. |
-| Primary key change publishing (ODS 5.1–5.3) | Key changes are not fully tracked; stale copies of resources with old key values remain in the target. | Resolved in ODS 5.3-cqe and 6.1. |
-| Descriptor delete publishing | Internal ODS implementation details prevent descriptor deletions from being published. | No current timeline. |
-| Cross-version publishing | Source and target must be the same Ed-Fi version. Cross-version migration is out of scope. | By design. |
+| Limitation                                  | Detail                                                                                                                                     | Resolution Status                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| Delete publishing (ODS 5.1–5.3)             | The ODS/API change deletes endpoint only returns resource IDs, which are not portable between ODS instances. Deletes cannot be replicated. | Resolved in ODS 5.3-cqe and 6.1. |
+| Primary key change publishing (ODS 5.1–5.3) | Key changes are not fully tracked; stale copies of resources with old key values remain in the target.                                     | Resolved in ODS 5.3-cqe and 6.1. |
+| Descriptor delete publishing                | Internal ODS implementation details prevent descriptor deletions from being published.                                                     | No current timeline.             |
+| Cross-version publishing                    | Source and target must be the same Ed-Fi version. Cross-version migration is out of scope.                                                 | By design.                       |
 
 ### Explicit Exclusions
 
@@ -280,15 +291,15 @@ The publisher does not own any persistent data storage. The Configuration Store 
 
 ## 10. Glossary
 
-| Term | Definition |
-|------|------------|
-| **Change Query / Change Queries** | An Ed-Fi ODS/API feature that exposes a change log enabling API clients to retrieve only records modified since a given change version. |
-| **Change Version** | A monotonically increasing integer maintained by the ODS/API that identifies the point-in-time of a given data change. |
-| **Claim Set** | A named set of resource permissions assigned to an API client in the Ed-Fi ODS security model. |
-| **Configuration Store** | A persistence layer (SQL Server, PostgreSQL, AWS Parameter Store, or plain text) used to store named API connection details and publishing state. |
-| **Descriptor** | A controlled-vocabulary reference value in the Ed-Fi data model (e.g., GradeLevelDescriptor). |
-| **Ed-Fi ODS/API** | The Ed-Fi Operational Data Store and API, the primary data platform in the Ed-Fi ecosystem. |
-| **lastChangeVersionsProcessed** | The change version of the most recently successfully published item from a source, stored per source/target connection pair to enable incremental sync. |
-| **Named Connection** | A pre-configured, named API connection stored in the Configuration Store, referenced by name at runtime instead of providing credentials inline. |
-| **Remediation Script** | A user-provided JavaScript module that handles specific failed POST requests against the target API by supplying modified or additional requests. |
-| **Snapshot Isolation** | A mechanism in the Ed-Fi ODS where a static copy of the database is made available to API clients, ensuring consistent reads during publishing. |
+| Term                              | Definition                                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Change Query / Change Queries** | An Ed-Fi ODS/API feature that exposes a change log enabling API clients to retrieve only records modified since a given change version.                 |
+| **Change Version**                | A monotonically increasing integer maintained by the ODS/API that identifies the point-in-time of a given data change.                                  |
+| **Claim Set**                     | A named set of resource permissions assigned to an API client in the Ed-Fi ODS security model.                                                          |
+| **Configuration Store**           | A persistence layer (SQL Server, PostgreSQL, AWS Parameter Store, or plain text) used to store named API connection details and publishing state.       |
+| **Descriptor**                    | A controlled-vocabulary reference value in the Ed-Fi data model (e.g., GradeLevelDescriptor).                                                           |
+| **Ed-Fi ODS/API**                 | The Ed-Fi Operational Data Store and API, the primary data platform in the Ed-Fi ecosystem.                                                             |
+| **lastChangeVersionsProcessed**   | The change version of the most recently successfully published item from a source, stored per source/target connection pair to enable incremental sync. |
+| **Named Connection**              | A pre-configured, named API connection stored in the Configuration Store, referenced by name at runtime instead of providing credentials inline.        |
+| **Remediation Script**            | A user-provided JavaScript module that handles specific failed POST requests against the target API by supplying modified or additional requests.       |
+| **Snapshot Isolation**            | A mechanism in the Ed-Fi ODS where a static copy of the database is made available to API clients, ensuring consistent reads during publishing.         |
