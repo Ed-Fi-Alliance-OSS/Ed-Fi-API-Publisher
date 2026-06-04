@@ -23,10 +23,10 @@ The publisher is subject to all authorization rules enforced by the Ed-Fi API on
 
 Two primary operational patterns drive the product:
 
-| Pattern     | Description                                                                 |
-| ----------- | --------------------------------------------------------------------------- |
-| **Pull**    | Deployed alongside a central (target) API; pulls from multiple source APIs. |
-| **Push**    | Deployed alongside source APIs; pushes data to a central target.            |
+| Pattern  | Description                                                                 |
+| -------- | --------------------------------------------------------------------------- |
+| **Pull** | Deployed alongside a central (target) API; pulls from multiple source APIs. |
+| **Push** | Deployed alongside source APIs; pushes data to a central target.            |
 
 A third operational pattern is to publish to multiple targets from a single source. This requires separate application runs with the same source and different targets; there is no capability to read once and publish to multiple sources in a single run.
 
@@ -274,12 +274,12 @@ The publisher does not own any persistent data storage. The Configuration Store 
 
 ### Current Limitations
 
-| Limitation                                  | Detail                                                                                                                                     | Resolution Status                |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
-| Delete publishing (ODS 5.1–5.3)             | The ODS/API change deletes endpoint only returns resource IDs, which are not portable between ODS instances. Deletes cannot be replicated. | Resolved in ODS 5.3-cqe and 6.1. |
-| Primary key change publishing (ODS 5.1–5.3) | Key changes are not fully tracked; stale copies of resources with old key values remain in the target.                                     | Resolved in ODS 5.3-cqe and 6.1. |
-| Descriptor delete publishing                | Internal ODS implementation details prevent descriptor deletions from being published.                                                     | No current timeline.             |
-| Cross-version publishing                    | Source and target must be the same Ed-Fi version. Cross-version migration is out of scope.                                                 | By design.                       |
+| Limitation                                  | Detail                                                                                                             | Resolution Status                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| Support for ODS/API < 6                     | Due to limitations in the Change Queries implementations, only ODS/API versions 6.0 and above are fully supported. | Final                            |
+| Primary key change publishing (ODS 5.1–5.3) | Key changes are not fully tracked; stale copies of resources with old key values remain in the target.             | Resolved in ODS 5.3-cqe and 6.1. |
+| Descriptor delete publishing                | Internal ODS implementation details prevent descriptor deletions from being published.                             | No current timeline.             |
+| Cross-version publishing                    | Source and target must be the same Ed-Fi version. Cross-version migration is out of scope.                         | By design.                       |
 
 ### Explicit Exclusions
 
