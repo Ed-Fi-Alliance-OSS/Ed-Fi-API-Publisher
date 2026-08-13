@@ -32,6 +32,7 @@ Defines general behavior of the Ed-Fi API Publisher.
 | Options:RateLimitMaxRetries<br/>`--rateLimitMaxRetries`                                                   | Indicates the number of times the Ed-Fi API publisher will attempt to _resend_ a request, rejected by rate limiting, to the source or destination APIs before determining that the failure is permanent.<br/>(_Default value: 10_) |
 | Options:useReversePaging<br/>`--useReversePaging`                                                         | Indicates whether or not to use reverse paging mode. For more information about this feature read [here](Reverse-Paging.md).<br/>(_Default value: false_) |
 | Options:LastChangeVersionProcessedNamespace<br />`--lastChangeVersionProcessedNamespace`                  | Indicates the namespace for change version tracking.  If provided, this string will be prepended to the target name when reading and writing the lastChangeVersionsProcessed named connection parameter. |
+| Options:ProcessDeletesAndKeyChangesOnFullPublish<br/>`--processDeletesAndKeyChangesOnFullPublish`         | When `true`, performs delete and key change processing even when the change window starts at version 1 or below (full publish). By default, these operations are skipped in full publish scenarios because it is assumed the target is empty.<br/>(_Default value: false_) |
 
 ## API Connections
 
@@ -73,6 +74,8 @@ Ed-Fi API Publisher will only process key changes and deletions if  specific Cha
 `--lastChangeVersionProcessed` value and set the `--useChangeVersionPaging` flag to true.
 Another option, if you want to keep the `--useChangeVersionPaging` false is defining a name for the source and target, using the
 `--sourceName` and `--targetName` values. More information about all these values [below](API-Publisher-Configuration.md#api-connections).
+
+When performing a full publish (change window starting at version 1 or below), delete and key change processing are skipped by default. Use `--processDeletesAndKeyChangesOnFullPublish=true` if you need these operations to run during a full publish.
 
 ## Authorization Failure Handling
 
