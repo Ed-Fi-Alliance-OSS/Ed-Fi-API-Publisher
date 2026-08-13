@@ -100,5 +100,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public bool UseReversePaging { get; set; } = false;
 
         public string LastChangeVersionProcessedNamespace { get; set; }
+
+        public bool ProcessDeletesAndKeyChangesOnFullPublish { get; set; } = false;
     }
 }

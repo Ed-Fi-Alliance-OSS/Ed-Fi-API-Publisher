@@ -679,7 +679,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 return Array.Empty<TaskStatus>();
             }
 
-            if (changeWindow.MinChangeVersion <= 1)
+            if (changeWindow.MinChangeVersion <= 1 && !options.ProcessDeletesAndKeyChangesOnFullPublish)
             {
                 _logger.Information($"Change window starting value indicates all values are being published, and so there is no need to perform delete processing.");
                 return Array.Empty<TaskStatus>();
@@ -752,7 +752,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 return Array.Empty<TaskStatus>();
             }
 
-            if (changeWindow.MinChangeVersion <= 1)
+            if (changeWindow.MinChangeVersion <= 1 && !options.ProcessDeletesAndKeyChangesOnFullPublish)
             {
                 _logger.Information($"Change window starting value indicates all values are being published, and so there is no need to perform key change processing.");
                 return Array.Empty<TaskStatus>();

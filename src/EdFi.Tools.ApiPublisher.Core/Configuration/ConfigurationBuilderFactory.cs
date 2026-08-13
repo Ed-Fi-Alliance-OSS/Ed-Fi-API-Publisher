@@ -80,7 +80,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--rateLimitMaxRetries"] = "Options:RateLimitMaxRetries",
                     ["--useReversePaging"] = "Options:UseReversePaging",
                     ["--lastChangeVersionProcessedNamespace"] = "Options:LastChangeVersionProcessedNamespace",
-
+                    ["--processDeletesAndKeyChangesOnFullPublish"] = "Options:ProcessDeletesAndKeyChangesOnFullPublish",
 
                     // Resource selection (comma delimited paths - e.g. "/ed-fi/students,/ed-fi/studentSchoolAssociations")
                     ["--include"] = "Connections:Source:Include",
