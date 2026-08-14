@@ -16,6 +16,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -109,7 +110,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         targetEdFiApiClient,
                         knownUnremediatedRequests,
                         missingDependencyByResourcePath),
-                new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem });
+                new ExecutionDataflowBlockOptions
+                {
+                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                    // Bound the input buffer so a slow target exerts backpressure on source page streaming
+                    // instead of buffering parsed source items in memory without limit (see APIPUB-112).
+                    // Retry pipelines receive their items via a synchronous Post that would silently drop
+                    // declined messages, so they remain unbounded.
+                    BoundedCapacity = createBlocksRequest.IsRetryPipeline
+                        ? DataflowBlockOptions.Unbounded
+                        : options.ResolvedProcessingBlockBoundedCapacity,
+                });
 
             return (postResourceBlock, postResourceBlock);
         }
@@ -285,7 +297,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                         if (missingDependencyItemRetrieved)
                         {
-                            var missingItem = JObject.Parse(missingItemJson!);
+                            var missingItem = JObject.Parse(missingItemJson!, JsonHelpers.NoLineInfoLoadSettings);
 
                             var postDependencyItemMessage = new PostItemMessage
                             {
@@ -429,7 +441,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 try
                 {
                     string content = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-                    var responseMessageToken = JObject.Parse(content);
+                    var responseMessageToken = JObject.Parse(content, JsonHelpers.NoLineInfoLoadSettings);
 
                     // If the failure message is related to a missing reference ("reference cannot be resolve")
                     return responseMessageToken["message"]?.Value<string>();
@@ -468,7 +480,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             {
                 try
                 {
-                    var responseMessageToken = JObject.Parse(await response.Content.ReadAsStringAsync());
+                    var responseMessageToken = JObject.Parse(await response.Content.ReadAsStringAsync(), JsonHelpers.NoLineInfoLoadSettings);
 
                     // If the failure message is related to a missing reference ("reference cannot be resolve")
                     return responseMessageToken["message"]?.Value<string>();
@@ -578,7 +590,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
         public IEnumerable<PostItemMessage> CreateProcessDataMessages(StreamResourcePageMessage<PostItemMessage> message, string json)
         {
-            JArray items = JArray.Parse(json);
+            JArray items = JArray.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
 
             // Iterate through the page of items
             foreach (var item in items.OfType<JObject>())

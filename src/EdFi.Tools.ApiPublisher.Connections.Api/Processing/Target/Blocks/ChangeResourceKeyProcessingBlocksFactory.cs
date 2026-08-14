@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -167,7 +168,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 message.ResourceUrl, sourceId, apiResponse.StatusCode);
                         }
 
-                        var getByKeyResults = JArray.Parse(responseContent);
+                        var getByKeyResults = JArray.Parse(responseContent, JsonHelpers.NoLineInfoLoadSettings);
 
                         // If the item whose key is to be changed cannot be found...
                         if (getByKeyResults.Count == 0)
@@ -250,7 +251,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
                 }, new ExecutionDataflowBlockOptions
                 {
-                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                    // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                    BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity
                 });
 
             return getItemForKeyChangeBlock;
@@ -384,7 +388,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
             }, new ExecutionDataflowBlockOptions
             {
-                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity
             });
 
             return changeKey;
@@ -395,7 +402,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                 try
                 {
-                    body = JObject.Parse(json);
+                    body = JObject.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
                 }
                 catch
                 {
@@ -414,7 +421,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 yield break;
             }
 
-            JArray items = JArray.Parse(json);
+            JArray items = JArray.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
 
             // Iterate through the page of items
             foreach (var item in items.OfType<JObject>())

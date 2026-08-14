@@ -91,6 +91,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 MaxDegreeOfParallelismForResourceProcessing = 2,
                 MaxDegreeOfParallelismForPostResourceItem = 1,
                 MaxDegreeOfParallelismForStreamResourcePages = 1,
+                ProcessingBlockBoundedCapacity = 0, // automatic (see APIPUB-112)
                 WhatIf = false,
             };
         }
