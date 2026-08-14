@@ -149,7 +149,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             };
 
                             // Publish the failure
-                            errorHandlingBlock.Post(error);
+                            await errorHandlingBlock.SendAsync(error).ConfigureAwait(false);
 
                             // No key changes to process
                             return Enumerable.Empty<ChangeKeyMessage>();
@@ -350,7 +350,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             Method = HttpMethod.Put.ToString(),
                             ResourceUrl = msg.ResourceUrl,
                             Id = id,
-                            Body = ParseToJObjectOrDefault(msg.Body),
+                            Body = ToValidatedJsonRawOrDefault(msg.Body),
                             ResponseStatus = apiResponse.StatusCode,
                             ResponseContent = responseContent
                         };
@@ -396,13 +396,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
             return changeKey;
 
-            JObject ParseToJObjectOrDefault(string json)
+            // Validates the JSON and returns it wrapped as a JRaw (retaining only the string,
+            // not a parsed token graph -- see APIPUB-112), or null if the JSON is unparseable.
+            JRaw ToValidatedJsonRawOrDefault(string json)
             {
-                JObject body = null;
+                JRaw body = null;
 
                 try
                 {
-                    body = JObject.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
+                    JObject.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
+
+                    body = new JRaw(json);
                 }
                 catch
                 {

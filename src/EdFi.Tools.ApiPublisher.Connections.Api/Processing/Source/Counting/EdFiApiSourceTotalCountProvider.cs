@@ -167,15 +167,15 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                     totalCountHeaderValue
                 );
 
-                errorHandlingBlock.Post(
-                    new ErrorItemMessage
-                    {
-                        ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
-                        Method = HttpMethod.Get.ToString(),
-                        ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = $"Total-Count: {totalCountHeaderValue}",
-                    }
-                );
+                await errorHandlingBlock.SendAsync(
+                        new ErrorItemMessage
+                        {
+                            ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
+                            Method = HttpMethod.Get.ToString(),
+                            ResponseStatus = apiResponse.StatusCode,
+                            ResponseContent = $"Total-Count: {totalCountHeaderValue}",
+                        })
+                    .ConfigureAwait(false);
 
                 // Allow processing to continue without performing additional work on this resource.
                 return (false, 0);
@@ -215,15 +215,15 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         _logger.Error(message);
 
         // Publish an error for the resource to allow processing to continue, but to force failure.
-        errorHandlingBlock.Post(
-            new ErrorItemMessage
-            {
-                ResourceUrl =
-                    $"{_sourceEdFiApiClientProvider.GetApiClient().DataManagementApiSegment}{resourceUrl}",
-                Method = HttpMethod.Get.ToString(),
-                ResponseStatus = apiResponse.StatusCode,
-                ResponseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false),
-            }
-        );
+        await errorHandlingBlock.SendAsync(
+                new ErrorItemMessage
+                {
+                    ResourceUrl =
+                        $"{_sourceEdFiApiClientProvider.GetApiClient().DataManagementApiSegment}{resourceUrl}",
+                    Method = HttpMethod.Get.ToString(),
+                    ResponseStatus = apiResponse.StatusCode,
+                    ResponseContent = responseContent,
+                })
+            .ConfigureAwait(false);
     }
 }

@@ -25,8 +25,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 #nullable enable
         public string? Id { get; set; }
 
+        /// <summary>
+        /// The JSON body of the failed request. Producers should assign a compact <see cref="JRaw" />
+        /// (serialized once at error creation) rather than a live <see cref="JObject" /> so that errors
+        /// queued for publishing do not retain full parsed token graphs in memory (see APIPUB-112).
+        /// </summary>
         //[JsonIgnore]
-        public JObject? Body { get; set; }
+        public JToken? Body { get; set; }
 
         public HttpStatusCode? ResponseStatus { get; set; }
 

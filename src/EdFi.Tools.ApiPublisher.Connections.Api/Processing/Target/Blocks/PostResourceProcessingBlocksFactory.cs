@@ -382,13 +382,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     message = $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{apiResponse.StatusCode}':{Environment.NewLine}{responseContent}";
                     _logger.Error(message);
 
-                    // Publish the failed data
+                    // Publish the failed data (serialized compactly so the queued error doesn't retain the parsed JObject graph)
                     var error = new ErrorItemMessage
                     {
                         Method = HttpMethod.Post.ToString(),
                         ResourceUrl = postItemMessage.ResourceUrl,
                         Id = id,
-                        Body = postItemMessage.Item,
+                        Body = new JRaw(postItemMessage.Item.ToString(Newtonsoft.Json.Formatting.None)),
                         ResponseStatus = apiResponse.StatusCode,
                         ResponseContent = responseContent
                     };
