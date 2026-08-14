@@ -13,6 +13,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public class PublishErrorsBlocksFactory
     {
+        // Maximum number of already-formed error batches allowed to queue for publication before the
+        // (bounded) ingestion block starts postponing new errors.
+        private const int MaxQueuedErrorBatches = 4;
+
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(PublishErrorsBlocksFactory));
         private IErrorPublisher _errorPublisher;
 
@@ -23,15 +27,26 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
         public ValueTuple<ITargetBlock<ErrorItemMessage>, ActionBlock<ErrorItemMessage[]>> CreateBlocks(Options options)
         {
-            var publishErrorsIngestionBlock = new BatchBlock<ErrorItemMessage>(options.ErrorPublishingBatchSize);
-            var publishErrorsCompletionBlock = CreatePublishErrorsBlock(_errorPublisher);
+            // Bound the error path so errors produced faster than they can be published (e.g. a sustained
+            // authorization-failure storm) exert backpressure on the pipeline instead of queueing without
+            // limit (see APIPUB-112). Producers must use SendAsync (never Post) so a full ingestion block
+            // delays them rather than silently dropping the error; linked processing blocks postpone offers.
+            var publishErrorsIngestionBlock = new BatchBlock<ErrorItemMessage>(
+                options.ErrorPublishingBatchSize,
+                new GroupingDataflowBlockOptions { BoundedCapacity = options.ResolvedErrorPublishingBoundedCapacity });
+
+            var publishErrorsCompletionBlock = CreatePublishErrorsBlock(
+                _errorPublisher,
+                boundedCapacity: options.ResolvedErrorPublishingBoundedCapacity == -1
+                    ? DataflowBlockOptions.Unbounded
+                    : MaxQueuedErrorBatches);
 
             publishErrorsIngestionBlock.LinkTo(publishErrorsCompletionBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
             return (publishErrorsIngestionBlock, publishErrorsCompletionBlock);
         }
 
-        private ActionBlock<ErrorItemMessage[]> CreatePublishErrorsBlock(IErrorPublisher errorPublisher)
+        private ActionBlock<ErrorItemMessage[]> CreatePublishErrorsBlock(IErrorPublisher errorPublisher, int boundedCapacity)
         {
             return new ActionBlock<ErrorItemMessage[]>(async errors =>
             {
@@ -46,7 +61,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                     throw;
                 }
-            });
+            },
+            new ExecutionDataflowBlockOptions { BoundedCapacity = boundedCapacity });
         }
     }
 }

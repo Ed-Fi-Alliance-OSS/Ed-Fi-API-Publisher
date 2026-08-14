@@ -134,7 +134,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         };
 
                         // Publish the failure
-                        errorHandlingBlock.Post(error);
+                        await errorHandlingBlock.SendAsync(error).ConfigureAwait(false);
 
                         _logger.Error("{ResourceUrl}: GET page items failed with response status '{StatusCode}'.",
                             message.ResourceUrl, apiResponse.StatusCode);
@@ -169,7 +169,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         };
 
                         // Publish the failure
-                        errorHandlingBlock.Post(error);
+                        await errorHandlingBlock.SendAsync(error).ConfigureAwait(false);
 
                         var logMessage = $"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}";
                         _logger.Error(ex, logMessage);
@@ -241,7 +241,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             };
 
             // Publish the failure
-            errorHandlingBlock.Post(error);
+            await errorHandlingBlock.SendAsync(error).ConfigureAwait(false);
 
             return Array.Empty<TProcessDataMessage>();
         }

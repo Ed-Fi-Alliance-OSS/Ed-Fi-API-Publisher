@@ -123,6 +123,19 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     2 * MaxDegreeOfParallelismForStreamResourcePages,
                     ResolvedProcessingBlockBoundedCapacity / Math.Max(1, StreamingPageSize));
 
+        /// <summary>
+        /// Gets the effective bounded capacity for the error publishing ingestion block. Errors awaiting
+        /// publication would otherwise queue without limit when they are produced faster than they can be
+        /// published (e.g. during a sustained authorization-failure storm -- see APIPUB-112). The capacity
+        /// is denominated in error messages and is kept at twice <see cref="ErrorPublishingBatchSize" /> so
+        /// batches can always form. Returns -1 when bounding is disabled via
+        /// <see cref="ProcessingBlockBoundedCapacity" />.
+        /// </summary>
+        public int ResolvedErrorPublishingBoundedCapacity
+            => ProcessingBlockBoundedCapacity == -1
+                ? -1
+                : 2 * Math.Max(1, ErrorPublishingBatchSize);
+
         public int StreamingPagesWaitDurationSeconds { get; set; } = 10;
 
         public int StreamingPageSize { get; set; } = 75;
