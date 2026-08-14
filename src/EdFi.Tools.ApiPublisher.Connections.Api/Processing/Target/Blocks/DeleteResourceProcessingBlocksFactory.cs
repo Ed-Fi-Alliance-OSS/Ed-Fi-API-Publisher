@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -161,7 +162,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             _logger.Debug("{ResourceUrl} (source id: {Id}): GET by key returned {StatusCode}", msg.ResourceUrl, id, apiResponse.StatusCode);
                         }
 
-                        var getByKeyResults = JArray.Parse(responseContent);
+                        var getByKeyResults = JArray.Parse(responseContent, JsonHelpers.NoLineInfoLoadSettings);
 
                         // If the item to be deleted cannot be found...
                         if (getByKeyResults.Count == 0)
@@ -206,7 +207,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
                 }, new ExecutionDataflowBlockOptions
                 {
-                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                    // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                    BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity
                 });
 
             return getItemForDeletionBlock;
@@ -343,7 +347,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
             }, new ExecutionDataflowBlockOptions
             {
-                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity
             });
 
             return deleteResourceBlock;
@@ -351,7 +358,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
         public IEnumerable<GetItemForDeletionMessage> CreateProcessDataMessages(StreamResourcePageMessage<GetItemForDeletionMessage> message, string json)
         {
-            JArray items = JArray.Parse(json);
+            JArray items = JArray.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
 
             // Iterate through the page of items
             foreach (var item in items.OfType<JObject>())

@@ -26,7 +26,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
         public TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> CreateBlock<TProcessDataMessage>(
             Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            bool applyBoundedCapacity = true)
         {
             var streamResourcePagesBlock =
                 new TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage>(
@@ -49,7 +50,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     },
                     new ExecutionDataflowBlockOptions
                     {
-                        MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForStreamResourcePages
+                        MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForStreamResourcePages,
+
+                        // Without a bound, this block's output buffer absorbs every page of source items the
+                        // moment it is fetched, growing without limit whenever the target is slower than the
+                        // source (see APIPUB-112). The bound is denominated in page messages: it gates how many
+                        // pages may be accepted (and therefore fetched), since each accepted page expands into
+                        // a full page of items regardless of how full the block's output buffer already is.
+                        BoundedCapacity = applyBoundedCapacity
+                            ? options.ResolvedStreamResourcePagesBlockBoundedCapacity
+                            : DataflowBlockOptions.Unbounded,
                     });
 
             return streamResourcePagesBlock;

@@ -180,7 +180,8 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     if (!options.UseReversePaging)
                     {
                         // Perform limit/offset final page check (for need for possible continuation)
-                        if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
+                        // (Item count is derived without re-parsing the page into a JToken graph -- see APIPUB-112)
+                        if (message.IsFinalPage && JsonHelpers.CountTopLevelArrayItems(responseContent) == limit)
                         {
                             if (_logger.IsEnabled(LogEventLevel.Debug))
                             {

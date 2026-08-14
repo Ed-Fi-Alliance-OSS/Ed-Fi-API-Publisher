@@ -69,6 +69,60 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
         public int MaxDegreeOfParallelismForStreamResourcePages { get; set; } = 5;
 
+        private int _processingBlockBoundedCapacity;
+
+        /// <summary>
+        /// Caps the number of items that each resource-processing Dataflow block will buffer so that a slow
+        /// target exerts backpressure on source page streaming, rather than buffering source items in memory
+        /// without limit (see APIPUB-112). A value of 0 (the default) derives the capacity automatically from
+        /// <see cref="StreamingPageSize" /> and <see cref="MaxDegreeOfParallelismForPostResourceItem" />;
+        /// -1 disables the bound entirely (restoring the pre-APIPUB-112 behavior).
+        /// </summary>
+        public int ProcessingBlockBoundedCapacity
+        {
+            get => _processingBlockBoundedCapacity;
+            set
+            {
+                if (value < -1)
+                {
+                    _logger.Warning($"Attempted processing block bounded capacity of '{value}' is invalid. Setting has been adjusted to '0' (automatic).");
+                    _processingBlockBoundedCapacity = 0;
+
+                    return;
+                }
+
+                _processingBlockBoundedCapacity = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets the effective bounded capacity to apply to resource-processing Dataflow blocks. Returns -1
+        /// (equivalent to <c>DataflowBlockOptions.Unbounded</c>) when bounding has been explicitly disabled.
+        /// An explicit capacity is never allowed below <see cref="MaxDegreeOfParallelismForPostResourceItem" />
+        /// so that item-level parallelism cannot be starved by the bound.
+        /// </summary>
+        public int ResolvedProcessingBlockBoundedCapacity
+            => ProcessingBlockBoundedCapacity switch
+            {
+                -1 => -1,
+                0 => Math.Max(StreamingPageSize, 4 * MaxDegreeOfParallelismForPostResourceItem),
+                _ => Math.Max(ProcessingBlockBoundedCapacity, MaxDegreeOfParallelismForPostResourceItem),
+            };
+
+        /// <summary>
+        /// Gets the effective bounded capacity for the block that fetches pages of source items. This capacity
+        /// is denominated in page messages rather than items: a TransformManyBlock's bound only gates the
+        /// acceptance of new inputs, and every accepted page message still expands into a full page of items,
+        /// so the item-denominated <see cref="ResolvedProcessingBlockBoundedCapacity" /> would allow that many
+        /// whole pages of items to materialize. Returns -1 when bounding is disabled.
+        /// </summary>
+        public int ResolvedStreamResourcePagesBlockBoundedCapacity
+            => ProcessingBlockBoundedCapacity == -1
+                ? -1
+                : Math.Max(
+                    2 * MaxDegreeOfParallelismForStreamResourcePages,
+                    ResolvedProcessingBlockBoundedCapacity / Math.Max(1, StreamingPageSize));
+
         public int StreamingPagesWaitDurationSeconds { get; set; } = 10;
 
         public int StreamingPageSize { get; set; } = 75;

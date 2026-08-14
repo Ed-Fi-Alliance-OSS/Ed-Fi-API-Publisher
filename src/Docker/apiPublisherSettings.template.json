@@ -8,6 +8,7 @@
     "maxDegreeOfParallelismForStreamResourcePages": $MAX_DEGREE_OF_PARALLELISM_FOR_STREAM_RESOURCE_PAGES,
     "streamingPagesWaitDurationSeconds": $STREAMING_PAGES_WAIT_DURATION_SECONDS,
     "streamingPageSize": $STREAMING_PAGE_SIZE,
+    "processingBlockBoundedCapacity": $PROCESSING_BLOCK_BOUNDED_CAPACITY,
     "includeDescriptors": $INCLUDE_DESCRIPTORS,
     "errorPublishingBatchSize": $ERROR_PUBLISHING_BATCH_SIZE,
     "useChangeVersionPaging": $USE_CHANGE_VERSION_PAGING,
