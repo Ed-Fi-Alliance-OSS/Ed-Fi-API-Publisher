@@ -13,6 +13,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public class PublishErrorsBlocksFactory
     {
+        // Maximum number of already-formed error batches allowed to queue for publication before the
+        // (bounded) ingestion block starts postponing new errors.
+        private const int MaxQueuedErrorBatches = 4;
+
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(PublishErrorsBlocksFactory));
         private IErrorPublisher _errorPublisher;
 
