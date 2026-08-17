@@ -107,11 +107,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                  };
 
             // Assert
-            Assert.DoesNotThrow(() =>
+            Assert.That((Action)(() =>
             {
                 // Act
                 var result = (IDictionary<string, string[]>)method.Invoke(changeProcessor, new object[] { postDependencies, updatableKeys });
-            });
+            }), Throws.Nothing);
 
         }
 
@@ -142,11 +142,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
 
             // Assert
-            Assert.DoesNotThrow(() =>
+            Assert.That((Action)(() =>
             {
                 // Act
                 var result = (IDictionary<string, string[]>)method.Invoke(changeProcessor, new object[] { postDependencies, updatableKeys });
-            });
+            }), Throws.Nothing);
 
         }
 
@@ -189,11 +189,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
 
             // Assert
-            Assert.DoesNotThrow(() =>
+            Assert.That((Action)(() =>
             {
                 // Act
                 var result = (IDictionary<string, string[]>)method.Invoke(changeProcessor, new object[] { postDependencies, updatableKeys });
-            });
+            }), Throws.Nothing);
 
         }
     }

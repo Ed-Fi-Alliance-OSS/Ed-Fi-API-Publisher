@@ -273,7 +273,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         if (!_sourceCapabilities.SupportsGetItemById)
                         {
                             _logger.Warning("{ResourceUrl}: Reference '{ReferenceName}' to resource '{ReferencedResourceName}' could not be automatically resolved because the source connection does not support retrieving items by id.",
-                                postItemMessage.ResourceUrl, missingDependencyDetails!.ReferenceName, missingDependencyDetails.ReferencedResourceName);
+                                postItemMessage.ResourceUrl, missingDependencyDetails.ReferenceName, missingDependencyDetails.ReferencedResourceName);
 
                             return response;
                         }
@@ -285,7 +285,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                         if (missingDependencyItemRetrieved)
                         {
-                            var missingItem = JObject.Parse(missingItemJson!);
+                            var missingItem = JObject.Parse(missingItemJson);
 
                             var postDependencyItemMessage = new PostItemMessage
                             {
@@ -296,7 +296,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                             await HandlePostItemMessage(
                                 ignoredResourceByUrl,
-                                postDependencyItemMessage!,
+                                postDependencyItemMessage,
                                 options,
                                 javaScriptModuleFactory,
                                 targetEdFiApiClient,
@@ -495,7 +495,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         // Infer reference name from message. This is a bit fragile, but no other choice here.  
                         var referenceNameMatch = Regex.Match(
                             responseMessageText,
-                            @"(?<ReferencedResourceName>\w+) reference could not be resolved.");
+                            @"(?<ReferencedResourceName>\w+) reference could not be resolved.",
+                            RegexOptions.None,
+                            TimeSpan.FromSeconds(1));
 
                         if (referenceNameMatch.Success)
                         {
