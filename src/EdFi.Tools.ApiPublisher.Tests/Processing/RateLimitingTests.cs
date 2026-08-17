@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using Shouldly;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -65,7 +66,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 {
                     tasks.Add(methodToTest.ExecuteAsync());
                 }
-                Assert.ThrowsAsync<Polly.RateLimit.RateLimitRejectedException>(async () => await Task.WhenAll(tasks));
+                Assert.That((Func<Task>)(async () => await Task.WhenAll(tasks)), Throws.TypeOf<Polly.RateLimit.RateLimitRejectedException>());
             }
         }
     }
