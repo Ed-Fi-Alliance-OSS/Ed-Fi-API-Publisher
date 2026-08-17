@@ -31,8 +31,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             // authorization-failure storm) exert backpressure on the pipeline instead of queueing without
             // limit (see APIPUB-112). Producers must use SendAsync (never Post) so a full ingestion block
             // delays them rather than silently dropping the error; linked processing blocks postpone offers.
+            // CLI options validation rejects a batch size below 1; the clamp here only protects library
+            // consumers that bypass that validation, since BatchBlock throws for non-positive batch sizes.
             var publishErrorsIngestionBlock = new BatchBlock<ErrorItemMessage>(
-                options.ErrorPublishingBatchSize,
+                Math.Max(1, options.ErrorPublishingBatchSize),
                 new GroupingDataflowBlockOptions { BoundedCapacity = options.ResolvedErrorPublishingBoundedCapacity });
 
             var publishErrorsCompletionBlock = CreatePublishErrorsBlock(

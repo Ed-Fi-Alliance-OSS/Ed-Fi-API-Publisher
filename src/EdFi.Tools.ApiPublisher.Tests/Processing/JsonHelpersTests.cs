@@ -43,6 +43,22 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             Should.Throw<JsonReaderException>(() => JsonHelpers.CountTopLevelArrayItems(json));
         }
 
+        [TestCase("[] {}")]
+        [TestCase("[1,2] 3")]
+        [TestCase("[]]")]
+        [TestCase("[]garbage")]
+        public void CountTopLevelArrayItems_should_throw_for_trailing_content_after_the_array(string json)
+        {
+            Should.Throw<JsonReaderException>(() => JsonHelpers.CountTopLevelArrayItems(json));
+        }
+
+        [TestCase("[] ", 0)]
+        [TestCase("[1, 2]\r\n", 2)]
+        public void CountTopLevelArrayItems_should_tolerate_trailing_whitespace(string json, int expectedCount)
+        {
+            JsonHelpers.CountTopLevelArrayItems(json).ShouldBe(expectedCount);
+        }
+
         [Test]
         public void CreateProcessDataMessages_should_not_attach_line_info_to_parsed_items()
         {
