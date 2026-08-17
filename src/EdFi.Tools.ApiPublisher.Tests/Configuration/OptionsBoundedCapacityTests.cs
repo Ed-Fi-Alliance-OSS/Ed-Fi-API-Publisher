@@ -108,6 +108,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Configuration
         [Test]
         public void Error_capacity_should_tolerate_a_degenerate_batch_size()
         {
+            // CLI options validation rejects ErrorPublishingBatchSize < 1; this covers the defensive clamp
+            // for library consumers that bypass validation (BatchBlock throws for non-positive batch sizes).
             var options = CreateOptions(0, errorBatchSize: 0);
 
             // 2 x max(1, 0)

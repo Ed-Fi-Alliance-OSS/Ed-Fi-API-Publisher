@@ -26,6 +26,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
     public class Options
     {
+        /// <summary>
+        /// Multiplier applied to <see cref="MaxDegreeOfParallelismForPostResourceItem" /> when deriving the
+        /// automatic processing-block capacity: enough buffered items to keep every POST worker busy through
+        /// several rounds of refills without reintroducing meaningful memory retention (see APIPUB-112).
+        /// </summary>
+        public const int AutoCapacityPostParallelismMultiplier = 4;
+
         private readonly ILogger _logger = Log.Logger;
 
         public int BearerTokenRefreshMinutes { get; set; } = 12;
@@ -92,7 +99,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 < -1 => throw new InvalidOperationException(
                     $"Processing block bounded capacity of '{ProcessingBlockBoundedCapacity}' is invalid. Valid values are -1 (unbounded), 0 (automatic), or a positive capacity."),
                 -1 => -1,
-                0 => Math.Max(StreamingPageSize, 4 * MaxDegreeOfParallelismForPostResourceItem),
+                0 => Math.Max(StreamingPageSize, AutoCapacityPostParallelismMultiplier * MaxDegreeOfParallelismForPostResourceItem),
                 _ => Math.Max(ProcessingBlockBoundedCapacity, MaxDegreeOfParallelismForPostResourceItem),
             };
 
