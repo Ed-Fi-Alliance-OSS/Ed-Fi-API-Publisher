@@ -14,10 +14,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
         /// <summary>
         /// Load settings that skip Newtonsoft's default line-info tracking. Parsed documents that are held in
         /// processing queues otherwise retain several <c>LineInfoAnnotation</c> objects per token subtree, which
-        /// are only ever used for parse-error messages (see APIPUB-112).
+        /// are only ever used for parse-error messages (see APIPUB-112). A fresh instance is returned on each
+        /// access because <see cref="JsonLoadSettings" /> is mutable -- a shared instance could be modified by
+        /// one caller and silently change parsing behavior everywhere.
         /// </summary>
-        public static readonly JsonLoadSettings NoLineInfoLoadSettings =
-            new JsonLoadSettings { LineInfoHandling = LineInfoHandling.Ignore };
+        public static JsonLoadSettings NoLineInfoLoadSettings
+            => new JsonLoadSettings { LineInfoHandling = LineInfoHandling.Ignore };
 
         /// <summary>
         /// Counts the elements of a top-level JSON array without materializing a <see cref="JToken" /> graph.
