@@ -93,6 +93,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             _logger.Debug($"Options for processing:{Environment.NewLine}{JsonConvert.SerializeObject(options, Formatting.Indented)}");
 
+            // Surface the effective backpressure configuration at Information level so operators (and support)
+            // can tell from the log whether a run is bounded, and that paused page fetching is intentional.
+            if (options.ProcessingBlockBoundedCapacity == -1)
+            {
+                _logger.Information(
+                    "Processing block bounding is disabled (processingBlockBoundedCapacity is -1); pipeline buffers may grow without limit while the target is slower than the source.");
+            }
+            else
+            {
+                _logger.Information(
+                    "Processing block bounding is active (processingBlockBoundedCapacity setting: {ConfiguredCapacity}): up to {ItemCapacity} items per resource-processing block, {PageCapacity} page messages per page-streaming block, and {ErrorCapacity} pending errors will be buffered. When buffers are full, source page fetching pauses until the target catches up -- slower or paused page fetching under a slow target is the bound working, not a hang.",
+                    options.ProcessingBlockBoundedCapacity,
+                    options.ResolvedProcessingBlockBoundedCapacity,
+                    options.ResolvedStreamResourcePagesBlockBoundedCapacity,
+                    options.ResolvedErrorPublishingBoundedCapacity);
+            }
+
             try
             {
                 // Check Ed-Fi API and Standard versions for compatibility

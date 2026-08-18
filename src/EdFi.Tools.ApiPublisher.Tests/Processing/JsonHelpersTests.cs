@@ -30,6 +30,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         [TestCase(@"[""a"", null, true, 1.5]", 4)]
         [TestCase(@"[{""a"":1},{""b"":{""c"":[1,2,3]}}]", 2)]
         [TestCase(@"[[1,2],[3],[]]", 3)]
+        [TestCase("[new Date(1)]", 1)]
+        [TestCase("[new Date(1), new Date(2, 3)]", 2)]
         public void CountTopLevelArrayItems_should_count_only_top_level_elements(string json, int expectedCount)
         {
             JsonHelpers.CountTopLevelArrayItems(json).ShouldBe(expectedCount);
