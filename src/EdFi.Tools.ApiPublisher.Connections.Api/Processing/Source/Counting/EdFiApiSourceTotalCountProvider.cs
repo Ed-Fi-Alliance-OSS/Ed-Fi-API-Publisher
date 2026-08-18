@@ -174,7 +174,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                             Method = HttpMethod.Get.ToString(),
                             ResponseStatus = apiResponse.StatusCode,
                             ResponseContent = $"Total-Count: {totalCountHeaderValue}",
-                        })
+                        }, cancellationToken)
                     .ConfigureAwait(false);
 
                 // Allow processing to continue without performing additional work on this resource.
