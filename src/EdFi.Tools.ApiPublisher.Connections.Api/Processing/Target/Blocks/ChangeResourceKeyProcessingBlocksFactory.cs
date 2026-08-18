@@ -46,14 +46,22 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         public (ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
+            // Retry pipelines are never bounded (see CreateBlocksRequest.IsRetryPipeline). Key changes are not
+            // currently routed through retry pipelines, but honor the flag here so the invariant is local
+            // rather than implied by the calling composition.
+            int boundedCapacity = createBlocksRequest.IsRetryPipeline
+                ? DataflowBlockOptions.Unbounded
+                : createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+
             TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> getItemForKeyChangeBlock
                 = CreateGetItemForKeyChangeBlock(
                     _targetEdFiApiClientProvider.GetApiClient(),
                     createBlocksRequest.Options,
-                    createBlocksRequest.ErrorHandlingBlock);
+                    createBlocksRequest.ErrorHandlingBlock,
+                    boundedCapacity);
 
             TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> changeKeyResourceBlock
-                = CreateChangeKeyBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options);
+                = CreateChangeKeyBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options, boundedCapacity);
 
             getItemForKeyChangeBlock.LinkTo(changeKeyResourceBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
@@ -63,7 +71,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> CreateGetItemForKeyChangeBlock(
             EdFiApiClient targetApiClient,
             Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            int boundedCapacity)
         {
             var getItemForKeyChangeBlock = new TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage>(
                 async message =>
@@ -254,7 +263,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
 
                     // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
-                    BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity
+                    BoundedCapacity = boundedCapacity
                 });
 
             return getItemForKeyChangeBlock;
@@ -283,7 +292,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         }
 
         private TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> CreateChangeKeyBlock(
-            EdFiApiClient targetApiClient, Options options)
+            EdFiApiClient targetApiClient, Options options, int boundedCapacity)
         {
             var changeKey = new TransformManyBlock<ChangeKeyMessage, ErrorItemMessage>(
                 async msg =>
@@ -350,7 +359,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             Method = HttpMethod.Put.ToString(),
                             ResourceUrl = msg.ResourceUrl,
                             Id = id,
-                            Body = ToValidatedJsonRawOrDefault(msg.Body),
+                            Body = JsonHelpers.ToValidatedJsonRawOrDefault(msg.Body),
                             ResponseStatus = apiResponse.StatusCode,
                             ResponseContent = responseContent
                         };
@@ -391,30 +400,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
 
                 // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
-                BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity
+                BoundedCapacity = boundedCapacity
             });
 
             return changeKey;
-
-            // Validates the JSON and returns it wrapped as a JRaw (retaining only the string,
-            // not a parsed token graph -- see APIPUB-112), or null if the JSON is unparseable.
-            JRaw ToValidatedJsonRawOrDefault(string json)
-            {
-                JRaw body = null;
-
-                try
-                {
-                    JObject.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
-
-                    body = new JRaw(json);
-                }
-                catch
-                {
-                    // ignored
-                }
-
-                return body;
-            }
         }
 
         public IEnumerable<GetItemForKeyChangeMessage> CreateProcessDataMessages(StreamResourcePageMessage<GetItemForKeyChangeMessage> message, string json)

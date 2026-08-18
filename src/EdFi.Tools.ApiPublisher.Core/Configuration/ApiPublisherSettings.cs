@@ -105,10 +105,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
         /// <summary>
         /// Gets the effective bounded capacity for the block that fetches pages of source items. This capacity
-        /// is denominated in page messages rather than items: a TransformManyBlock's bound only gates the
-        /// acceptance of new inputs, and every accepted page message still expands into a full page of items,
-        /// so the item-denominated <see cref="ResolvedProcessingBlockBoundedCapacity" /> would allow that many
-        /// whole pages of items to materialize. Returns -1 when bounding is disabled.
+        /// is denominated in page messages rather than items because of how a TransformManyBlock's bound works:
+        /// expanded outputs do count toward the bound once produced, but input acceptance is gated in message
+        /// units (each unprocessed input counts as 1) and every accepted input is still processed even after
+        /// expansion has pushed the count past the bound. Upstream delivers all page messages instantly, so an
+        /// item-denominated bound of N would admit up to N whole page messages -- N x StreamingPageSize items --
+        /// before the first expansion lands (verified by the TransformManyBlock semantics test in
+        /// BackpressureTests). With a page-denominated bound, worst-case per-resource retention is approximately
+        /// (this value x StreamingPageSize) + <see cref="ResolvedProcessingBlockBoundedCapacity" /> items.
+        /// Returns -1 when bounding is disabled.
         /// </summary>
         public int ResolvedStreamResourcePagesBlockBoundedCapacity
             => ResolvedProcessingBlockBoundedCapacity == -1

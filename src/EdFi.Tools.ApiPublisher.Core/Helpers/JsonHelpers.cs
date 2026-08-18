@@ -22,6 +22,39 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
             => new JsonLoadSettings { LineInfoHandling = LineInfoHandling.Ignore };
 
         /// <summary>
+        /// Validates the supplied JSON with a streaming reader (no token graph is materialized) and returns
+        /// it wrapped as a <see cref="JRaw" /> for compact retention on an error message, or null if the
+        /// text is empty or not valid JSON.
+        /// </summary>
+        public static JRaw ToValidatedJsonRawOrDefault(string json)
+        {
+            JRaw body = null;
+
+            try
+            {
+                using var reader = new JsonTextReader(new StringReader(json));
+
+                bool hasContent = false;
+
+                while (reader.Read())
+                {
+                    hasContent = true;
+                }
+
+                if (hasContent)
+                {
+                    body = new JRaw(json);
+                }
+            }
+            catch
+            {
+                // Not valid JSON -- omit the body rather than corrupt the serialized error output
+            }
+
+            return body;
+        }
+
+        /// <summary>
         /// Counts the elements of a top-level JSON array without materializing a <see cref="JToken" /> graph.
         /// </summary>
         /// <param name="json">The JSON text, expected to be a top-level array.</param>
