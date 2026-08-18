@@ -19,6 +19,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Shouldly;
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -36,6 +37,61 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     {
         private const string Students = "/ed-fi/students";
         private const string StateEducationAgencies = "/ed-fi/stateEducationAgencies";
+
+        /// <summary>
+        /// Pins the TransformManyBlock BoundedCapacity semantics that the page-streaming bound relies on,
+        /// since they've been read two different ways in review: (a) expanded outputs DO count toward the
+        /// bound (the block adjusts its bounding count by the output count after the delegate runs), but
+        /// (b) input acceptance is gated in MESSAGE units -- each unprocessed input counts as 1 -- so a
+        /// bound of N admits up to N input messages before any expansion, and every accepted input is
+        /// still processed even once expansion has pushed the count far past the bound. Consequence: an
+        /// item-denominated bound of N on a page-expanding block admits up to N whole pages (N x pageSize
+        /// items), which is why the pages block's capacity is denominated in page messages instead.
+        /// </summary>
+        [Test]
+        public async Task TransformManyBlock_bound_counts_expanded_outputs_but_gates_acceptance_in_message_units()
+        {
+            const int BoundedCapacity = 10;
+            const int ExpansionFactor = 10;
+            const int OfferedInputs = 100;
+
+            int processedInputs = 0;
+
+            var block = new TransformManyBlock<int, int>(
+                i =>
+                {
+                    Interlocked.Increment(ref processedInputs);
+
+                    return Enumerable.Range(0, ExpansionFactor);
+                },
+                new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = 1, BoundedCapacity = BoundedCapacity });
+
+            // No consumer linked: outputs accumulate in the block's own buffer
+
+            int accepted = 0;
+
+            for (int i = 0; i < OfferedInputs; i++)
+            {
+                if (block.Post(i))
+                {
+                    accepted++;
+                }
+            }
+
+            // (b) Acceptance is gated per input message: up to BoundedCapacity inputs are admitted
+            // before/while expansion happens -- far fewer than offered, but more than one.
+            accepted.ShouldBeInRange(2, BoundedCapacity);
+
+            // (a) Wait for the block to go idle, then verify every accepted input was processed even though
+            // the very first expansion (10 outputs) already saturated the bound -- and that the expanded
+            // outputs now count against it, blocking any further acceptance.
+            await GetStableValueAsync(() => Volatile.Read(ref processedInputs));
+
+            processedInputs.ShouldBe(accepted);
+            block.OutputCount.ShouldBe(accepted * ExpansionFactor);
+            block.OutputCount.ShouldBeGreaterThan(BoundedCapacity);
+            block.Post(999).ShouldBeFalse();
+        }
 
         [Test]
         public async Task Bounded_post_resource_block_should_decline_new_items_at_capacity_and_recover_after_draining()

@@ -45,14 +45,22 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         public (ITargetBlock<GetItemForDeletionMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
+            // Retry pipelines are never bounded (see CreateBlocksRequest.IsRetryPipeline). Deletes are not
+            // currently routed through retry pipelines, but honor the flag here so the invariant is local
+            // rather than implied by the calling composition.
+            int boundedCapacity = createBlocksRequest.IsRetryPipeline
+                ? DataflowBlockOptions.Unbounded
+                : createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+
             TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> getItemForDeletionBlock =
                 CreateGetItemForDeletionBlock(
                     _targetEdFiApiClientProvider.GetApiClient(),
                     createBlocksRequest.Options,
-                    createBlocksRequest.ErrorHandlingBlock);
+                    createBlocksRequest.ErrorHandlingBlock,
+                    boundedCapacity);
 
             TransformManyBlock<DeleteItemMessage, ErrorItemMessage> deleteResourceBlock
-                = CreateDeleteResourceBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options);
+                = CreateDeleteResourceBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options, boundedCapacity);
 
             getItemForDeletionBlock.LinkTo(deleteResourceBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
@@ -62,7 +70,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> CreateGetItemForDeletionBlock(
             EdFiApiClient targetApiClient,
             Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            int boundedCapacity)
         {
             var getItemForDeletionBlock = new TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage>(
                 async msg =>
@@ -210,7 +219,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
 
                     // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
-                    BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity
+                    BoundedCapacity = boundedCapacity
                 });
 
             return getItemForDeletionBlock;
@@ -239,7 +248,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         }
 
         private TransformManyBlock<DeleteItemMessage, ErrorItemMessage> CreateDeleteResourceBlock(
-            EdFiApiClient targetApiClient, Options options)
+            EdFiApiClient targetApiClient, Options options, int boundedCapacity)
         {
             var deleteResourceBlock = new TransformManyBlock<DeleteItemMessage, ErrorItemMessage>(
                 async msg =>
@@ -350,7 +359,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
 
                 // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
-                BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity
+                BoundedCapacity = boundedCapacity
             });
 
             return deleteResourceBlock;
