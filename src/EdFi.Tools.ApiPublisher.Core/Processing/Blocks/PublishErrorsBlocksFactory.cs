@@ -7,6 +7,8 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Serilog;
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
@@ -52,6 +54,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     : Options.MaxQueuedErrorBatches);
 
             publishErrorsIngestionBlock.LinkTo(publishErrorsCompletionBlock, new DataflowLinkOptions { PropagateCompletion = true });
+
+            // Dataflow only propagates completion forward, so a faulted publisher would sever the link and
+            // leave the bounded ingestion block permanently full, parking every SendAsync producer forever.
+            // Propagate the fault backward so parked sends complete (declined) and the run fails instead of hanging.
+            publishErrorsCompletionBlock.Completion.ContinueWith(
+                t => ((IDataflowBlock)publishErrorsIngestionBlock).Fault(t.Exception!),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
 
             return (publishErrorsIngestionBlock, publishErrorsCompletionBlock);
         }
