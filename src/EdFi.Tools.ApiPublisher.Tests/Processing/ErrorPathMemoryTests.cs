@@ -159,6 +159,38 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public async Task Faulted_error_publisher_should_fault_ingestion_so_parked_producers_complete_instead_of_hanging()
+        {
+            TestHelpers.InitializeLogging();
+
+            var errorPublisher = A.Fake<IErrorPublisher>();
+
+            A.CallTo(() => errorPublisher.PublishErrorsAsync(A<ErrorItemMessage[]>.Ignored))
+                .ThrowsAsync(new InvalidOperationException("Error store is unavailable."));
+
+            var options = TestHelpers.GetOptions();
+            options.ErrorPublishingBatchSize = 2;
+
+            var (ingestionBlock, completionBlock) = new PublishErrorsBlocksFactory(errorPublisher).CreateBlocks(options);
+
+            // Park producers well past the bound (capacity is 2 x batch size = 4); the first published batch
+            // faults the completion block, which severs the link and leaves the bound permanently full
+            var sends = Enumerable.Range(0, 20)
+                .Select(_ => ingestionBlock.SendAsync(CreateErrorItemMessage()))
+                .ToArray();
+
+            // The completion block must fault with the publisher's exception (this already worked pre-fix)
+            await Should.ThrowAsync<InvalidOperationException>(
+                completionBlock.Completion.WaitAsync(TimeSpan.FromSeconds(10)));
+
+            // The fault must propagate back to the ingestion block so parked SendAsync producers complete
+            // (with false) instead of waiting forever for capacity that can never free up
+            await Task.WhenAll(sends).WaitAsync(TimeSpan.FromSeconds(10));
+
+            sends[^1].Result.ShouldBeFalse();
+        }
+
+        [Test]
         public async Task Error_ingestion_should_be_unbounded_when_bounding_is_explicitly_disabled()
         {
             TestHelpers.InitializeLogging();

@@ -19,6 +19,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Shouldly;
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -93,12 +94,16 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             block.Post(999).ShouldBeFalse();
         }
 
-        [Test]
-        public async Task Bounded_post_resource_block_should_decline_new_items_at_capacity_and_recover_after_draining()
+        [TestCase(4, true)]
+        [TestCase(-1, false)]
+        public async Task Post_resource_block_should_decline_at_capacity_only_when_bounded_and_recover_after_draining(
+            int configuredCapacity,
+            bool expectDecline)
         {
             TestHelpers.InitializeLogging();
 
-            const int BoundedCapacity = 4;
+            const int InitialItems = 4;
+            const int ExtraOffers = 12;
 
             var gate = new ManualResetEventSlim(false);
             var postStarted = new SemaphoreSlim(0);
@@ -124,16 +129,16 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 var options = TestHelpers.GetOptions();
                 options.MaxDegreeOfParallelismForPostResourceItem = 1;
-                options.ProcessingBlockBoundedCapacity = BoundedCapacity;
+                options.ProcessingBlockBoundedCapacity = configuredCapacity;
 
                 var (inputBlock, outputBlock) = CreatePostResourceBlocks(fakeTargetRequestHandler, options);
                 outputBlock.LinkTo(DataflowBlock.NullTarget<ErrorItemMessage>());
 
-                // Fill the block to its capacity (all sends must be accepted; the first item is dequeued for
-                // processing and parks on the gate inside the fake POST handler)
+                // Fill the block up to the bounded capacity (all sends must be accepted in both modes; the
+                // first item is dequeued for processing and parks on the gate inside the fake POST handler)
                 int accepted = 0;
 
-                for (int i = 0; i < BoundedCapacity; i++)
+                for (int i = 0; i < InitialItems; i++)
                 {
                     var sendTask = inputBlock.SendAsync(CreatePostItemMessage());
                     (await Task.WhenAny(sendTask, Task.Delay(TimeSpan.FromSeconds(30)))).ShouldBe(sendTask);
@@ -143,11 +148,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 (await postStarted.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
 
-                // With the consumer stalled and the buffer full, the block must start declining offered items.
-                // (An unbounded block accepts everything here, which is the memory growth behavior of APIPUB-112.)
+                // With the consumer stalled and the buffer full, a bounded block must decline every further
+                // offer, while an unbounded block (-1, the rollback configuration) must accept all of them --
+                // which is the memory growth behavior of APIPUB-112.
                 bool declined = false;
 
-                for (int i = 0; i < 3 && !declined; i++)
+                for (int i = 0; i < ExtraOffers; i++)
                 {
                     if (inputBlock.Post(CreatePostItemMessage()))
                     {
@@ -159,7 +165,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     }
                 }
 
-                declined.ShouldBeTrue();
+                declined.ShouldBe(expectDecline);
+
+                if (!expectDecline)
+                {
+                    accepted.ShouldBe(InitialItems + ExtraOffers);
+                }
 
                 // Release the consumer; the block must hand capacity back and accept new items again
                 gate.Set();
@@ -239,8 +250,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             }
         }
 
-        [Test]
-        public async Task When_target_posts_stall_source_page_fetching_should_halt_instead_of_buffering_all_pages()
+        [TestCase(25, true)]
+        [TestCase(-1, false)]
+        public async Task When_target_posts_stall_source_page_fetching_should_halt_only_when_bounded(
+            int configuredCapacity,
+            bool expectBackpressure)
         {
             TestHelpers.InitializeLogging();
 
@@ -258,7 +272,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // -----------------------------------------------------------------
                 //                      Source Requests
                 // -----------------------------------------------------------------
-                var suppliedPageOfResources = TestHelpers.GetGenericResourceFaker().Generate(PageSize);
+                var resourceFaker = TestHelpers.GetGenericResourceFaker();
 
                 var fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
                     .AvailableChangeVersions(1100)
@@ -279,14 +293,29 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             long offset = long.Parse(request.RequestUri.ParseQueryString()["offset"] ?? "0");
 
                             // Pages beyond the advertised total are empty (ends the final-page continuation probe)
-                            return offset < TotalItems
-                                ? FakeResponse.OK(suppliedPageOfResources)
-                                : FakeResponse.OK("[]");
+                            if (offset >= TotalItems)
+                            {
+                                return FakeResponse.OK("[]");
+                            }
+
+                            // Stamp a unique, position-derived marker into each item (it survives the POST,
+                            // unlike "id") so the assertions below can prove every distinct source item was
+                            // published exactly once -- not merely that the number of POSTs matched.
+                            var page = resourceFaker.Generate(PageSize);
+
+                            for (int i = 0; i < page.Count; i++)
+                            {
+                                page[i].VehicleManufacturer = $"item-{offset + i}";
+                            }
+
+                            return FakeResponse.OK(page);
                         });
 
                 // -----------------------------------------------------------------
                 //                      Target Requests
                 // -----------------------------------------------------------------
+                var postedStamps = new ConcurrentBag<string>();
+
                 var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
                 A.CallTo(
@@ -294,8 +323,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                             A<string>.That.Matches(url => url.EndsWith(StateEducationAgencies)),
                             A<HttpRequestMessage>.Ignored))
                     .ReturnsLazily(
-                        _ =>
+                        call =>
                         {
+                            var request = (HttpRequestMessage)call.Arguments[1];
+                            string body = request.Content!.ReadAsStringAsync().Result;
+                            postedStamps.Add(JObject.Parse(body)["vehicleManufacturer"]!.Value<string>()!);
+
                             postStarted.Release();
                             gate.Wait(TimeSpan.FromSeconds(60));
                             Interlocked.Increment(ref postsCompleted);
@@ -320,7 +353,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 options.MaxDegreeOfParallelismForResourceProcessing = 1;
                 options.MaxDegreeOfParallelismForPostResourceItem = 1;
                 options.MaxDegreeOfParallelismForStreamResourcePages = 1;
-                options.ProcessingBlockBoundedCapacity = PageSize;
+                options.ProcessingBlockBoundedCapacity = configuredCapacity;
 
                 var changeProcessorConfiguration = TestHelpers.CreateChangeProcessorConfiguration(options);
 
@@ -350,11 +383,24 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 await processingTask.WaitAsync(TimeSpan.FromMinutes(2));
 
                 // With backpressure, only a handful of pages fit in the bounded buffers while the target is
-                // stalled. Without it (APIPUB-112), every page is fetched and buffered in memory.
-                pageGetsSnapshot.ShouldBeLessThan(TotalPages / 4);
+                // stalled. Without it (-1, the APIPUB-112 behavior), every page is fetched and buffered.
+                if (expectBackpressure)
+                {
+                    pageGetsSnapshot.ShouldBeLessThan(TotalPages / 4);
+                }
+                else
+                {
+                    pageGetsSnapshot.ShouldBeGreaterThanOrEqualTo(TotalPages);
+                }
 
-                // All items must still be published exactly once the target recovers (no loss, no deadlock)
+                // Every distinct source item must be published exactly once after the target recovers
+                // (no loss, no duplication, no deadlock) in both modes
                 postsCompleted.ShouldBe(TotalItems);
+                postedStamps.Count.ShouldBe(TotalItems);
+
+                postedStamps.ToHashSet()
+                    .SetEquals(Enumerable.Range(0, TotalItems).Select(i => $"item-{i}"))
+                    .ShouldBeTrue();
             }
             finally
             {

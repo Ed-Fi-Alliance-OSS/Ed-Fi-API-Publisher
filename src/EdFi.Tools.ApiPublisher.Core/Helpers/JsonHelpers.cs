@@ -81,8 +81,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
                     count++;
                 }
 
-                // Skip the interior of any non-scalar element in a single step
-                if (reader.TokenType == JsonToken.StartObject || reader.TokenType == JsonToken.StartArray)
+                // Skip the interior of any non-scalar element in a single step (constructors are non-standard
+                // JSON that JsonTextReader accepts; without the skip, EndConstructor would count as an element)
+                if (reader.TokenType == JsonToken.StartObject
+                    || reader.TokenType == JsonToken.StartArray
+                    || reader.TokenType == JsonToken.StartConstructor)
                 {
                     reader.Skip();
                 }
