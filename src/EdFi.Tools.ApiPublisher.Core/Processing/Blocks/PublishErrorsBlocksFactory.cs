@@ -7,18 +7,12 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Serilog;
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 {
     public class PublishErrorsBlocksFactory
     {
-        // Maximum number of already-formed error batches allowed to queue for publication before the
-        // (bounded) ingestion block starts postponing new errors.
-        private const int MaxQueuedErrorBatches = 4;
-
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(PublishErrorsBlocksFactory));
         private IErrorPublisher _errorPublisher;
 
@@ -54,24 +48,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     : Options.MaxQueuedErrorBatches);
 
             publishErrorsIngestionBlock.LinkTo(publishErrorsCompletionBlock, new DataflowLinkOptions { PropagateCompletion = true });
-
-            // Dataflow only propagates completion forward, so a faulted publisher would sever the link and
-            // leave the bounded ingestion block permanently full, parking every SendAsync producer forever.
-            // Propagate the fault backward so parked sends complete (declined) and the run fails instead of hanging.
-            publishErrorsCompletionBlock.Completion.ContinueWith(
-                t => ((IDataflowBlock)publishErrorsIngestionBlock).Fault(t.Exception!),
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-
-            // Nothing awaits the ingestion block's Completion (the run waits on the completion block), so
-            // observe its exception here to keep a backward-propagated fault from surfacing as an unobserved
-            // task exception. The continuation is simply canceled when the block completes normally.
-            publishErrorsIngestionBlock.Completion.ContinueWith(
-                static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
 
             return (publishErrorsIngestionBlock, publishErrorsCompletionBlock);
         }
