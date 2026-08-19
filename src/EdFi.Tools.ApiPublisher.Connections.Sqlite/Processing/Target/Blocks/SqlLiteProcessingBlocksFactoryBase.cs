@@ -39,10 +39,6 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
     public (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
         CreateBlocksRequest createBlocksRequest)
     {
-        // Retry pipelines are never bounded: they are fed by a synchronous Post that would silently drop
-        // declined messages. This connector's flows are not currently retry-routed, but the flag is honored
-        // locally so the invariant holds here rather than by distant composition (see APIPUB-112).
-        //
         // Unlike the API target blocks, every message this block receives carries a WHOLE PAGE of items
         // (see CreateProcessDataMessages below), so the item-denominated capacity must be converted to
         // page messages -- applying it directly would admit that many whole pages (at shipped defaults,
