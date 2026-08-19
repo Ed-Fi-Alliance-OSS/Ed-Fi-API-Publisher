@@ -158,7 +158,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             };
 
                             // Publish the failure
-                            await errorHandlingBlock.SendAsync(error).ConfigureAwait(false);
+                            await errorHandlingBlock.SendErrorAsync(error, message.CancellationToken).ConfigureAwait(false);
 
                             // No key changes to process
                             return Enumerable.Empty<ChangeKeyMessage>();

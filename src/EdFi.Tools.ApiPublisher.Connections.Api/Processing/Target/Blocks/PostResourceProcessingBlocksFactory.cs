@@ -268,7 +268,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     }
                     else
                     {
-                        requestBodyJson = postItemMessage.Item.ToString();
+                        // Serialized compactly: indented serialization roughly doubles the request bytes on
+                        // the wire for no benefit to the target, and keeps parity with the key-change path
+                        requestBodyJson = postItemMessage.Item.ToString(Newtonsoft.Json.Formatting.None);
                     }
 
                     var response = await RequestHelpers.SendPostRequestAsync(

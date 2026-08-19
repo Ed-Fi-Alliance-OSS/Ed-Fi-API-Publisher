@@ -29,15 +29,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     {
         private const string Students = "/ed-fi/students";
 
-        [TestCase(4, true)]
+        [TestCase(100, true)]
         [TestCase(-1, false)]
-        public async Task Sqlite_processing_block_should_decline_at_capacity_only_when_bounded_and_write_all_accepted_items(
+        public async Task Sqlite_processing_block_should_bound_in_page_messages_and_write_all_accepted_items(
             int configuredCapacity,
             bool expectDecline)
         {
             TestHelpers.InitializeLogging();
 
-            const int InitialItems = 4;
+            // Every message this block receives carries a whole page of items (see CreateProcessDataMessages),
+            // so its bound must be denominated in pages: a 100-item capacity at page size 25 admits exactly
+            // 4 page messages -- applying the item capacity directly would admit 100 whole pages (~25x).
+            const int PageSize = 25;
+            const int ExpectedPageCapacity = 4;
             const int ExtraOffers = 12;
 
             using var connectionGate = new ManualResetEventSlim(false);
@@ -52,6 +56,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             {
                 var options = TestHelpers.GetOptions();
                 options.MaxDegreeOfParallelismForPostResourceItem = 1;
+                options.StreamingPageSize = PageSize;
                 options.ProcessingBlockBoundedCapacity = configuredCapacity;
 
                 var factory = new UpsertProcessingBlocksFactory(
@@ -72,10 +77,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 var (inputBlock, outputBlock) = factory.CreateProcessingBlocks(createBlocksRequest);
                 outputBlock.LinkTo(DataflowBlock.NullTarget<ErrorItemMessage>());
 
-                // Fill the block up to the bounded capacity (accepted in both modes)
+                // Fill the block up to the page-denominated bound (accepted in both modes)
                 int accepted = 0;
 
-                for (int i = 0; i < InitialItems; i++)
+                for (int i = 0; i < ExpectedPageCapacity; i++)
                 {
                     (await inputBlock.SendAsync(CreateMessage()).WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
                     accepted++;
@@ -99,10 +104,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 declined.ShouldBe(expectDecline);
 
-                if (!expectDecline)
-                {
-                    accepted.ShouldBe(InitialItems + ExtraOffers);
-                }
+                accepted.ShouldBe(expectDecline
+                    ? ExpectedPageCapacity
+                    : ExpectedPageCapacity + ExtraOffers);
 
                 // Release the consumer and drain; every accepted message must be written (no loss, no errors)
                 connectionGate.Set();

@@ -151,7 +151,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             };
 
                             // Publish the failure
-                            await errorHandlingBlock.SendAsync(error).ConfigureAwait(false);
+                            await errorHandlingBlock.SendErrorAsync(error, msg.CancellationToken).ConfigureAwait(false);
 
                             // No delete to process
                             return Enumerable.Empty<DeleteItemMessage>();

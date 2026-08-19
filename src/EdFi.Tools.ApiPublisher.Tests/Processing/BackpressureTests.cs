@@ -388,11 +388,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 gate.Set();
                 await processingTask.WaitAsync(TimeSpan.FromMinutes(2));
 
-                // With backpressure, only a handful of pages fit in the bounded buffers while the target is
-                // stalled. Without it (-1, the APIPUB-112 behavior), every page is fetched and buffered.
+                // With backpressure, only the pages that fit in the bounded buffers are fetched while the
+                // target is stalled: the pages block holds max(2 x pagesDOP, itemCap/pageSize) = 2 page
+                // messages plus one being expanded, and the POST block holds itemCap = 1 page of items --
+                // roughly 4 pages, plus slack for handoffs. Without backpressure (-1, the APIPUB-112
+                // behavior), every page is fetched and buffered.
                 if (expectBackpressure)
                 {
-                    pageGetsSnapshot.ShouldBeLessThan(TotalPages / 4);
+                    pageGetsSnapshot.ShouldBeLessThanOrEqualTo(6);
                 }
                 else
                 {

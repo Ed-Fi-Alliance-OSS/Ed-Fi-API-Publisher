@@ -55,9 +55,9 @@ When the target API is slower than the source, the publisher's internal buffers 
 - Any positive number — an explicit item capacity (values below `MaxDegreeOfParallelismForPostResourceItem` are raised to it so POST workers are never starved).
 - Any other value fails options validation with a non-zero exit.
 
-The same option governs the error publishing queue (capped at `2 × ErrorPublishingBatchSize` pending errors unless disabled with `-1`), so a sustained error storm also exerts backpressure instead of queueing errors in memory without limit.
+The same option governs the error publishing queue, so a sustained error storm also exerts backpressure instead of queueing errors in memory without limit. The ingestion queue is capped at `2 × ErrorPublishingBatchSize` pending errors, and up to 4 more already-formed batches can be queued for publication behind it — a total of roughly `6 × ErrorPublishingBatchSize` pending errors (150 at shipped defaults), each of which can carry a full document body. Both are unbounded under `-1`.
 
-**What the ceiling actually is.** The capacity is per block, not a process-wide total. Each live resource pipeline can hold up to roughly `(pagesBlockCapacity × StreamingPageSize) + itemCapacity` items across its buffers, where `pagesBlockCapacity = max(2 × MaxDegreeOfParallelismForStreamResourcePages, itemCapacity ÷ StreamingPageSize)`, and up to `MaxDegreeOfParallelismForResourceProcessing` resource pipelines stream concurrently. With shipped defaults that is on the order of thousands of items per resource rather than hundreds — still a fixed configuration-derived ceiling, independent of resource size.
+**What the ceiling actually is.** The capacity is per block, not a process-wide total. Each live resource pipeline can hold up to roughly `(pagesBlockCapacity × StreamingPageSize) + itemCapacity` items across its buffers, where `pagesBlockCapacity = max(2 × MaxDegreeOfParallelismForStreamResourcePages, itemCapacity ÷ StreamingPageSize)`, and up to `MaxDegreeOfParallelismForResourceProcessing` resource pipelines stream concurrently. Delete and key-change pipelines chain two bounded item blocks, so their per-resource item term is `2 × itemCapacity`. With shipped defaults that is on the order of thousands of items per resource rather than hundreds — still a fixed configuration-derived ceiling that does not grow with resource size. (Two small resource-proportional allocations remain: the per-resource list of page descriptors and the final-page continuation accumulator — both hold lightweight offset/limit entries rather than documents.)
 
 **Which settings actually lower the ceiling.** At typical settings the dominant term is the page buffer floor — `2 × MaxDegreeOfParallelismForStreamResourcePages` whole pages, kept so page-fetch workers are never starved — and `ProcessingBlockBoundedCapacity` cannot reduce it. For example, at `StreamingPageSize=500` and `MaxDegreeOfParallelismForStreamResourcePages=10`, the page buffer holds up to `2 × 10 = 20` pages = 10,000 items per resource no matter what this option is set to; lowering the option from automatic (500) to 100 only trims the much smaller item buffer. To materially reduce per-resource retention, lower `MaxDegreeOfParallelismForStreamResourcePages` and/or `StreamingPageSize` (and `MaxDegreeOfParallelismForResourceProcessing` to reduce how many resources buffer concurrently); use `ProcessingBlockBoundedCapacity` to raise the item buffer above its automatic value or to disable bounding entirely.
 
@@ -118,7 +118,9 @@ NOTE: This part of the configuration can only be defined in the _publisherSettin
 | /authorizationFailureHandling\[\*]/path                    | The partial path for the resource (e.g. _/ed-fi/students_) for which additional 403 Forbidden processing should be performed.                                                                                |
 | /authorizationFailureHandling\[\*]/updatePrerequisitePaths | An array of partial paths for the resource(s) (e.g. _/ed-fi/studentSchoolAssociations_) that should be processed before attempting to retry the original request which resulted in an authorization failure. |
 
-The default configuration, which will probably suffice for all current Ed-Fi ODS API deployments, is as follows:
+The default configuration targets Data Standard 5.x and later, where the parent resource is `/ed-fi/contacts`. For sources on Data Standard 4.0 or earlier, replace that entry with `/ed-fi/parents` → `/ed-fi/studentParentAssociations`. An entry whose path or prerequisites do not exist in the source's dependency graph is skipped with a warning in the log (it does not fail the run).
+
+The default configuration is as follows:
 ```json
 {  
   "options":   
@@ -138,8 +140,8 @@ The default configuration, which will probably suffice for all current Ed-Fi ODS
       ]  
     },  
     {  
-      "path": "/ed-fi/parents",  
-      "updatePrerequisitePaths": ["/ed-fi/studentParentAssociations"]  
+      "path": "/ed-fi/contacts",  
+      "updatePrerequisitePaths": ["/ed-fi/studentContactAssociations"]  
     }
   ]
 }
