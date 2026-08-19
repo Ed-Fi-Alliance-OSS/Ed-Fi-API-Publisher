@@ -129,7 +129,9 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             streamingResourceBlockByResourceKey.Add(resourceKey, streamResourceBlock);
         }
 
-        var cancellationSource = new CancellationTokenSource();
+        // Linked to the run's token so external cancellation also releases producers parked on bounded
+        // blocks via the per-message cancellation source (see APIPUB-112)
+        var cancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         // Initiate streaming of all resources, with dependencies
         foreach (var kvp in processingContext.DependencyKeysByResourceKey)

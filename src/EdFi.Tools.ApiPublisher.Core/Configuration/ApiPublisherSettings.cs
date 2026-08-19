@@ -44,6 +44,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         /// </summary>
         public const int PagesCapacityStreamParallelismMultiplier = 2;
 
+        /// <summary>
+        /// Maximum number of already-formed error batches allowed to queue for publication behind the
+        /// (bounded) error ingestion block. Total pending errors can therefore reach approximately
+        /// <see cref="ResolvedErrorPublishingBoundedCapacity" /> plus this value x
+        /// <see cref="ErrorPublishingBatchSize" /> (150 at shipped defaults), not the ingestion bound alone.
+        /// </summary>
+        public const int MaxQueuedErrorBatches = 4;
+
         private readonly ILogger _logger = Log.Logger;
 
         public int BearerTokenRefreshMinutes { get; set; } = 12;

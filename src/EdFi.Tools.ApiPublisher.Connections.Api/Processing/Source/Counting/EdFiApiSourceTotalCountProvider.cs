@@ -13,6 +13,7 @@ using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
@@ -167,7 +168,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                     totalCountHeaderValue
                 );
 
-                await errorHandlingBlock.SendAsync(
+                await errorHandlingBlock.SendErrorAsync(
                         new ErrorItemMessage
                         {
                             ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
@@ -216,7 +217,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         _logger.Error(message);
 
         // Publish an error for the resource to allow processing to continue, but to force failure.
-        await errorHandlingBlock.SendAsync(
+        await errorHandlingBlock.SendErrorAsync(
                 new ErrorItemMessage
                 {
                     ResourceUrl =

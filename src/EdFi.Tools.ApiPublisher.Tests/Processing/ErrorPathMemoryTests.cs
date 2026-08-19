@@ -137,7 +137,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 }
 
                 declined.ShouldBeTrue();
-                accepted.ShouldBeLessThan(100);
+
+                // The true ceiling: ingestion queue (2 x batch size = 4) + queued publishing batches
+                // (4 x batch size = 8) + one batch mid-handoff of slack -- far below the offered 100
+                int expectedCeiling = options.ResolvedErrorPublishingBoundedCapacity
+                    + (Options.MaxQueuedErrorBatches * options.ErrorPublishingBatchSize)
+                    + options.ErrorPublishingBatchSize;
+
+                accepted.ShouldBeLessThanOrEqualTo(expectedCeiling);
 
                 // SendAsync (the produce path) must wait for capacity rather than drop the error
                 var delayedSend = ingestionBlock.SendAsync(CreateErrorItemMessage());
@@ -159,7 +166,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
-        public async Task Faulted_error_publisher_should_fault_ingestion_so_parked_producers_complete_instead_of_hanging()
+        public async Task Failing_error_publisher_should_record_the_failure_and_keep_draining_instead_of_faulting()
         {
             TestHelpers.InitializeLogging();
 
@@ -171,23 +178,89 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var options = TestHelpers.GetOptions();
             options.ErrorPublishingBatchSize = 2;
 
-            var (ingestionBlock, completionBlock) = new PublishErrorsBlocksFactory(errorPublisher).CreateBlocks(options);
+            var factory = new PublishErrorsBlocksFactory(errorPublisher);
+            var (ingestionBlock, completionBlock) = factory.CreateBlocks(options);
 
-            // Park producers well past the bound (capacity is 2 x batch size = 4); the first published batch
-            // faults the completion block, which severs the link and leaves the bound permanently full
+            // Offer far more errors than the bound (2 x batch size = 4). A faulting publisher must not
+            // stop the pipeline from draining: every send must be accepted, and nothing may hang or fault.
             var sends = Enumerable.Range(0, 20)
                 .Select(_ => ingestionBlock.SendAsync(CreateErrorItemMessage()))
                 .ToArray();
 
-            // The completion block must fault with the publisher's exception (this already worked pre-fix)
-            await Should.ThrowAsync<InvalidOperationException>(
-                completionBlock.Completion.WaitAsync(TimeSpan.FromSeconds(10)));
-
-            // The fault must propagate back to the ingestion block so parked SendAsync producers complete
-            // (with false) instead of waiting forever for capacity that can never free up
             await Task.WhenAll(sends).WaitAsync(TimeSpan.FromSeconds(10));
+            sends.ShouldAllBe(send => send.Result);
 
-            sends[^1].Result.ShouldBeFalse();
+            ingestionBlock.Complete();
+            await completionBlock.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+            completionBlock.Completion.Status.ShouldBe(TaskStatus.RanToCompletion);
+
+            // The failure must be recorded so the run can be failed after the pipeline drains
+            factory.FirstPublishingException.ShouldBeOfType<InvalidOperationException>();
+        }
+
+        [Test]
+        public async Task Failing_error_publisher_should_not_strand_producers_linked_to_the_ingestion_block()
+        {
+            TestHelpers.InitializeLogging();
+
+            var publisherInvoked = new SemaphoreSlim(0);
+            var errorPublisher = A.Fake<IErrorPublisher>();
+
+            A.CallTo(() => errorPublisher.PublishErrorsAsync(A<ErrorItemMessage[]>.Ignored))
+                .ReturnsLazily(
+                    _ =>
+                    {
+                        publisherInvoked.Release();
+
+                        return Task.FromException(new InvalidOperationException("Error store is unavailable."));
+                    });
+
+            var options = TestHelpers.GetOptions();
+            options.ErrorPublishingBatchSize = 1;
+
+            var factory = new PublishErrorsBlocksFactory(errorPublisher);
+            var (ingestionBlock, completionBlock) = factory.CreateBlocks(options);
+
+            // Mirror the production topology: processing-output blocks are linked to the error ingestion
+            // block without completion propagation (see StreamingResourceProcessor). If a publisher failure
+            // faulted the ingestion block, this link would be severed and the producer's buffered error
+            // could never drain, so the producer would never complete and the run would spin forever.
+            var producerBlock = new TransformManyBlock<int, ErrorItemMessage>(_ => new[] { CreateErrorItemMessage() });
+            producerBlock.LinkTo(ingestionBlock, new DataflowLinkOptions { Append = true });
+
+            producerBlock.Post(1).ShouldBeTrue();
+            (await publisherInvoked.WaitAsync(TimeSpan.FromSeconds(10))).ShouldBeTrue();
+
+            // An error produced after the publisher has already failed must still drain out of the producer
+            producerBlock.Post(2).ShouldBeTrue();
+            producerBlock.Complete();
+
+            await producerBlock.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+            producerBlock.Completion.Status.ShouldBe(TaskStatus.RanToCompletion);
+
+            ingestionBlock.Complete();
+            await completionBlock.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+
+            factory.FirstPublishingException.ShouldBeOfType<InvalidOperationException>();
+        }
+
+        [Test]
+        public async Task Error_send_should_still_deliver_when_cancellation_is_already_requested()
+        {
+            TestHelpers.InitializeLogging();
+
+            // Graceful cancellation (e.g. delete processing canceling remaining pages when the source lacks
+            // deleted key values) is a normal flow event; errors raised afterwards must still be delivered
+            // and must never throw into the producing block (a thrown TaskCanceledException would fault it)
+            var receivingBlock = new BufferBlock<ErrorItemMessage>();
+
+            using var cancellationSource = new CancellationTokenSource();
+            cancellationSource.Cancel();
+
+            await receivingBlock.SendErrorAsync(CreateErrorItemMessage(), cancellationSource.Token)
+                .WaitAsync(TimeSpan.FromSeconds(10));
+
+            receivingBlock.Count.ShouldBe(1);
         }
 
         [Test]

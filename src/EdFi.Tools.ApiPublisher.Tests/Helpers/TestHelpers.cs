@@ -244,11 +244,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
         public static ChangeProcessorConfiguration CreateChangeProcessorConfiguration(
             Options options,
             Func<string> javascriptModuleFactory = null,
-            string[] resourcesWithUpdatableKeys = null)
+            string[] resourcesWithUpdatableKeys = null,
+            AuthorizationFailureHandling[] authorizationFailureHandling = null)
         {
             return new(
                 options,
-                Configuration.GetAuthorizationFailureHandling(),
+                authorizationFailureHandling ?? Configuration.GetAuthorizationFailureHandling(),
                 resourcesWithUpdatableKeys ?? Array.Empty<string>(),
                 A.Fake<IConfigurationSection>(),
                 javascriptModuleFactory
