@@ -120,7 +120,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 var messge = $"{resourceUrl}: Count request returned {apiResponse.StatusCode}\r{responseContent}";
                 _logger.Error(messge);
 
-                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
+                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse, cancellationToken)
                     .ConfigureAwait(false);
 
                 // Allow processing to continue with no additional work on this resource
@@ -136,7 +136,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 );
 
                 // Publish an error for the resource. Feature is not supported.
-                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
+                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse, cancellationToken)
                     .ConfigureAwait(false);
 
                 // Allow processing to continue as best it can with no additional work on this resource
@@ -191,10 +191,11 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
     private async Task HandleResourceCountRequestErrorAsync(
         string resourceUrl,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock,
-        HttpResponseMessage apiResponse
+        HttpResponseMessage apiResponse,
+        CancellationToken cancellationToken
     )
     {
-        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+        string responseContent = await apiResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         string message = string.Empty;
 
         // Was this an authorization failure?
@@ -223,7 +224,8 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                     Method = HttpMethod.Get.ToString(),
                     ResponseStatus = apiResponse.StatusCode,
                     ResponseContent = responseContent,
-                })
+                },
+                cancellationToken)
             .ConfigureAwait(false);
     }
 }

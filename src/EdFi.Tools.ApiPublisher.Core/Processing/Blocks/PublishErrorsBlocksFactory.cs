@@ -56,6 +56,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
 
+            // Nothing awaits the ingestion block's Completion (the run waits on the completion block), so
+            // observe its exception here to keep a backward-propagated fault from surfacing as an unobserved
+            // task exception. The continuation is simply canceled when the block completes normally.
+            publishErrorsIngestionBlock.Completion.ContinueWith(
+                static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
             return (publishErrorsIngestionBlock, publishErrorsCompletionBlock);
         }
 

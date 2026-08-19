@@ -33,6 +33,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         /// </summary>
         public const int AutoCapacityPostParallelismMultiplier = 4;
 
+        /// <summary>
+        /// Multiplier applied to <see cref="MaxDegreeOfParallelismForStreamResourcePages" /> when deriving the
+        /// page-streaming block's capacity floor: one page in flight per fetch worker plus one queued behind it,
+        /// so page-fetch parallelism is never starved by the bound. At shipped defaults this floor -- not
+        /// <see cref="ProcessingBlockBoundedCapacity" /> -- produces the dominant retention term
+        /// (floor x <see cref="StreamingPageSize" /> items per resource), so the effective levers for reducing
+        /// retention are <see cref="MaxDegreeOfParallelismForStreamResourcePages" /> and
+        /// <see cref="StreamingPageSize" />, not this option (see API-Publisher-Configuration.md).
+        /// </summary>
+        public const int PagesCapacityStreamParallelismMultiplier = 2;
+
         private readonly ILogger _logger = Log.Logger;
 
         public int BearerTokenRefreshMinutes { get; set; } = 12;
@@ -119,7 +130,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             => ResolvedProcessingBlockBoundedCapacity == -1
                 ? -1
                 : Math.Max(
-                    2 * MaxDegreeOfParallelismForStreamResourcePages,
+                    PagesCapacityStreamParallelismMultiplier * MaxDegreeOfParallelismForStreamResourcePages,
                     ResolvedProcessingBlockBoundedCapacity / Math.Max(1, StreamingPageSize));
 
         /// <summary>

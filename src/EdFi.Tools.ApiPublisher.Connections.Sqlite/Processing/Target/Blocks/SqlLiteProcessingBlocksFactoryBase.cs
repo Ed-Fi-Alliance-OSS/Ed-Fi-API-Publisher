@@ -39,6 +39,13 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
     public (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
         CreateBlocksRequest createBlocksRequest)
     {
+        // Retry pipelines are never bounded: they are fed by a synchronous Post that would silently drop
+        // declined messages. This connector's flows are not currently retry-routed, but the flag is honored
+        // locally so the invariant holds here rather than by distant composition (see APIPUB-112).
+        int boundedCapacity = createBlocksRequest.IsRetryPipeline
+            ? DataflowBlockOptions.Unbounded
+            : createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+
         var block = new TransformManyBlock<ResourceJsonMessage, ErrorItemMessage>(
             async msg =>
             {
@@ -127,7 +134,14 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
                     return new[] { error };
                 }
             },
-            new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = 1 });
+            new ExecutionDataflowBlockOptions
+            {
+                MaxDegreeOfParallelism = 1,
+
+                // The single-threaded SQLite writer is the slowest consumer in the codebase; bound its buffer
+                // so a slow write path exerts backpressure on source page streaming (see APIPUB-112)
+                BoundedCapacity = boundedCapacity
+            });
 
         return (block, block);
     }
