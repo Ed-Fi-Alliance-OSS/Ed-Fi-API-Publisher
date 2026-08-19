@@ -31,7 +31,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         /// publishing retain a single string instead of a full parsed token graph (see APIPUB-112), and so
         /// that no implicit conversion can silently assign non-JSON content.
         /// </summary>
-        //[JsonIgnore]
         public JRaw? Body { get; set; }
 
         public HttpStatusCode? ResponseStatus { get; set; }

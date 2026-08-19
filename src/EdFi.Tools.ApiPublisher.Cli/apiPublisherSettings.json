@@ -32,8 +32,8 @@
             ]
         },
         {
-            "path": "/ed-fi/parents",
-            "updatePrerequisitePaths": ["/ed-fi/studentParentAssociations"]
+            "path": "/ed-fi/contacts",
+            "updatePrerequisitePaths": ["/ed-fi/studentContactAssociations"]
         }
     ],
     "resourcesWithUpdatableKeys": [

@@ -82,7 +82,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 };
 
                 // Publish the failure
-                await errorHandlingBlock.SendAsync(error).ConfigureAwait(false);
+                await errorHandlingBlock.SendAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
                 return Array.Empty<TProcessDataMessage>();
             }
@@ -106,7 +106,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 };
 
                 // Publish the failure
-                await errorHandlingBlock.SendAsync(error).ConfigureAwait(false);
+                await errorHandlingBlock.SendAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
                 return Array.Empty<TProcessDataMessage>();
             }

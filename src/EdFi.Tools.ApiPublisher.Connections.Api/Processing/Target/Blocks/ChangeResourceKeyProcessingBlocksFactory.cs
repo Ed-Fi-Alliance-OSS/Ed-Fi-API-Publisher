@@ -240,7 +240,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 ResourceUrl = message.ResourceUrl,
                                 Id = targetId,
-                                Body = existingResourceItem.ToString(),
+                                // Serialized compactly: the body rides in pipeline messages and is retained
+                                // verbatim on error messages, matching the POST path (see APIPUB-112)
+                                Body = existingResourceItem.ToString(Formatting.None),
                                 SourceId = message.SourceId,
                             }
                         };

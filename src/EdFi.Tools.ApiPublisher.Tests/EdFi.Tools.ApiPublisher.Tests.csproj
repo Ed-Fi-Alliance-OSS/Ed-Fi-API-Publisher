@@ -22,6 +22,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.Api\EdFi.Tools.ApiPublisher.Connections.Api.csproj" />
+    <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Connections.Sqlite\EdFi.Tools.ApiPublisher.Connections.Sqlite.csproj" />
     <ProjectReference Include="..\EdFi.Tools.ApiPublisher.Core\EdFi.Tools.ApiPublisher.Core.csproj" />
   </ItemGroup>
   <ItemGroup>

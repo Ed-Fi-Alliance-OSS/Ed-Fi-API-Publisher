@@ -56,11 +56,16 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             const int ExpansionFactor = 10;
             const int OfferedInputs = 100;
 
+            using var expansionGate = new ManualResetEventSlim(false);
             int processedInputs = 0;
 
             var block = new TransformManyBlock<int, int>(
                 i =>
                 {
+                    // Held closed until all offers land, so acceptance counting is deterministic (the pool
+                    // thread cannot race ahead and expand the first input while later Posts are still arriving)
+                    expansionGate.Wait(TimeSpan.FromSeconds(30));
+
                     Interlocked.Increment(ref processedInputs);
 
                     return Enumerable.Range(0, ExpansionFactor);
@@ -79,13 +84,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 }
             }
 
-            // (b) Acceptance is gated per input message: up to BoundedCapacity inputs are admitted
-            // before/while expansion happens -- far fewer than offered, but more than one.
-            accepted.ShouldBeInRange(2, BoundedCapacity);
+            // (b) Acceptance is gated per input message: with no expansion having run yet, exactly
+            // BoundedCapacity inputs are admitted.
+            accepted.ShouldBe(BoundedCapacity);
 
-            // (a) Wait for the block to go idle, then verify every accepted input was processed even though
-            // the very first expansion (10 outputs) already saturated the bound -- and that the expanded
-            // outputs now count against it, blocking any further acceptance.
+            // (a) Release expansion, wait for the block to go idle, then verify every accepted input was
+            // processed even though the very first expansion (10 outputs) already saturated the bound --
+            // and that the expanded outputs now count against it, blocking any further acceptance.
+            expansionGate.Set();
             await GetStableValueAsync(() => Volatile.Read(ref processedInputs));
 
             processedInputs.ShouldBe(accepted);
