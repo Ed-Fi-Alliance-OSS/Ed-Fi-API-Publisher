@@ -161,7 +161,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 int attempts = 0;
                 // Rate Limit
                 bool isRateLimitingEnabled = options.EnableRateLimit;
-                var retryPolicy = Policy.Handle<Exception>()
+                var retryPolicy = Policy.Handle<Exception>(exception => !EdFiApiAuthenticationException.IsRepresentedBy(exception))
                     .OrResult<HttpResponseMessage>(
                         r =>
                             // Descriptor Conflicts are not to be retried 

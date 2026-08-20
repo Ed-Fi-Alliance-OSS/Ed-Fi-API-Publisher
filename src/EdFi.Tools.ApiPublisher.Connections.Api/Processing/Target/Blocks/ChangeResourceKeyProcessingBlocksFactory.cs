@@ -92,7 +92,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         bool isRateLimitingEnabled = options.EnableRateLimit;
 
                         var retryPolicy = Policy
-                            .Handle<Exception>()
+                            .Handle<Exception>(exception => !EdFiApiAuthenticationException.IsRepresentedBy(exception))
                             .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                             .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                             {
@@ -297,7 +297,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // Rate Limit
                     bool isRateLimitingEnabled = options.EnableRateLimit;
                     var retryPolicy = Policy
-                        .Handle<Exception>()
+                        .Handle<Exception>(exception => !EdFiApiAuthenticationException.IsRepresentedBy(exception))
                         .OrResult<HttpResponseMessage>(r =>
                             r.StatusCode == HttpStatusCode.Conflict || r.StatusCode.IsPotentiallyTransientFailure())
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
