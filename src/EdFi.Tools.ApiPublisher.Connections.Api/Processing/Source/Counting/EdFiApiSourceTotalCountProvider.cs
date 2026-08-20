@@ -86,7 +86,8 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
             : retryPolicy;
         try
         {
-            var apiResponse = await policy.ExecuteAsync(
+            // Dispose explicitly: with ResponseHeadersRead (see APIPUB-134) an open response holds a live connection
+            using var apiResponse = await policy.ExecuteAsync(
                 async (ctx, ct) =>
                 {
                     attempt++;

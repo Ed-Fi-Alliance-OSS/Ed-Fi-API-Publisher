@@ -14,9 +14,11 @@ using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using Jering.Javascript.NodeJS;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Shouldly;
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading;
 
@@ -61,6 +63,96 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             JsonHelpers.CountTopLevelArrayItems(json).ShouldBe(expectedCount);
         }
 
+        [TestCase("[]", 0)]
+        [TestCase("[1, 2, 3]", 3)]
+        [TestCase(@"[""a"", null, true, 1.5]", 4)]
+        [TestCase(@"[{""a"":1},{""b"":{""c"":[1,2,3]}}]", 2)]
+        [TestCase(@"[[1,2],[3],[]]", 3)]
+        [TestCase("[new Date(1)]", 1)]
+        [TestCase("[new Date(1), new Date(2, 3)]", 2)]
+        public void EnumerateTopLevelArrayItems_should_yield_each_top_level_element_and_report_count(string json, int expectedCount)
+        {
+            int? reportedCount = null;
+
+            using var reader = new StringReader(json);
+
+            var items = JsonHelpers.EnumerateTopLevelArrayItems(reader, count => reportedCount = count).ToArray();
+
+            items.Length.ShouldBe(expectedCount);
+            reportedCount.ShouldBe(expectedCount);
+
+            // The yielded tokens must be faithful to the source elements
+            var expectedItems = JArray.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
+            items.Select(i => i.ToString(Formatting.None)).ShouldBe(expectedItems.Select(i => i.ToString(Formatting.None)));
+        }
+
+        [TestCase("{}")]
+        [TestCase(@"{""a"": [1,2,3]}")]
+        [TestCase("not json")]
+        public void EnumerateTopLevelArrayItems_should_throw_for_input_that_is_not_a_json_array(string json)
+        {
+            using var reader = new StringReader(json);
+
+            Should.Throw<JsonReaderException>(() => JsonHelpers.EnumerateTopLevelArrayItems(reader).ToArray());
+        }
+
+        [TestCase("[] {}")]
+        [TestCase("[1,2] 3")]
+        [TestCase("[]]")]
+        [TestCase("[]garbage")]
+        public void EnumerateTopLevelArrayItems_should_throw_for_trailing_content_after_the_array(string json)
+        {
+            using var reader = new StringReader(json);
+
+            Should.Throw<JsonReaderException>(() => JsonHelpers.EnumerateTopLevelArrayItems(reader).ToArray());
+        }
+
+        [TestCase("[] ", 0)]
+        [TestCase("[1, 2]\r\n", 2)]
+        public void EnumerateTopLevelArrayItems_should_tolerate_trailing_whitespace(string json, int expectedCount)
+        {
+            using var reader = new StringReader(json);
+
+            JsonHelpers.EnumerateTopLevelArrayItems(reader).Count().ShouldBe(expectedCount);
+        }
+
+        [Test]
+        public void EnumerateTopLevelArrayItems_should_not_report_count_when_enumeration_stops_early()
+        {
+            int? reportedCount = null;
+
+            using var reader = new StringReader("[1, 2, 3]");
+
+            var firstItem = JsonHelpers.EnumerateTopLevelArrayItems(reader, count => reportedCount = count)
+                .Take(1)
+                .ToArray();
+
+            firstItem.Length.ShouldBe(1);
+            reportedCount.ShouldBeNull();
+        }
+
+        [Test]
+        public void EnumerateTopLevelArrayItems_should_not_attach_line_info_to_yielded_tokens()
+        {
+            using var reader = new StringReader(@"[{""id"":""abc123"",""nested"":{""property"":""value""}}]");
+
+            var items = JsonHelpers.EnumerateTopLevelArrayItems(reader).ToArray();
+
+            ((IJsonLineInfo)items[0]).HasLineInfo().ShouldBeFalse();
+            ((IJsonLineInfo)items[0]["nested"]).HasLineInfo().ShouldBeFalse();
+        }
+
+        [Test]
+        public void EnumerateTopLevelArrayItems_should_not_close_the_supplied_reader()
+        {
+            using var reader = new StringReader("[1]");
+
+            JsonHelpers.EnumerateTopLevelArrayItems(reader).ToArray();
+
+            // A closed StringReader throws ObjectDisposedException from Read()
+            Should.NotThrow(() => reader.Read());
+        }
+
         [Test]
         public void CreateProcessDataMessages_should_not_attach_line_info_to_parsed_items()
         {
@@ -91,7 +183,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             const string Json = @"[{""id"":""abc123"",""nested"":{""property"":""value""}}]";
 
-            var itemMessages = factory.CreateProcessDataMessages(pageMessage, Json).ToArray();
+            using var jsonReader = new StringReader(Json);
+
+            var itemMessages = factory.CreateProcessDataMessages(pageMessage, jsonReader, null).ToArray();
 
             itemMessages.Length.ShouldBe(1);
 

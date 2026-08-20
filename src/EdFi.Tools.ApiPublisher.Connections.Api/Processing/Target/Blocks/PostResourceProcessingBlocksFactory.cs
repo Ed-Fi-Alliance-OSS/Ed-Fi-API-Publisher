@@ -599,13 +599,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             public string DependencyResourceUrl { get; set; }
         }
 
-        public IEnumerable<PostItemMessage> CreateProcessDataMessages(StreamResourcePageMessage<PostItemMessage> message, string json)
+        public IEnumerable<PostItemMessage> CreateProcessDataMessages(
+            StreamResourcePageMessage<PostItemMessage> message,
+            TextReader jsonReader,
+            Action<int> reportTopLevelItemCount)
         {
-            JArray items = JArray.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
-
-            // Iterate through the page of items
-            foreach (var item in items.OfType<JObject>())
+            // Iterate through the page of items, materializing one element at a time (see APIPUB-134)
+            foreach (var token in JsonHelpers.EnumerateTopLevelArrayItems(jsonReader, reportTopLevelItemCount))
             {
+                // Non-object elements are counted by the splitter but produce no message
+                if (token is not JObject item)
+                {
+                    continue;
+                }
+
                 var itemMessage = CreateItemActionMessage(message, item);
 
                 // Stop processing individual items if cancellation has been requested

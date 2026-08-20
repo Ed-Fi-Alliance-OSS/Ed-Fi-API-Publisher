@@ -77,7 +77,9 @@ namespace EdFi.Tools.ApiPublisher.Tests
                                 (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url))
                                 && !HasTotalCountParameter(msg)
                                 && RequestMatchesParameters(msg, parameters))))
-                .Returns(FakeResponse.OK(data));
+                // A fresh response per request: responses are disposed after parsing (see APIPUB-134),
+                // so a shared instance would fail on the second matching request
+                .ReturnsLazily(() => FakeResponse.OK(data));
 
             return fakeRequestHandler;
         }
@@ -209,7 +211,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                         A<HttpRequestMessage>.That.Matches(msg => HasTotalCountParameter(msg))));
             }
 
-            fakeCall.Returns(FakeResponse.OK("[]").AppendHeaders(("Total-Count", responseTotalCountHeader.ToString())));
+            fakeCall.ReturnsLazily(() => FakeResponse.OK("[]").AppendHeaders(("Total-Count", responseTotalCountHeader.ToString())));
 
             return fakeRequestHandler;
         }
@@ -227,7 +229,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                     () => fakeRequestHandler.Get(
                         $"{fakeRequestHandler.BaseUrl}/metadata/{fakeRequestHandler.DataManagementUrlSegment}/dependencies",
                         A<HttpRequestMessage>.Ignored))
-                .Returns(FakeResponse.OK(TestData.Dependencies.GraphML()));
+                .ReturnsLazily(() => FakeResponse.OK(TestData.Dependencies.GraphML()));
 
             return fakeRequestHandler;
         }
@@ -238,7 +240,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                     () => fakeRequestHandler.Get(
                         $"{fakeRequestHandler.BaseUrl}/metadata/{fakeRequestHandler.DataManagementUrlSegment}/dependencies",
                         A<HttpRequestMessage>.Ignored))
-                .Returns(FakeResponse.OK($@"<?xml version=""1.0"" encoding=""utf-8""?>
+                .ReturnsLazily(() => FakeResponse.OK($@"<?xml version=""1.0"" encoding=""utf-8""?>
 <graphml xmlns=""http://graphml.graphdrawing.org/xmlns"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:schemaLocation=""http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"">
   <graph id=""EdFi Dependencies"" edgedefault=""directed"">
     <node id=""{resourcePath}""/>
@@ -255,8 +257,8 @@ namespace EdFi.Tools.ApiPublisher.Tests
             string edfiVersion = "3.3.0-a")
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/", A<HttpRequestMessage>.Ignored))
-                .Returns(
-                    FakeResponse.OK(
+                .ReturnsLazily(
+                    () => FakeResponse.OK(
                         new
                         {
                             version = apiVersion,
@@ -281,8 +283,8 @@ namespace EdFi.Tools.ApiPublisher.Tests
             )
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/", A<HttpRequestMessage>.Ignored))
-                .Returns(
-                    FakeResponse.OK(
+                .ReturnsLazily(
+                    () => FakeResponse.OK(
                         new
                         {
                             version = apiVersion,
@@ -336,7 +338,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
         public static IFakeHttpRequestHandler Snapshots(this IFakeHttpRequestHandler fakeRequestHandler, Snapshot[] data)
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/snapshots", A<HttpRequestMessage>.Ignored))
-                .Returns(FakeResponse.OK(JsonConvert.SerializeObject(data)));
+                .ReturnsLazily(() => FakeResponse.OK(JsonConvert.SerializeObject(data)));
 
             return fakeRequestHandler;
         }
@@ -344,7 +346,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
         public static IFakeHttpRequestHandler SnapshotsEmpty(this IFakeHttpRequestHandler fakeRequestHandler)
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/snapshots", A<HttpRequestMessage>.Ignored))
-                .Returns(FakeResponse.OK("[]"));
+                .ReturnsLazily(() => FakeResponse.OK("[]"));
 
             return fakeRequestHandler;
         }
@@ -352,7 +354,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
         public static IFakeHttpRequestHandler SnapshotsNotFound(this IFakeHttpRequestHandler fakeRequestHandler)
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/snapshots", A<HttpRequestMessage>.Ignored))
-                .Returns(FakeResponse.NotFound());
+                .ReturnsLazily(() => FakeResponse.NotFound());
 
             return fakeRequestHandler;
         }
@@ -360,7 +362,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
         public static IFakeHttpRequestHandler LegacySnapshotsNotFound(this IFakeHttpRequestHandler fakeRequestHandler)
         {
             A.CallTo(() => fakeRequestHandler.Get($"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.DataManagementUrlSegment}/publishing/snapshots", A<HttpRequestMessage>.Ignored))
-                .Returns(FakeResponse.NotFound());
+                .ReturnsLazily(() => FakeResponse.NotFound());
 
             return fakeRequestHandler;
         }
@@ -371,7 +373,7 @@ namespace EdFi.Tools.ApiPublisher.Tests
                     () => fakeRequestHandler.Get(
                         $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/availableChangeVersions", //  changeQueries/v1 or changeQueries/v1/2099 
                         A<HttpRequestMessage>.Ignored))
-                .Returns(FakeResponse.OK(new { newestChangeVersion = newestAvailableChangeVersion }));
+                .ReturnsLazily(() => FakeResponse.OK(new { newestChangeVersion = newestAvailableChangeVersion }));
 
             return fakeRequestHandler;
         }

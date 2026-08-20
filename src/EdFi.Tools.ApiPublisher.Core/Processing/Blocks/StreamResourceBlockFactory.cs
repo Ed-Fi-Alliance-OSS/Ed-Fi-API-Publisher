@@ -11,6 +11,7 @@ using Serilog;
 using Serilog.Events;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,7 +31,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         }
 
         public TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>> CreateBlock<TProcessDataMessage>(
-            Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
+            Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             Options options,
             CancellationToken cancellationToken)
@@ -86,7 +87,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             StreamResourceMessage message,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             Options options,
-            Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
+            Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
             CancellationToken cancellationToken)
         {
             // ==============================================================

@@ -12,7 +12,6 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 using Polly.RateLimiting;
@@ -88,11 +87,17 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         {
                             _logger.Warning("{ResourceUrl}: Retrying GET page items {Offset} to {OffsetPlusLimitMinus1} from source failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
                                 message.ResourceUrl, offset, offset + limit - 1, result.Result.StatusCode, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds);
+
+                            // With ResponseHeadersRead (see APIPUB-134), an abandoned response pins a
+                            // connection until finalized -- release the transient failure being retried
+                            result.Result?.Dispose();
                         });
                 IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled ? Policy.WrapAsync(_rateLimiter?.GetRateLimitingPolicy(), retryPolicy) : retryPolicy;
                 try
                 {
-                    var apiResponse = await policy.ExecuteAsync(
+                    // Dispose explicitly after parsing: with ResponseHeadersRead (see APIPUB-134) an open
+                    // response holds a live connection and its unread body
+                    using var apiResponse = await policy.ExecuteAsync(
                             (ctx, ct) =>
                             {
                                 attempts++;
@@ -119,11 +124,12 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             $"Content of response for '{edFiApiClient.HttpClient.BaseAddress}{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}' was null.");
                     }
 
-                    string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-
                     // Failure
                     if (!apiResponse.IsSuccessStatusCode)
                     {
+                        // Error bodies are small, so buffering them as a string is deliberate (see APIPUB-134)
+                        string errorContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+
                         var error = new ErrorItemMessage
                         {
                             Method = HttpMethod.Get.ToString(),
@@ -131,7 +137,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             Id = null,
                             Body = null,
                             ResponseStatus = apiResponse.StatusCode,
-                            ResponseContent = responseContent
+                            ResponseContent = errorContent
                         };
 
                         // Publish the failure
@@ -150,10 +156,23 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             message.ResourceUrl, offset, offset + limit - 1, attempts, apiResponse.StatusCode);
                     }
 
-                    // Transform the page content to item actions
+                    // Transform the page content to item actions, streaming the response body in a single
+                    // forward-only pass -- the page is never buffered as a whole string (see APIPUB-134)
+                    int? topLevelItemCount = null;
+                    var pageMessages = new List<TProcessDataMessage>();
+
                     try
                     {
-                        transformedMessages.AddRange(message.CreateProcessDataMessages(message, responseContent));
+                        await using var responseStream = await apiResponse.Content.ReadAsStreamAsync().ConfigureAwait(false);
+
+                        // JSON is UTF-8 per RFC 8259 (and the Ed-Fi ODS API always emits UTF-8); StreamReader's
+                        // default UTF-8-with-BOM-detection deliberately replaces ReadAsStringAsync's charset negotiation
+                        using var streamReader = new StreamReader(responseStream);
+
+                        // Drain into a page-local list so a mid-page parse failure contributes no messages
+                        // (matching the previous whole-page JArray.Parse semantics)
+                        pageMessages.AddRange(
+                            message.CreateProcessDataMessages(message, streamReader, count => topLevelItemCount = count));
                     }
                     catch (JsonReaderException ex)
                     {
@@ -165,24 +184,31 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             Id = null,
                             Body = null,
                             ResponseStatus = apiResponse.StatusCode,
-                            ResponseContent = responseContent,
+                            // The page was streamed, not buffered, so the body is no longer in hand;
+                            // the exception carries the parse position (line/position/path) instead
+                            ResponseContent = null,
                             Exception = ex,
                         };
 
                         // Publish the failure
                         await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
-                        var logMessage = $"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}";
-                        _logger.Error(ex, logMessage);
+                        _logger.Error(ex,
+                            "{ResourceUrl}: JSON parsing of source page data failed at offset {Offset} (limit {Limit}).",
+                            message.ResourceUrl, offset, limit);
 
                         break;
                     }
 
+                    transformedMessages.AddRange(pageMessages);
+
                     if (!options.UseReversePaging)
                     {
                         // Perform limit/offset final page check (for need for possible continuation)
-                        // (Item count is derived without re-parsing the page into a JToken graph -- see APIPUB-112)
-                        if (message.IsFinalPage && JsonHelpers.CountTopLevelArrayItems(responseContent) == limit)
+                        // (Item count was captured during the single streaming pass over the page -- a count
+                        // is never reported when item creation stopped early alongside cancellation, and no
+                        // count means no continuation)
+                        if (message.IsFinalPage && topLevelItemCount == limit)
                         {
                             if (_logger.IsEnabled(LogEventLevel.Debug))
                             {

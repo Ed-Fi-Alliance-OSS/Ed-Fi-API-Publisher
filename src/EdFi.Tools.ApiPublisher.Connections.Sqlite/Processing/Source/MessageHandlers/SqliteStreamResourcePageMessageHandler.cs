@@ -91,7 +91,11 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
             // Transform the page content to item actions
             try
             {
-                transformedMessages.AddRange(message.CreateProcessDataMessages(message, json!));
+                // No count callback: SQLite source pages are rowid partitions, so final-page continuation
+                // (the count's only consumer) never applies here
+                using var jsonReader = new StringReader(json!);
+
+                transformedMessages.AddRange(message.CreateProcessDataMessages(message, jsonReader, null));
             }
             catch (JsonReaderException ex)
             {
