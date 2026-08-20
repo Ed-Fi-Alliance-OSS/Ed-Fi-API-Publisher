@@ -5,7 +5,9 @@
 
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing;
@@ -24,10 +26,20 @@ public interface IProcessingBlocksFactory<TProcessDataMessage>
     (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(CreateBlocksRequest createBlocksRequest);
 
     /// <summary>
-    /// Creates the custom data processing message(s) from the supplied page-level JSON content.
+    /// Creates the custom data processing message(s) from the supplied page-level JSON content, read as a
+    /// single forward-only pass over the supplied reader (the page is never buffered as a whole string on
+    /// the API source path -- see APIPUB-134).
     /// </summary>
     /// <param name="message">The message containing the context of the current streaming resource.</param>
-    /// <param name="json">The JSON payload for the current page of data.</param>
+    /// <param name="jsonReader">A single-read, forward-only reader over the JSON payload for the current page of data.
+    /// The reader is only valid while the returned enumerable is being enumerated.</param>
+    /// <param name="reportTopLevelItemCount">Optional callback invoked exactly once with the count of top-level array
+    /// elements in the page (which can exceed the number of messages produced, since implementations may skip
+    /// elements) when enumeration completes normally. Not invoked if enumeration stops early (implementations
+    /// only stop early alongside cancellation). Implementations must tolerate null.</param>
     /// <returns>An enumerable of 0 or more messages representing the data to be processed.</returns>
-    IEnumerable<TProcessDataMessage> CreateProcessDataMessages(StreamResourcePageMessage<TProcessDataMessage> message, string json);
+    IEnumerable<TProcessDataMessage> CreateProcessDataMessages(
+        StreamResourcePageMessage<TProcessDataMessage> message,
+        TextReader jsonReader,
+        Action<int> reportTopLevelItemCount);
 }

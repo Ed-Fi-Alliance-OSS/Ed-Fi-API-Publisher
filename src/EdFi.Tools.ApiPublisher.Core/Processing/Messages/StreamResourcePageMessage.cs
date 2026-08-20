@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
@@ -44,6 +45,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public CancellationTokenSource CancellationSource { get; set; }
 
         // TODO: GKM - Need to eliminate use of JObject in signature of this factory method -- needs proper abstractions
-        public Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> CreateProcessDataMessages { get; set; }
+        // Arguments: the page message, a single-read forward-only reader over the page JSON, and an optional
+        // callback reporting the top-level array element count (see IProcessingBlocksFactory<T>.CreateProcessDataMessages)
+        public Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> CreateProcessDataMessages { get; set; }
     }
 }

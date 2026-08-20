@@ -11,6 +11,7 @@ using Serilog;
 using Serilog.Events;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks.Dataflow;
@@ -21,7 +22,7 @@ public interface IStreamingResourceProcessor
 {
     IDictionary<string, StreamingPagesItem> Start<TProcessDataMessage>(
         Func<CreateBlocksRequest, (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
-        Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
+        Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
         ProcessingContext processingContext,
         CancellationToken cancellationToken);
 }
@@ -54,7 +55,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
 
     public IDictionary<string, StreamingPagesItem> Start<TProcessDataMessage>(
         Func<CreateBlocksRequest, (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>)> createProcessingBlocks,
-        Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
+        Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
         ProcessingContext processingContext,
         CancellationToken cancellationToken)
     {

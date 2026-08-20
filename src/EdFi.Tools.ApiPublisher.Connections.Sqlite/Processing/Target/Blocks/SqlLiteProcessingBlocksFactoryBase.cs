@@ -6,6 +6,7 @@
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -134,7 +135,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
                     var error = new ErrorItemMessage
                     {
                         ResourceUrl = msg.ResourceUrl,
-                        ResponseContent = msg.Json.Substring(0, 200) + "...",
+                        ResponseContent = msg.Json is { Length: > 200 } ? msg.Json[..200] + "..." : msg.Json,
                         Exception = ex
                     };
 
@@ -155,8 +156,17 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 
     public IEnumerable<TProcessDataMessage> CreateProcessDataMessages(
         StreamResourcePageMessage<TProcessDataMessage> message,
-        string json)
+        TextReader jsonReader,
+        Action<int> reportTopLevelItemCount)
     {
+        // EXEMPTION (APIPUB-134): this connector stores whole pages as TEXT rows in SQLite, so the page is
+        // deliberately buffered to a string here rather than streamed item-by-item.
+        string json = jsonReader.ReadToEnd();
+
+        // The API source handler still needs the top-level item count for final-page continuation when
+        // downloading to SQLite; run the streaming counting pass only when a caller asks for the count.
+        reportTopLevelItemCount?.Invoke(JsonHelpers.CountTopLevelArrayItems(json));
+
         yield return new TProcessDataMessage
         {
             ResourceUrl = message.ResourceUrl,

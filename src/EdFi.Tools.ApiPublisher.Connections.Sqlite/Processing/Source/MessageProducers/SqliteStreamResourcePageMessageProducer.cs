@@ -34,7 +34,7 @@ public class SqliteStreamResourcePageMessageProducer : IStreamResourcePageMessag
         StreamResourceMessage message,
         Options options,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock,
-        Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
+        Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
         CancellationToken cancellationToken)
     {
         // Get total count of items in source resource for change window (if applicable)

@@ -408,7 +408,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             return changeKey;
         }
 
-        public IEnumerable<GetItemForKeyChangeMessage> CreateProcessDataMessages(StreamResourcePageMessage<GetItemForKeyChangeMessage> message, string json)
+        public IEnumerable<GetItemForKeyChangeMessage> CreateProcessDataMessages(
+            StreamResourcePageMessage<GetItemForKeyChangeMessage> message,
+            TextReader jsonReader,
+            Action<int> reportTopLevelItemCount)
         {
             // Detect cancellation and quit returning messages
             if (message.CancellationSource.IsCancellationRequested)
@@ -416,11 +419,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 yield break;
             }
 
-            JArray items = JArray.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
-
-            // Iterate through the page of items
-            foreach (var item in items.OfType<JObject>())
+            // Iterate through the page of items, materializing one element at a time (see APIPUB-134)
+            foreach (var token in JsonHelpers.EnumerateTopLevelArrayItems(jsonReader, reportTopLevelItemCount))
             {
+                // Non-object elements are counted by the splitter but produce no message
+                if (token is not JObject item)
+                {
+                    continue;
+                }
+
                 // Detect cancellation and quit returning messages
                 if (message.CancellationSource.IsCancellationRequested)
                 {
