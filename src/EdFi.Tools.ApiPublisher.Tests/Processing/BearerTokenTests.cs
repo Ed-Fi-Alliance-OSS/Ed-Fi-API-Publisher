@@ -241,20 +241,27 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             TestHelpers.InitializeLogging();
 
-            using (TestCorrelator.CreateContext())
-            {
-                using var apiClient = CreateApiClient(fakeRequestHandler, bearerTokenRefreshMinutes: 28);
+            using var apiClient = CreateApiClient(fakeRequestHandler, bearerTokenRefreshMinutes: 28);
 
-                var messages = TestCorrelator
-                    .GetLogEventsFromCurrentContext()
-                    .Select(logEvent => logEvent.RenderMessage())
-                    .ToList();
+            // Half of the reported lifetime rather than the configured 28 minutes, so that a failed refresh can be
+            // retried before the token expires. Asserted on the effective interval rather than on a rendered log
+            // message, which would depend on wording and on the decimal separator of the current culture.
+            Assert.That(apiClient.RefreshInterval, Is.EqualTo(TimeSpan.FromMinutes(15)));
+        }
 
-                Assert.That(
-                    messages.Any(message => message.Contains("refresh interval") && message.Contains("15.0 minutes")),
-                    Is.True,
-                    $"Expected the refresh interval to be halved to 15 minutes. Messages: {string.Join(" | ", messages)}");
-            }
+        [Test]
+        public void When_the_api_reports_no_token_lifetime_the_configured_interval_is_kept()
+        {
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            A.CallTo(() => fakeRequestHandler.Post(TokenUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => TokenResponse(FirstToken));
+
+            TestHelpers.InitializeLogging();
+
+            using var apiClient = CreateApiClient(fakeRequestHandler, bearerTokenRefreshMinutes: 28);
+
+            Assert.That(apiClient.RefreshInterval, Is.EqualTo(TimeSpan.FromMinutes(28)));
         }
 
         private static EdFiApiClient CreateApiClient(

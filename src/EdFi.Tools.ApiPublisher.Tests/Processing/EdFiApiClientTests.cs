@@ -3,6 +3,8 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System.Net.Http;
+using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
@@ -13,10 +15,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     [TestFixture]
     public class EdFiApiClientTests
     {
-
+        private const string ResourceUrl = MockRequests.SourceApiBaseUrl + "/data/v3/ed-fi/schools";
+        private const string ResourceRelativeUrl = "data/v3/ed-fi/schools";
 
         [Test]
-        public void TokenRequest_ShouldAuthenticateWithAPIBaseUrl()
+        public async Task TokenRequest_ShouldAuthenticateWithAPIBaseUrl()
         {
             // Arrange
             // No Auth Url
@@ -25,16 +28,31 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
                 .SetBaseUrl(MockRequests.SourceApiBaseUrl)
                 .OAuthToken();
-            var client = new EdFiApiClient("TestClient", sourceApiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            string appliedAuthorizationHeader = null;
+
+            A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(
+                    (string url, HttpRequestMessage request) =>
+                    {
+                        appliedAuthorizationHeader = request.Headers.Authorization?.ToString();
+
+                        return FakeResponse.OK(new { });
+                    });
+
+            TestHelpers.InitializeLogging();
+
+            using var client = new EdFiApiClient(
+                "TestClient", sourceApiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
 
             // Act
-            var authHeader = client.HttpClient.DefaultRequestHeaders.Authorization;
+            await client.HttpClient.GetAsync(ResourceRelativeUrl);
 
             // Assert
-            Assert.That(authHeader != null, "Authentication Header cannot be null");
-            Assert.That(authHeader.Scheme, Is.EqualTo("Bearer"));
-            Assert.That(authHeader.Parameter, Is.EqualTo(MockRequests.OdsApiToken));
+            Assert.That(client.CurrentBearerToken, Is.EqualTo(MockRequests.OdsApiToken));
 
+            // The token reaches the API on the request itself, applied by the request pipeline
+            Assert.That(appliedAuthorizationHeader, Is.EqualTo($"Bearer {MockRequests.OdsApiToken}"));
         }
 
         [Test]
@@ -45,23 +63,17 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var apiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails();
             apiConnectionDetails.AuthUrl = MockRequests.SourceAuthenticateServiceUrl;
 
-            //var _fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
             var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
                 .SetBaseUrl(apiConnectionDetails.AuthUrl)
                 .SeparateAuthServiceToken();
 
-            var client = new EdFiApiClient("TestClient", apiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+            TestHelpers.InitializeLogging();
 
-            // Act
-            var authHeader = client.HttpClient.DefaultRequestHeaders.Authorization;
+            using var client = new EdFiApiClient(
+                "TestClient", apiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
 
             // Assert
-            Assert.That(authHeader != null, "Authentication Header cannot be null");
-            Assert.That(authHeader.Scheme, Is.EqualTo("Bearer"));
-            Assert.That(authHeader.Parameter, Is.EqualTo(MockRequests.AuthServiceToken));
-
+            Assert.That(client.CurrentBearerToken, Is.EqualTo(MockRequests.AuthServiceToken));
         }
-
     }
-
 }

@@ -22,6 +22,21 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             Assert.That(interval, Is.EqualTo(TimeSpan.FromMinutes(28)));
         }
 
+        [TestCaseSource(nameof(UnusableTokenLifetimes))]
+        public void When_the_reported_token_lifetime_is_not_usable_the_configured_interval_is_used(
+            TimeSpan tokenLifetime)
+        {
+            var interval = BearerTokenRefreshPolicy.GetRefreshInterval(TimeSpan.FromMinutes(28), tokenLifetime);
+
+            Assert.That(interval, Is.EqualTo(TimeSpan.FromMinutes(28)));
+        }
+
+        private static readonly TimeSpan[] UnusableTokenLifetimes =
+        {
+            TimeSpan.Zero,
+            TimeSpan.FromSeconds(-1)
+        };
+
         // A 30 minute token, which is what the Ed-Fi ODS / API issues, against the documented default of 28 minutes
         [TestCase(30, 28, 15)]
         // The configured interval is the upper bound, so a long lived token does not stretch it
