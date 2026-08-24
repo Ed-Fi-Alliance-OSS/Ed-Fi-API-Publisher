@@ -43,5 +43,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             return false;
         }
+
+        /// <summary>
+        /// The inverse of <see cref="IsRepresentedBy" />, so that retry policies can exclude an authentication
+        /// failure by referencing this method instead of repeating the predicate at every policy.
+        /// </summary>
+        public static bool IsNotRepresentedBy(Exception exception) => !IsRepresentedBy(exception);
     }
 }
