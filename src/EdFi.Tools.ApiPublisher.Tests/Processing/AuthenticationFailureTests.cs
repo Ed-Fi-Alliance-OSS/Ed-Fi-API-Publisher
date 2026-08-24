@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -12,6 +13,8 @@ using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
+using EdFi.Tools.ApiPublisher.Tests.Models;
+using Bogus;
 using FakeItEasy;
 using NUnit.Framework;
 
@@ -25,6 +28,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     public class AuthenticationFailureTests
     {
         private const string StateEducationAgencies = "/ed-fi/stateEducationAgencies";
+        private const string ResourceWithUpdatableKeys = "/ed-fi/classPeriods";
 
         [Test]
         public async Task When_the_target_token_cannot_be_obtained_the_run_fails()
@@ -81,12 +85,111 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             Assert.That(caught, Is.Not.Null, "A source that cannot authenticate must not let the run complete.");
         }
 
+        [Test]
+        public async Task When_the_target_cannot_authenticate_a_key_change_is_not_retried()
+        {
+            var fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
+                .AvailableChangeVersions(1100)
+                .ResourceCount(responseTotalCountHeader: 1)
+                .GetResourceData(@"/data/v3/ed-fi/\w+/keyChanges", GenerateKeyChanges());
+
+            var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
+
+            GivenTheTargetCannotAuthenticate(fakeTargetRequestHandler, ResourceWithUpdatableKeys);
+
+            var caught = await RunAndCaptureAsync(
+                fakeSourceRequestHandler,
+                fakeTargetRequestHandler,
+                includedResource: ResourceWithUpdatableKeys,
+                resourcesWithUpdatableKeys: new[] { ResourceWithUpdatableKeys });
+
+            Assert.That(caught, Is.Not.Null, "A key change that cannot be authenticated must not let the run complete.");
+
+            // Attempted once rather than retried MaxRetryAttempts times, because the retry policy excludes an
+            // authentication failure
+            AssertTargetResourceRequests(fakeTargetRequestHandler, ResourceWithUpdatableKeys, expectedCount: 1);
+        }
+
+        [Test]
+        public async Task When_the_target_cannot_authenticate_a_delete_is_not_retried()
+        {
+            var suppliedDeletes = new[]
+            {
+                new
+                {
+                    id = Guid.NewGuid().ToString("n"),
+                    keyValues = TestHelpers.GetKeyValueFaker().Generate()
+                }
+            };
+
+            var fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
+                .AvailableChangeVersions(1100)
+                .ResourceCount(responseTotalCountHeader: 1)
+                .GetResourceData($"{EdFiApiConstants.DataManagementApiSegment}{TestHelpers.AnyResourcePattern}/deletes", suppliedDeletes);
+
+            var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
+
+            GivenTheTargetCannotAuthenticate(fakeTargetRequestHandler, StateEducationAgencies);
+
+            var caught = await RunAndCaptureAsync(fakeSourceRequestHandler, fakeTargetRequestHandler);
+
+            Assert.That(caught, Is.Not.Null, "A delete that cannot be authenticated must not let the run complete.");
+
+            AssertTargetResourceRequests(fakeTargetRequestHandler, StateEducationAgencies, expectedCount: 1);
+        }
+
+        private static List<KeyChange<FakeKey>> GenerateKeyChanges()
+        {
+            var keyValueFaker = TestHelpers.GetKeyValueFaker();
+            int changeVersion = 1001;
+
+            var keyChangeFaker = new Faker<KeyChange<FakeKey>>().StrictMode(true)
+                .RuleFor(o => o.Id, f => Guid.NewGuid().ToString("n"))
+                .RuleFor(o => o.ChangeVersion, f => changeVersion++)
+                .Ignore(o => o.OldKeyValues)
+                .RuleFor(o => o.OldKeyValuesObject, f => keyValueFaker.Generate())
+                .Ignore(o => o.NewKeyValues)
+                .RuleFor(o => o.NewKeyValuesObject, f => keyValueFaker.Generate());
+
+            return keyChangeFaker.Generate(1);
+        }
+
+        /// <summary>
+        /// The request the target makes for the resource fails the way it does once its client has given up on the
+        /// token: the handler throws before the request is sent. Matched on the resource URL itself so that the
+        /// metadata requests the run needs first are left alone.
+        /// </summary>
+        private static void GivenTheTargetCannotAuthenticate(
+            IFakeHttpRequestHandler fakeTargetRequestHandler,
+            string resourcePath)
+        {
+            A.CallTo(
+                    () => fakeTargetRequestHandler.Get(
+                        $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{resourcePath}",
+                        A<HttpRequestMessage>.Ignored))
+                .Throws(() => new EdFiApiAuthenticationException("the bearer token could not be obtained"));
+        }
+
+        private static void AssertTargetResourceRequests(
+            IFakeHttpRequestHandler fakeTargetRequestHandler,
+            string resourcePath,
+            int expectedCount)
+        {
+            A.CallTo(
+                    () => fakeTargetRequestHandler.Get(
+                        $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{resourcePath}",
+                        A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(expectedCount, Times.Exactly);
+        }
+
         private static async Task<Exception> RunAndCaptureAsync(
             IFakeHttpRequestHandler fakeSourceRequestHandler,
-            IFakeHttpRequestHandler fakeTargetRequestHandler)
+            IFakeHttpRequestHandler fakeTargetRequestHandler,
+            string includedResource = StateEducationAgencies,
+            string[] resourcesWithUpdatableKeys = null)
         {
             var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
-                include: new[] { StateEducationAgencies });
+                include: new[] { includedResource });
 
             var targetApiConnectionDetails = TestHelpers.GetTargetApiConnectionDetails();
 
@@ -95,7 +198,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             TestHelpers.InitializeLogging();
 
-            var changeProcessorConfiguration = TestHelpers.CreateChangeProcessorConfiguration(options);
+            var changeProcessorConfiguration = TestHelpers.CreateChangeProcessorConfiguration(
+                options,
+                resourcesWithUpdatableKeys: resourcesWithUpdatableKeys);
 
             try
             {
