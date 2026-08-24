@@ -97,7 +97,7 @@ public class EdFiApiChangeVersionPagingStreamResourcePageMessageProducer : IStre
                 {
                     // Resource-specific context
                     ResourceUrl = message.ResourceUrl,
-                    PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
+                    HasAuthorizationRetryPipeline = message.HasAuthorizationRetryPipeline,
 
                     // Page-strategy specific context
                     Limit = limit,

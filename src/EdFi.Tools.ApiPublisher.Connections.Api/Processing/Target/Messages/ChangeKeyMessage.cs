@@ -26,5 +26,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
         /// Gets or sets the source API's resource identifier for the resource whose key was changed (primarily for correlating activity in log messages).
         /// </summary>
         public string SourceId { get; set; }
+
+        /// <summary>
+        /// Cancellation token from the resource's processing cancellation source, used to abandon in-flight
+        /// requests when processing of the resource has been cancelled.
+        /// </summary>
+        public CancellationToken CancellationToken { get; set; }
     }
 }

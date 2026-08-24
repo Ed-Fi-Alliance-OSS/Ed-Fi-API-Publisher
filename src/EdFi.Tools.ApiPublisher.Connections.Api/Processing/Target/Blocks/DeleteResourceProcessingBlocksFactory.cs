@@ -45,12 +45,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         public (ITargetBlock<GetItemForDeletionMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
-            // Retry pipelines are never bounded (see CreateBlocksRequest.IsRetryPipeline). Deletes are not
-            // currently routed through retry pipelines, but honor the flag here so the invariant is local
-            // rather than implied by the calling composition.
-            int boundedCapacity = createBlocksRequest.IsRetryPipeline
-                ? DataflowBlockOptions.Unbounded
-                : createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+            int boundedCapacity = createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
 
             TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> getItemForDeletionBlock =
                 CreateGetItemForDeletionBlock(
@@ -129,11 +124,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
 
                             return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}?{queryString}", ct);
-                        }, new Context(), CancellationToken.None);
+                        }, new Context(), msg.CancellationToken);
 
                         string responseContent = null;
 
-                        responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        responseContent = await apiResponse.Content.ReadAsStringAsync(msg.CancellationToken).ConfigureAwait(false);
 
                         if (!apiResponse.IsSuccessStatusCode)
                         {
@@ -192,6 +187,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 ResourceUrl = msg.ResourceUrl,
                                 Id = getByKeyResults[0]["id"].Value<string>(),
                                 SourceId = msg.Id,
+                                CancellationToken = msg.CancellationToken,
                             }
                         };
                     }
@@ -200,6 +196,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     {
                         _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                         throw;
+                    }
+                    catch (OperationCanceledException ex) when (msg.CancellationToken.IsCancellationRequested)
+                    {
+                        // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                        _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): GET by key abandoned because processing of the resource was cancelled.",
+                            msg.ResourceUrl, id);
+
+                        return Enumerable.Empty<DeleteItemMessage>();
                     }
                     catch (Exception ex)
                     {
@@ -288,12 +292,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
 
                             return targetApiClient.HttpClient.DeleteAsync($"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}/{id}", ct);
-                        }, new Context(), CancellationToken.None);
+                        }, new Context(), msg.CancellationToken);
 
                     // Failure
                     if (!apiResponse.IsSuccessStatusCode)
                     {
-                        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        string responseContent = await apiResponse.Content.ReadAsStringAsync(msg.CancellationToken).ConfigureAwait(false);
 
                         var message = $"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
                         _logger.Error(message);
@@ -332,6 +336,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 {
                     _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                     throw;
+                }
+                catch (OperationCanceledException ex) when (msg.CancellationToken.IsCancellationRequested)
+                {
+                    // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                    _logger.Debug(ex, "{ResourceUrl} (source id: {SourceId}): DELETE abandoned because processing of the resource was cancelled.",
+                        msg.ResourceUrl, sourceId);
+
+                    return Enumerable.Empty<ErrorItemMessage>();
                 }
                 catch (Exception ex)
                 {

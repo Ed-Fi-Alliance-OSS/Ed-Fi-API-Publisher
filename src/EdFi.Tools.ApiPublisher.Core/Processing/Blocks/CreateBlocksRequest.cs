@@ -28,12 +28,5 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         public AuthorizationFailureHandling[] AuthorizationFailureHandling { get; set; }
         public ITargetBlock<ErrorItemMessage> ErrorHandlingBlock { get; set; }
         public Func<string> JavaScriptModuleFactory { get; }
-
-        /// <summary>
-        /// Indicates the blocks are for an authorization-retry pseudo-resource ("#Retry"). Retry pipelines
-        /// receive their items through a synchronous <c>Post</c> from the main processing pipeline that would
-        /// silently drop messages if the target block declined them, so they must remain unbounded (see APIPUB-112).
-        /// </summary>
-        public bool IsRetryPipeline { get; set; }
     }
 }
