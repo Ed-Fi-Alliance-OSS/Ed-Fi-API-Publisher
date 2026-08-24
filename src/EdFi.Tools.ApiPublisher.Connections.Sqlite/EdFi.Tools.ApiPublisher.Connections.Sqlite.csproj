@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Autofac" Version="8.4.0" />
+    <PackageReference Include="Autofac" Version="9.3.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
   </ItemGroup>
   <ItemGroup>
