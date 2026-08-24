@@ -5,6 +5,7 @@
 
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
+using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Configuration.Enhancers;
 using EdFi.Tools.ApiPublisher.Core.Modules;
@@ -182,6 +183,15 @@ namespace EdFi.Tools.ApiPublisher.Cli
             //}
             catch (Exception ex)
             {
+                if (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                {
+                    // The single most important line for an unattended run: name authentication as the cause rather
+                    // than leaving it inside a generic failure message.
+                    _logger.Fatal($"Processing failed because the publisher could not authenticate against the API. No further data was published. {string.Join(" ", GetExceptionMessages(ex))}");
+
+                    return -1;
+                }
+
                 _logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
                 return -1;
             }

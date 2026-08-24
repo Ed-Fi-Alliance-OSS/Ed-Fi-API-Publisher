@@ -34,6 +34,16 @@ Defines general behavior of the Ed-Fi API Publisher.
 | Options:LastChangeVersionProcessedNamespace<br />`--lastChangeVersionProcessedNamespace`                  | Indicates the namespace for change version tracking.  If provided, this string will be prepended to the target name when reading and writing the lastChangeVersionsProcessed named connection parameter. |
 | Options:ProcessDeletesAndKeyChangesOnFullPublish<br/>`--processDeletesAndKeyChangesOnFullPublish`         | When `true`, performs delete and key change processing even when the change window starts at version 1 or below (full publish). By default, these operations are skipped in full publish scenarios because it is assumed the target is empty.<br/>(_Default value: false_) |
 
+### Bearer token handling
+
+The publisher refreshes its bearer token while a run is in progress, and recovers when the API rejects a request as unauthorized by obtaining a new token and sending the request again.
+
+- When the API reports the lifetime of the token it issues, the refresh interval is capped at half of that lifetime so that a failed refresh can be retried before the token expires. The interval is never shortened below 30 seconds. A token whose lifetime is around a minute therefore leaves no room to retry, and the first failed refresh ends the run.
+- A failed refresh is retried on a short, growing delay for as long as the current token remains usable. Publishing is unaffected while that happens, because the token in hand is still valid.
+- When the token can no longer be obtained at all, the run ends with a `FATAL` log entry rather than continuing to send requests that the API will reject.
+
+**Behavior change:** a run that cannot authenticate now exits with a non-zero exit code. Earlier versions could log the failure, keep going, and still exit `0`, so automation that treats a zero exit code as success will begin to see failures it previously did not.
+
 ## API Connections
 
 Metadata for source and targets API connections can be supplied to the publisher using values stored in a persistent configuration or through environment variables and/or command-line arguments, as documented below. It is **strongly recommended** that you use named connections with persistent configuration for repeated publishing operations (e.g. `--sourceName=abcd --targetName=wxyz`). You should not mix named connections with overrides supplied through environment variables or command-line arguments.
