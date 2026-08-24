@@ -210,6 +210,13 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
             return transformedMessages;
         }
+        catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+        {
+            // The source API client can no longer authenticate, so nothing that follows can succeed. Faulting the
+            // block reports one authoritative failure instead of an per-page error for every resource still
+            // streaming, each of which would rediscover the same dead token.
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.Error(ex, "{ResourceUrl}: {Ex}", message.ResourceUrl, ex);
