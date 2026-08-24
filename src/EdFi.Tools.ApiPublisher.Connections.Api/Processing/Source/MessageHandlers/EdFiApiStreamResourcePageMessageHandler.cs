@@ -128,7 +128,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     if (!apiResponse.IsSuccessStatusCode)
                     {
                         // Error bodies are small, so buffering them as a string is deliberate (see APIPUB-134)
-                        string errorContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        string errorContent = await apiResponse.Content.ReadAsStringAsync(message.CancellationSource.Token).ConfigureAwait(false);
 
                         var error = new ErrorItemMessage
                         {
@@ -163,7 +163,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
                     try
                     {
-                        await using var responseStream = await apiResponse.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                        await using var responseStream = await apiResponse.Content.ReadAsStreamAsync(message.CancellationSource.Token).ConfigureAwait(false);
 
                         // JSON is UTF-8 per RFC 8259 (and the Ed-Fi ODS API always emits UTF-8); StreamReader's
                         // default UTF-8-with-BOM-detection deliberately replaces ReadAsStringAsync's charset negotiation
@@ -240,20 +240,12 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
         }
         catch (OperationCanceledException ex) when (message.CancellationSource.IsCancellationRequested)
         {
-            // The run is being cancelled, so the request in flight was interrupted on purpose and is not an error.
-            _logger.Debug(
-                ex,
-                "{MessageResourceUrl}: Cancellation requested while retrieving page of source items starting at offset {Offset}.",
-                message.ResourceUrl, offset);
+            // Graceful cancellation of the resource's processing (normal flow) -- abandon the page fetch,
+            // including any in-flight request or retry backoff delay, without publishing an error
+            _logger.Debug(ex, "{ResourceUrl}: Page fetch abandoned because processing of the resource was cancelled.",
+                message.ResourceUrl);
 
-            return Enumerable.Empty<TProcessDataMessage>();
-        }
-        catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
-        {
-            // The source API client can no longer authenticate, so nothing that follows can succeed. Faulting the
-            // block reports one authoritative failure instead of an per-page error for every resource still
-            // streaming, each of which would rediscover the same dead token.
-            throw;
+            return Array.Empty<TProcessDataMessage>();
         }
         catch (Exception ex)
         {

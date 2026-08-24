@@ -25,11 +25,14 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 {
     private readonly Func<SqliteConnection> _createConnection;
 
-    private readonly ILogger _logger = Log.ForContext(typeof(UpsertProcessingBlocksFactory));
+    private readonly ILogger _logger;
 
     protected SqlLiteProcessingBlocksFactoryBase(Func<SqliteConnection> createConnection)
     {
         _createConnection = createConnection;
+
+        // Log under the concrete factory type (upserts, deletes or key changes), not a fixed one
+        _logger = Log.ForContext(GetType());
     }
 
     protected abstract string TableSuffix { get; }
