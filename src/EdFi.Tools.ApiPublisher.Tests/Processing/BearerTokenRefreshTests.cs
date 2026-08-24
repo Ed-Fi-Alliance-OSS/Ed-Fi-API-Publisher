@@ -17,9 +17,9 @@ using NUnit.Framework;
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
     /// <summary>
-    /// Covers what the periodic refresh does with the decision the policy hands it: how the next attempt is
-    /// scheduled, and when the client stops trying altogether. Driven through the refresh attempt itself rather than
-    /// by waiting for a real timer to fire.
+    /// Covers the token lifecycle on its own: the interval it settles on, what it does with the decision the policy
+    /// hands it, and when it stops trying altogether. Driven through a refresh attempt rather than by waiting for a
+    /// real timer to fire.
     /// </summary>
     [TestFixture]
     public class BearerTokenRefreshTests
@@ -30,14 +30,37 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private const string AnyToken = "any-access-token";
 
         [Test]
+        public void The_refresh_interval_is_capped_at_half_of_the_reported_token_lifetime()
+        {
+            // A 30 minute token, which is what the Ed-Fi ODS / API issues, against the documented default interval
+            var fakeRequestHandler = GivenTheTokenEndpoint(out _, tokenLifetimeSeconds: 1800);
+
+            using var tokenManager = CreateTokenManager(fakeRequestHandler);
+
+            // Asserted on the effective interval rather than on a rendered log message, which would depend on
+            // wording and on the decimal separator of the current culture
+            Assert.That(tokenManager.RefreshInterval, Is.EqualTo(TimeSpan.FromMinutes(15)));
+        }
+
+        [Test]
+        public void The_configured_interval_is_kept_when_the_api_reports_no_token_lifetime()
+        {
+            var fakeRequestHandler = GivenTheTokenEndpoint(out _, tokenLifetimeSeconds: null);
+
+            using var tokenManager = CreateTokenManager(fakeRequestHandler);
+
+            Assert.That(tokenManager.RefreshInterval, Is.EqualTo(TimeSpan.FromMinutes(28)));
+        }
+
+        [Test]
         public void A_successful_refresh_schedules_the_next_attempt_at_the_effective_interval()
         {
             var fakeRequestHandler = GivenTheTokenEndpoint(out _, tokenLifetimeSeconds: 1800);
 
-            using var apiClient = CreateApiClient(fakeRequestHandler);
+            using var tokenManager = CreateTokenManager(fakeRequestHandler);
 
-            Assert.That(apiClient.TryRefreshBearerToken(), Is.EqualTo(apiClient.RefreshInterval));
-            Assert.That(apiClient.IsAuthenticationFailed, Is.False);
+            Assert.That(tokenManager.TryRefreshBearerToken(), Is.EqualTo(tokenManager.RefreshInterval));
+            Assert.That(tokenManager.IsAuthenticationFailed, Is.False);
         }
 
         [Test]
@@ -45,15 +68,15 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var fakeRequestHandler = GivenTheTokenEndpoint(out var failTokenRequests, tokenLifetimeSeconds: 3600);
 
-            using var apiClient = CreateApiClient(fakeRequestHandler);
+            using var tokenManager = CreateTokenManager(fakeRequestHandler);
 
             failTokenRequests.Value = true;
 
             // The token has most of an hour left, so the failures are retried instead of ending the run
-            Assert.That(apiClient.TryRefreshBearerToken(), Is.EqualTo(TimeSpan.FromSeconds(5)));
-            Assert.That(apiClient.TryRefreshBearerToken(), Is.EqualTo(TimeSpan.FromSeconds(10)));
-            Assert.That(apiClient.TryRefreshBearerToken(), Is.EqualTo(TimeSpan.FromSeconds(20)));
-            Assert.That(apiClient.IsAuthenticationFailed, Is.False);
+            Assert.That(tokenManager.TryRefreshBearerToken(), Is.EqualTo(TimeSpan.FromSeconds(5)));
+            Assert.That(tokenManager.TryRefreshBearerToken(), Is.EqualTo(TimeSpan.FromSeconds(10)));
+            Assert.That(tokenManager.TryRefreshBearerToken(), Is.EqualTo(TimeSpan.FromSeconds(20)));
+            Assert.That(tokenManager.IsAuthenticationFailed, Is.False);
         }
 
         [Test]
@@ -62,23 +85,23 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // Without expires_in there is no runway to measure, so the failure count is what decides
             var fakeRequestHandler = GivenTheTokenEndpoint(out var failTokenRequests, tokenLifetimeSeconds: null);
 
-            using var apiClient = CreateApiClient(fakeRequestHandler);
+            using var tokenManager = CreateTokenManager(fakeRequestHandler);
 
             failTokenRequests.Value = true;
 
             for (int attempt = 1; attempt < BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithUnknownLifetime; attempt++)
             {
                 Assert.That(
-                    apiClient.TryRefreshBearerToken(),
+                    tokenManager.TryRefreshBearerToken(),
                     Is.Not.Null,
                     $"Attempt {attempt} should still have been retried.");
 
-                Assert.That(apiClient.IsAuthenticationFailed, Is.False);
+                Assert.That(tokenManager.IsAuthenticationFailed, Is.False);
             }
 
-            // The attempt that exhausts what is tolerated stops rearming the timer and fails the client
-            Assert.That(apiClient.TryRefreshBearerToken(), Is.Null);
-            Assert.That(apiClient.IsAuthenticationFailed, Is.True);
+            // The attempt that exhausts what is tolerated stops rearming the timer and fails the manager
+            Assert.That(tokenManager.TryRefreshBearerToken(), Is.Null);
+            Assert.That(tokenManager.IsAuthenticationFailed, Is.True);
         }
 
         [Test]
@@ -86,18 +109,18 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var fakeRequestHandler = GivenTheTokenEndpoint(out var failTokenRequests, tokenLifetimeSeconds: 3600);
 
-            using var apiClient = CreateApiClient(fakeRequestHandler);
+            using var tokenManager = CreateTokenManager(fakeRequestHandler);
 
             failTokenRequests.Value = true;
-            apiClient.TryRefreshBearerToken();
-            apiClient.TryRefreshBearerToken();
+            tokenManager.TryRefreshBearerToken();
+            tokenManager.TryRefreshBearerToken();
 
             failTokenRequests.Value = false;
-            Assert.That(apiClient.TryRefreshBearerToken(), Is.EqualTo(apiClient.RefreshInterval));
+            Assert.That(tokenManager.TryRefreshBearerToken(), Is.EqualTo(tokenManager.RefreshInterval));
 
             // Back to the first backoff step rather than continuing where the earlier failures left off
             failTokenRequests.Value = true;
-            Assert.That(apiClient.TryRefreshBearerToken(), Is.EqualTo(TimeSpan.FromSeconds(5)));
+            Assert.That(tokenManager.TryRefreshBearerToken(), Is.EqualTo(TimeSpan.FromSeconds(5)));
         }
 
         [Test]
@@ -108,20 +131,32 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
                 .ReturnsLazily(() => FakeResponse.OK(new { }));
 
-            using var apiClient = CreateApiClient(fakeRequestHandler);
+            var transportHandler = new HttpClientHandlerFakeBridge(fakeRequestHandler);
+
+            using var tokenManager = new BearerTokenManager(
+                "TestSource",
+                TestHelpers.GetSourceApiConnectionDetails(),
+                bearerTokenRefreshMinutes: 28,
+                transportHandler);
+
+            using var httpClient = new HttpClient(
+                new BearerTokenHandler(transportHandler, tokenManager, "TestSource"))
+            {
+                BaseAddress = new Uri(MockRequests.SourceApiBaseUrl + "/")
+            };
 
             failTokenRequests.Value = true;
 
             for (int attempt = 0; attempt < BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithUnknownLifetime; attempt++)
             {
-                apiClient.TryRefreshBearerToken();
+                tokenManager.TryRefreshBearerToken();
             }
 
-            Assert.That(apiClient.IsAuthenticationFailed, Is.True);
+            Assert.That(tokenManager.IsAuthenticationFailed, Is.True);
 
             int tokenRequestsSoFar = CountTokenRequests(fakeRequestHandler);
 
-            Assert.That(apiClient.TryRefreshBearerToken(), Is.Null, "The timer should not be rearmed.");
+            Assert.That(tokenManager.TryRefreshBearerToken(), Is.Null, "The timer should not be rearmed.");
             Assert.That(
                 CountTokenRequests(fakeRequestHandler),
                 Is.EqualTo(tokenRequestsSoFar),
@@ -131,7 +166,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             try
             {
-                await apiClient.HttpClient.GetAsync(ResourceRelativeUrl);
+                await httpClient.GetAsync(ResourceRelativeUrl);
             }
             catch (Exception ex)
             {
@@ -194,12 +229,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 ? FakeResponse.OK(new { access_token = AnyToken })
                 : FakeResponse.OK(new { access_token = AnyToken, expires_in = expiresInSeconds.Value });
 
-        private static EdFiApiClient CreateApiClient(IFakeHttpRequestHandler fakeRequestHandler) =>
-            new EdFiApiClient(
+        private static BearerTokenManager CreateTokenManager(IFakeHttpRequestHandler fakeRequestHandler) =>
+            new BearerTokenManager(
                 "TestSource",
                 TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes: 28,
-                ignoreSslErrors: true,
                 new HttpClientHandlerFakeBridge(fakeRequestHandler));
 
         private sealed class MutableFlag

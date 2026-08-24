@@ -49,9 +49,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             await client.HttpClient.GetAsync(ResourceRelativeUrl);
 
             // Assert
-            Assert.That(client.CurrentBearerToken, Is.EqualTo(MockRequests.OdsApiToken));
-
-            // The token reaches the API on the request itself, applied by the request pipeline
+            // The token is obtained from the API's own base URL and reaches the API on the request itself, applied
+            // by the request pipeline
             Assert.That(appliedAuthorizationHeader, Is.EqualTo($"Bearer {MockRequests.OdsApiToken}"));
         }
 
@@ -69,11 +68,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             TestHelpers.InitializeLogging();
 
-            using var client = new EdFiApiClient(
-                "TestClient", apiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+            using var tokenManager = new BearerTokenManager(
+                "TestClient", apiConnectionDetails, 60, new HttpClientHandlerFakeBridge(fakeRequestHandler));
 
             // Assert
-            Assert.That(client.CurrentBearerToken, Is.EqualTo(MockRequests.AuthServiceToken));
+            Assert.That(tokenManager.CurrentBearerToken, Is.EqualTo(MockRequests.AuthServiceToken));
         }
     }
 }
