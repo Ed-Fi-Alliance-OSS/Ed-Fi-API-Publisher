@@ -17,7 +17,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     public class BearerTokenHandler : DelegatingHandler
     {
         private readonly IBearerTokenProvider _bearerTokenProvider;
-        private readonly string _name;
+        private readonly string _displayName;
         private readonly ILogger _logger = Log.ForContext(typeof(BearerTokenHandler));
 
         public BearerTokenHandler(
@@ -29,7 +29,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             _bearerTokenProvider =
                 bearerTokenProvider ?? throw new ArgumentNullException(nameof(bearerTokenProvider));
-            _name = name;
+            _displayName = name?.ToLower();
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -40,21 +40,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (_bearerTokenProvider.IsAuthenticationFailed)
             {
                 throw new EdFiApiAuthenticationException(
-                    $"The bearer token for the {_name.ToLower()} API client could not be obtained, so the request '{request.Method} {request.RequestUri}' cannot be authenticated."
+                    $"The bearer token for the {_displayName} API client could not be obtained, so the request '{request.Method} {request.RequestUri}' cannot be authenticated."
                 );
             }
 
             string bearerToken = _bearerTokenProvider.CurrentBearerToken;
 
             ApplyBearerToken(request, bearerToken);
-
-            // The body and its headers have to be captured before sending, because the content is disposed once the
-            // request has been sent. Everything else on the request remains readable afterwards.
-            byte[] requestBody = request.Content == null
-                ? null
-                : await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-
-            var requestContentHeaders = request.Content?.Headers.ToList();
 
             var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -67,7 +59,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 "'{Method} {RequestUri}' was rejected as unauthorized by the {Name} API. Re-acquiring the bearer token and replaying the request...",
                 request.Method,
                 request.RequestUri,
-                _name.ToLower()
+                _displayName
             );
 
             bool tokenIsUsable = await _bearerTokenProvider
@@ -81,13 +73,70 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return response;
             }
 
-            var replayRequest = CloneRequest(request, requestBody, requestContentHeaders);
+            var replayRequest = await TryCloneRequestAsync(request, cancellationToken).ConfigureAwait(false);
+
+            if (replayRequest == null)
+            {
+                return response;
+            }
 
             ApplyBearerToken(replayRequest, _bearerTokenProvider.CurrentBearerToken);
 
             response.Dispose();
 
             return await base.SendAsync(replayRequest, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Builds the request to replay. The body is only read here, on the unauthorized path, so that an ordinary
+        /// request does not pay for a copy it never needs. It is still readable at this point because the request is
+        /// disposed by <see cref="HttpClient" /> once the send completes, which is after this handler returns.
+        /// </summary>
+        private async Task<HttpRequestMessage> TryCloneRequestAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            if (request.Content == null)
+            {
+                return CloneRequest(request, requestBody: null, requestContentHeaders: null);
+            }
+
+            long? expectedLength = request.Content.Headers.ContentLength;
+            byte[] requestBody;
+
+            try
+            {
+                requestBody = await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or IOException)
+            {
+                _logger.Warning(
+                    ex,
+                    "'{Method} {RequestUri}' cannot be replayed because its body is no longer readable. The unauthorized response is reported instead.",
+                    request.Method,
+                    request.RequestUri
+                );
+
+                return null;
+            }
+
+            // A body that is no longer fully readable would be replayed truncated, which is worse than reporting
+            // the unauthorized response.
+            if (expectedLength != null && requestBody.LongLength != expectedLength.Value)
+            {
+                _logger.Warning(
+                    "'{Method} {RequestUri}' cannot be replayed because only {ActualLength} of {ExpectedLength} bytes of its body are still readable. The unauthorized response is reported instead.",
+                    request.Method,
+                    request.RequestUri,
+                    requestBody.LongLength,
+                    expectedLength.Value
+                );
+
+                return null;
+            }
+
+            return CloneRequest(request, requestBody, request.Content.Headers.ToList());
         }
 
         private static void ApplyBearerToken(HttpRequestMessage request, string bearerToken)
