@@ -40,95 +40,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     [TestFixture]
     public class StreamingPageReadTests
     {
-        /// <summary>
-        /// A non-seekable read-only stream that records whether it was disposed.
-        /// </summary>
-        private class ForwardOnlyStream : Stream
-        {
-            private readonly MemoryStream _inner;
-
-            public ForwardOnlyStream(byte[] data)
-            {
-                _inner = new MemoryStream(data);
-            }
-
-            public bool Disposed { get; private set; }
-
-            public override bool CanRead => true;
-            public override bool CanSeek => false;
-            public override bool CanWrite => false;
-            public override long Length => throw new NotSupportedException();
-
-            public override long Position
-            {
-                get => throw new NotSupportedException();
-                set => throw new NotSupportedException();
-            }
-
-            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
-            public override void Flush() { }
-            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-            public override void SetLength(long value) => throw new NotSupportedException();
-            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-            protected override void Dispose(bool disposing)
-            {
-                Disposed = true;
-                _inner.Dispose();
-
-                base.Dispose(disposing);
-            }
-        }
-
-        /// <summary>
-        /// HttpContent that hands out a non-seekable stream for the streaming path and records whether the
-        /// whole-body buffering path (used by ReadAsStringAsync and by HttpClient's ResponseContentRead
-        /// completion option) was ever invoked.
-        /// </summary>
-        private class InstrumentedJsonContent : HttpContent
-        {
-            private readonly byte[] _data;
-
-            public InstrumentedJsonContent(string json)
-            {
-                _data = Encoding.UTF8.GetBytes(json);
-                Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            }
-
-            public bool BufferingAttempted { get; private set; }
-            public bool ContentDisposed { get; private set; }
-            public int StreamsCreated { get; private set; }
-            public ForwardOnlyStream LastStream { get; private set; }
-
-            protected override Task<Stream> CreateContentReadStreamAsync()
-            {
-                StreamsCreated++;
-                LastStream = new ForwardOnlyStream(_data);
-
-                return Task.FromResult<Stream>(LastStream);
-            }
-
-            protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext context)
-            {
-                BufferingAttempted = true;
-
-                return stream.WriteAsync(_data, 0, _data.Length);
-            }
-
-            protected override bool TryComputeLength(out long length)
-            {
-                length = _data.Length;
-
-                return true;
-            }
-
-            protected override void Dispose(bool disposing)
-            {
-                ContentDisposed = true;
-
-                base.Dispose(disposing);
-            }
-        }
+        // ForwardOnlyStream and InstrumentedJsonContent live in Tests\Helpers (shared with the
+        // retry-disposal and count-provider tests)
 
         private static PostResourceProcessingBlocksFactory CreatePostFactory()
         {
@@ -330,6 +243,119 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             // The response is still disposed after the failure
             content.ContentDisposed.ShouldBeTrue();
+        }
+
+        [Test]
+        public async Task Transient_retry_responses_should_be_disposed()
+        {
+            TestHelpers.InitializeLogging();
+
+            var (handler, fakeRequestHandler) = CreateHandler();
+
+            // First attempt fails transiently; the retry succeeds
+            var transientContent = new InstrumentedJsonContent(@"{""message"":""temporarily unavailable""}");
+            int attempts = 0;
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                () => Interlocked.Increment(ref attempts) == 1
+                    ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = transientContent }
+                    : new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new InstrumentedJsonContent(@"[{""id"":""1""}]")
+                    });
+
+            var message = CreatePageMessage(limit: 50, isFinalPage: false);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
+                .ToArray();
+
+            attempts.ShouldBe(2);
+            itemMessages.Length.ShouldBe(1);
+            errorBlock.Count.ShouldBe(0);
+
+            // With ResponseHeadersRead, an undisposed transient response would pin a connection --
+            // the retry callback must dispose the failed response being retried
+            transientContent.ContentDisposed.ShouldBeTrue();
+        }
+
+        [Test]
+        public async Task Cancellation_during_transient_retry_should_abandon_the_page_fetch_without_publishing_an_error()
+        {
+            TestHelpers.InitializeLogging();
+
+            var (handler, fakeRequestHandler) = CreateHandler();
+
+            var message = CreatePageMessage(limit: 50, isFinalPage: false);
+
+            int attempts = 0;
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                () =>
+                {
+                    Interlocked.Increment(ref attempts);
+
+                    // Cancel while the retry policy is heading into its backoff delay
+                    message.CancellationSource.Cancel();
+
+                    return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                    {
+                        Content = new StringContent("{}", Encoding.UTF8, "application/json")
+                    };
+                });
+
+            // Without cancellation aborting the retry backoff, this configuration would take minutes
+            var options = TestHelpers.GetOptions();
+            options.MaxRetryAttempts = 10;
+            options.RetryStartingDelayMilliseconds = 10_000;
+
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            var handlerTask = handler.HandleStreamResourcePageAsync(message, options, errorBlock);
+            (await Task.WhenAny(handlerTask, Task.Delay(TimeSpan.FromSeconds(30)))).ShouldBe(handlerTask);
+
+            // Graceful cancellation: no items, no further attempts, and no error published
+            (await handlerTask).ShouldBeEmpty();
+            attempts.ShouldBe(1);
+            errorBlock.Count.ShouldBe(0);
+        }
+
+        [Test]
+        public async Task Precancelled_page_message_should_return_no_items_without_requesting_or_publishing_anything()
+        {
+            TestHelpers.InitializeLogging();
+
+            var (handler, fakeRequestHandler) = CreateHandler();
+
+            int attempts = 0;
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                () =>
+                {
+                    Interlocked.Increment(ref attempts);
+
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("[]", Encoding.UTF8, "application/json")
+                    };
+                });
+
+            var message = CreatePageMessage(limit: 50, isFinalPage: false);
+            message.CancellationSource.Cancel();
+
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock);
+
+            itemMessages.ShouldBeEmpty();
+            attempts.ShouldBe(0);
+            errorBlock.Count.ShouldBe(0);
         }
     }
 }

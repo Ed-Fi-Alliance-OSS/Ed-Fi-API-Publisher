@@ -115,7 +115,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                                 return RequestHelpers.SendGetRequestAsync(edFiApiClient, message.ResourceUrl, requestUri, ct);
                             },
                             new Context(),
-                            CancellationToken.None);
+                            message.CancellationSource.Token);
 
                     // Detect null content and provide a better error message (which happens only during unit testing if mocked requests aren't properly defined)
                     if (apiResponse.Content == null)
@@ -128,7 +128,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     if (!apiResponse.IsSuccessStatusCode)
                     {
                         // Error bodies are small, so buffering them as a string is deliberate (see APIPUB-134)
-                        string errorContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        string errorContent = await apiResponse.Content.ReadAsStringAsync(message.CancellationSource.Token).ConfigureAwait(false);
 
                         var error = new ErrorItemMessage
                         {
@@ -163,7 +163,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
                     try
                     {
-                        await using var responseStream = await apiResponse.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                        await using var responseStream = await apiResponse.Content.ReadAsStreamAsync(message.CancellationSource.Token).ConfigureAwait(false);
 
                         // JSON is UTF-8 per RFC 8259 (and the Ed-Fi ODS API always emits UTF-8); StreamReader's
                         // default UTF-8-with-BOM-detection deliberately replaces ReadAsStringAsync's charset negotiation
@@ -237,6 +237,15 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             while (true);
 
             return transformedMessages;
+        }
+        catch (OperationCanceledException ex) when (message.CancellationSource.IsCancellationRequested)
+        {
+            // Graceful cancellation of the resource's processing (normal flow) -- abandon the page fetch,
+            // including any in-flight request or retry backoff delay, without publishing an error
+            _logger.Debug(ex, "{ResourceUrl}: Page fetch abandoned because processing of the resource was cancelled.",
+                message.ResourceUrl);
+
+            return Array.Empty<TProcessDataMessage>();
         }
         catch (Exception ex)
         {

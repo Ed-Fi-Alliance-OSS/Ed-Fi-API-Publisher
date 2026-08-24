@@ -79,6 +79,10 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                         options.MaxRetryAttempts,
                         ts.TotalSeconds
                     );
+
+                    // With ResponseHeadersRead (see APIPUB-134), an abandoned response pins a
+                    // connection until finalized -- release the transient failure being retried
+                    result.Result?.Dispose();
                 }
             );
         IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled
@@ -115,12 +119,9 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 cancellationToken
             );
 
-            string responseContent = null;
-
             if (!apiResponse.IsSuccessStatusCode)
             {
-                var messge = $"{resourceUrl}: Count request returned {apiResponse.StatusCode}\r{responseContent}";
-                _logger.Error(messge);
+                _logger.Error("{Url}: Count request returned {StatusCode}.", resourceUrl, apiResponse.StatusCode);
 
                 await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse, cancellationToken)
                     .ConfigureAwait(false);
