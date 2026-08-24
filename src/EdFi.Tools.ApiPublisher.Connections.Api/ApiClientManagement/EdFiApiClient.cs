@@ -323,8 +323,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     authResponseMessage.StatusCode,
                     Truncate(authResponseContent)
                 );
+                // The status belongs in the message as well as in the log entry above, because this is the message
+                // that travels up to the operator when the run ends.
                 throw new EdFiApiAuthenticationException(
-                    $"Authentication failed for {_displayName} API client."
+                    $"Authentication failed for {_displayName} API client: the token request to '{authRequest.RequestUri}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}."
                 );
             }
 
