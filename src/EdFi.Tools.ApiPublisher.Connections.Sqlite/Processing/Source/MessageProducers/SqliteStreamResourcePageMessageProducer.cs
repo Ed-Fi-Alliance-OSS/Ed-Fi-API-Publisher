@@ -77,7 +77,7 @@ public class SqliteStreamResourcePageMessageProducer : IStreamResourcePageMessag
             {
                 // Resource-specific context
                 ResourceUrl = message.ResourceUrl,
-                PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
+                HasAuthorizationRetryPipeline = message.HasAuthorizationRetryPipeline,
 
                 // Use key set paging strategy properties
                 PartitionFrom = reader.GetInt32("id").ToString(),

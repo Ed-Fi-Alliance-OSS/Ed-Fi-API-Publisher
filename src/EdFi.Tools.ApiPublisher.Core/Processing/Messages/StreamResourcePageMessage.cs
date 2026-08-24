@@ -21,8 +21,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public string ResourceUrl { get; set; }
 
         // Source Ed-Fi ODS API processing context (resource-specific)
-        // Question: Is this just a pass-through from the top-level StreamResourceMessage?
-        public Action<object> PostAuthorizationFailureRetry { get; set; }
+        // Pass-through from the top-level StreamResourceMessage (see its remarks): true when an
+        // authorization-retry ("#Retry") pipeline will re-publish this resource after prerequisites complete.
+        public bool HasAuthorizationRetryPipeline { get; set; }
 
         // -------------------------------
         // Paging-strategy specific context

@@ -26,8 +26,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
         public TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> CreateBlock<TProcessDataMessage>(
             Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
-            bool applyBoundedCapacity = true)
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
             var streamResourcePagesBlock =
                 new TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage>(
@@ -57,9 +56,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                         // source (see APIPUB-112). The bound is denominated in page messages: it gates how many
                         // pages may be accepted (and therefore fetched), since each accepted page expands into
                         // a full page of items regardless of how full the block's output buffer already is.
-                        BoundedCapacity = applyBoundedCapacity
-                            ? options.ResolvedStreamResourcePagesBlockBoundedCapacity
-                            : DataflowBlockOptions.Unbounded,
+                        BoundedCapacity = options.ResolvedStreamResourcePagesBlockBoundedCapacity,
                     });
 
             return streamResourcePagesBlock;

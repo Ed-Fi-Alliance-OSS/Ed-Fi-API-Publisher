@@ -68,7 +68,10 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
         var streamingResourceBlockByResourceKey =
             new Dictionary<string, ITargetBlock<StreamResourceMessage>>(StringComparer.OrdinalIgnoreCase);
 
-        var postAuthorizationRetryByResourceKey = new Dictionary<string, Action<object>>(StringComparer.OrdinalIgnoreCase);
+        // Resource paths that have an authorization-retry ("#Retry") pipeline which re-publishes the entire
+        // resource after its update prerequisites complete. A 403 on an individual item of such a resource is
+        // skipped (no error published) because the retry pass covers it (see APIPUB-133).
+        var retryPipelineResourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Set up streaming resource blocks for all resources
         foreach (var kvp in processingContext.DependencyKeysByResourceKey)
@@ -83,30 +86,14 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
                 processingContext.Options,
                 processingContext.AuthorizationFailureHandling,
                 processingContext.PublishErrorsIngestionBlock,
-                processingContext.JavaScriptModuleFactory)
-            {
-                IsRetryPipeline = isRetryPipeline,
-            };
+                processingContext.JavaScriptModuleFactory);
 
             // This creates the actual processing sub-pipeline ingesting TProcessDataMessage through to ErrorItemMessages
             var (processingInputBlock, processingOutputBlock) = createProcessingBlocks(createBlocksRequest);
 
             if (isRetryPipeline)
             {
-                // Save an action delegate for processing the item, keyed by the resource path.
-                // NOTE: Retry pipeline blocks are never bounded, so the Post here can only be declined if the
-                // block has already completed (see APIPUB-112).
-                postAuthorizationRetryByResourceKey.Add(
-                    resourcePath,
-                    msg =>
-                    {
-                        if (!processingInputBlock.Post((TProcessDataMessage)msg))
-                        {
-                            _logger.Error(
-                                "{ResourcePath}: Authorization retry message was declined by the retry processing block and will not be reprocessed.",
-                                resourcePath);
-                        }
-                    });
+                retryPipelineResourcePaths.Add(resourcePath);
             }
 
             streamingPagesByResourceKey.Add(resourceKey, new StreamingPagesItem { CompletionBlock = processingOutputBlock });
@@ -115,12 +102,11 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>> streamResourceBlock =
                 _streamResourceBlockFactory.CreateBlock(createProcessDataMessages, processingContext.PublishErrorsIngestionBlock, processingContext.Options, cancellationToken);
 
-            // Create a new StreamResourcePages block (unbounded for retry pipelines -- see CreateBlocksRequest.IsRetryPipeline)
+            // Create a new StreamResourcePages block
             TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> streamResourcePagesBlock =
                 _streamResourcePagesBlockFactory.CreateBlock<TProcessDataMessage>(
                     processingContext.Options,
-                    processingContext.PublishErrorsIngestionBlock,
-                    applyBoundedCapacity: !isRetryPipeline);
+                    processingContext.PublishErrorsIngestionBlock);
 
             // Link together the general pipeline
             streamResourceBlock.LinkTo(streamResourcePagesBlock, linkOptions);
@@ -154,7 +140,10 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             // Record the dependencies for status reporting
             streamingPagesByResourceKey[resourceKey].DependencyPaths = dependencyPaths;
 
-            postAuthorizationRetryByResourceKey.TryGetValue(resourceKey, out Action<object> postRetry);
+            // Looked up by resource KEY so only the main resource is flagged -- the "#Retry" pseudo-resource
+            // itself is not, meaning a repeat 403 during the retry pass surfaces as an error (or a warning
+            // under TreatForbiddenPostAsWarning) rather than deferring again.
+            bool hasAuthorizationRetryPipeline = retryPipelineResourcePaths.Contains(resourceKey);
 
             var skippedResources = ResourcePathHelper.ParseResourcesCsvToResourcePathArray(_sourceConnectionDetails.ExcludeOnly);
 
@@ -168,11 +157,11 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
                 PageSize = processingContext.Options.StreamingPageSize,
                 ChangeWindow = processingContext.ChangeWindow,
                 CancellationSource = cancellationSource,
-                PostAuthorizationFailureRetry = postRetry,
+                HasAuthorizationRetryPipeline = hasAuthorizationRetryPipeline,
                 ProcessingSemaphore = processingContext.Semaphore,
             };
 
-            if (postRetry != null)
+            if (hasAuthorizationRetryPipeline)
             {
                 _logger.Debug($"{message.ResourceUrl}: Authorization retry processing is supported.");
             }

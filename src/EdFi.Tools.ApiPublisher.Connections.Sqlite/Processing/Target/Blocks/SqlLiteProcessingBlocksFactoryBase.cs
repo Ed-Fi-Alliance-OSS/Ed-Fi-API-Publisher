@@ -46,7 +46,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
         // roughly 500 pages against a documented ceiling of ~5,500 items).
         int resolvedItemCapacity = createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
 
-        int boundedCapacity = createBlocksRequest.IsRetryPipeline || resolvedItemCapacity == -1
+        int boundedCapacity = resolvedItemCapacity == -1
             ? DataflowBlockOptions.Unbounded
             : Math.Max(1, resolvedItemCapacity / Math.Max(1, createBlocksRequest.Options.StreamingPageSize));
 

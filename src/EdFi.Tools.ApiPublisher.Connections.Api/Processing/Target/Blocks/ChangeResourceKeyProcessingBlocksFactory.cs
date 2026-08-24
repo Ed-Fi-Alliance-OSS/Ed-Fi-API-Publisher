@@ -46,12 +46,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         public (ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
-            // Retry pipelines are never bounded (see CreateBlocksRequest.IsRetryPipeline). Key changes are not
-            // currently routed through retry pipelines, but honor the flag here so the invariant is local
-            // rather than implied by the calling composition.
-            int boundedCapacity = createBlocksRequest.IsRetryPipeline
-                ? DataflowBlockOptions.Unbounded
-                : createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+            int boundedCapacity = createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
 
             TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> getItemForKeyChangeBlock
                 = CreateGetItemForKeyChangeBlock(
@@ -131,7 +126,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
 
                             return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{message.ResourceUrl}?{queryString}", ct);
-                        }, new Context(), CancellationToken.None);
+                        }, new Context(), message.CancellationToken);
 
                         // Detect null content and provide a better error message (which happens during unit testing if mocked requests aren't properly defined)
                         if (apiResponse.Content == null)
@@ -139,7 +134,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             throw new NullReferenceException($"Content of response for '{targetApiClient.HttpClient.BaseAddress}{message.ResourceUrl}?{queryString}' was null.");
                         }
 
-                        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        string responseContent = await apiResponse.Content.ReadAsStringAsync(message.CancellationToken).ConfigureAwait(false);
 
                         // Failure
                         if (!apiResponse.IsSuccessStatusCode)
@@ -244,6 +239,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 // verbatim on error messages, matching the POST path (see APIPUB-112)
                                 Body = existingResourceItem.ToString(Formatting.None),
                                 SourceId = message.SourceId,
+                                CancellationToken = message.CancellationToken,
                             }
                         };
                     }
@@ -253,12 +249,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", message.ResourceUrl);
                         throw;
                     }
-                    catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                    catch (OperationCanceledException ex) when (message.CancellationToken.IsCancellationRequested)
                     {
-                        // The API client already reported the authentication failure once. Repeating it for every message
-                        // still in flight would bury it, so this only needs to fault the block.
-                        _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", message.ResourceUrl, sourceId);
-                        throw;
+                        // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                        _logger.Debug(ex, "{ResourceUrl} (source id: {SourceId}): GET by key abandoned because processing of the resource was cancelled.",
+                            message.ResourceUrl, sourceId);
+
+                        return Enumerable.Empty<ChangeKeyMessage>();
                     }
                     catch (Exception ex)
                     {
@@ -352,12 +349,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 $"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}/{id}",
                                 new StringContent(msg.Body, Encoding.UTF8, "application/json"),
                                 ct);
-                        }, new Context(), CancellationToken.None);
+                        }, new Context(), msg.CancellationToken);
 
                     // Failure
                     if (!apiResponse.IsSuccessStatusCode)
                     {
-                        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        string responseContent = await apiResponse.Content.ReadAsStringAsync(msg.CancellationToken).ConfigureAwait(false);
 
                         var message = $"{msg.ResourceUrl} (source id: {sourceId}): PUT returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
                         _logger.Error(message);
@@ -398,12 +395,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                     throw;
                 }
-                catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                catch (OperationCanceledException ex) when (msg.CancellationToken.IsCancellationRequested)
                 {
-                    // The API client already reported the authentication failure once. Repeating it for every message
-                    // still in flight would bury it, so this only needs to fault the block.
-                    _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", msg.ResourceUrl, sourceId);
-                    throw;
+                    // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                    _logger.Debug(ex, "{ResourceUrl} (source id: {SourceId}): PUT abandoned because processing of the resource was cancelled.",
+                        msg.ResourceUrl, sourceId);
+
+                    return Enumerable.Empty<ErrorItemMessage>();
                 }
                 catch (Exception ex)
                 {

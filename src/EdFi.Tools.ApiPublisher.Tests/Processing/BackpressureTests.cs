@@ -198,64 +198,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             }
         }
 
-        [Test]
-        public async Task Retry_pipeline_blocks_should_remain_unbounded_so_deferred_authorization_retries_are_never_dropped()
-        {
-            TestHelpers.InitializeLogging();
-
-            const int ItemCount = 10;
-
-            var gate = new ManualResetEventSlim(false);
-            int postsCompleted = 0;
-
-            try
-            {
-                var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
-
-                A.CallTo(
-                        () => fakeTargetRequestHandler.Post(
-                            A<string>.That.Matches(url => url.EndsWith(Students)),
-                            A<HttpRequestMessage>.Ignored))
-                    .ReturnsLazily(
-                        _ =>
-                        {
-                            gate.Wait(TimeSpan.FromSeconds(30));
-                            Interlocked.Increment(ref postsCompleted);
-
-                            return new HttpResponseMessage(HttpStatusCode.OK);
-                        });
-
-                var options = TestHelpers.GetOptions();
-                options.MaxDegreeOfParallelismForPostResourceItem = 1;
-
-                // Deliberately tiny capacity -- the retry pipeline must ignore it, because messages arrive
-                // via a synchronous Post from the main pipeline that would silently drop them when declined
-                options.ProcessingBlockBoundedCapacity = 1;
-
-                var (inputBlock, outputBlock) =
-                    CreatePostResourceBlocks(fakeTargetRequestHandler, options, isRetryPipeline: true);
-
-                outputBlock.LinkTo(DataflowBlock.NullTarget<ErrorItemMessage>());
-
-                // With the consumer stalled, every Post must still be accepted immediately
-                for (int i = 0; i < ItemCount; i++)
-                {
-                    inputBlock.Post(CreatePostItemMessage()).ShouldBeTrue();
-                }
-
-                gate.Set();
-
-                inputBlock.Complete();
-                await outputBlock.Completion.WaitAsync(TimeSpan.FromSeconds(30));
-
-                postsCompleted.ShouldBe(ItemCount);
-            }
-            finally
-            {
-                gate.Set();
-            }
-        }
-
         [TestCase(25, true)]
         [TestCase(-1, false)]
         public async Task When_target_posts_stall_source_page_fetching_should_halt_only_when_bounded(
@@ -454,8 +396,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private static (ITargetBlock<PostItemMessage> inputBlock, ISourceBlock<ErrorItemMessage> outputBlock)
             CreatePostResourceBlocks(
                 IFakeHttpRequestHandler fakeTargetRequestHandler,
-                Options options,
-                bool isRetryPipeline = false)
+                Options options)
         {
             EdFiApiClient TargetApiClientFactory() =>
                 new EdFiApiClient(
@@ -478,10 +419,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 options,
                 Array.Empty<AuthorizationFailureHandling>(),
                 new BufferBlock<ErrorItemMessage>(),
-                javaScriptModuleFactory: null)
-            {
-                IsRetryPipeline = isRetryPipeline,
-            };
+                javaScriptModuleFactory: null);
 
             return factory.CreateProcessingBlocks(createBlocksRequest);
         }

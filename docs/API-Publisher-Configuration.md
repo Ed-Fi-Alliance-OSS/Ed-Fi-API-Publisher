@@ -63,7 +63,7 @@ The same option governs the error publishing queue, so a sustained error storm a
 
 **Streamed page reads.** When streaming from an API source, a fetched page is no longer buffered as a whole string before item splitting — the response body is parsed in a single forward-only pass that materializes one document at a time, so the per-page memory constant inside the ceiling above is one document rather than one whole page of text (see APIPUB-134). The SQLite connector is the documented exception: as a target it stores whole pages as TEXT rows, so it deliberately buffers each page string before writing it.
 
-**Operational notes.** Slower or paused source page fetching while the target catches up is the bound working as intended, not a hang — the log reports the resolved capacities (items, page messages, pending errors) at startup. Resources configured for authorization-failure retry in `authorizationFailureHandling` are re-streamed through a deliberately unbounded retry pipeline after their update prerequisites complete, so the ceiling above does not apply to that second pass.
+**Operational notes.** Slower or paused source page fetching while the target catches up is the bound working as intended, not a hang — the log reports the resolved capacities (items, page messages, pending errors) at startup. Resources configured for authorization-failure retry in `authorizationFailureHandling` are re-streamed through a retry pipeline after their update prerequisites complete; that second pass is bounded exactly like any other pipeline, so the ceiling above applies to it as well.
 
 ## API Connections
 
@@ -121,6 +121,8 @@ NOTE: This part of the configuration can only be defined in the _publisherSettin
 | /authorizationFailureHandling\[\*]/updatePrerequisitePaths | An array of partial paths for the resource(s) (e.g. _/ed-fi/studentSchoolAssociations_) that should be processed before attempting to retry the original request which resulted in an authorization failure. |
 
 The default configuration targets Data Standard 5.x and later, where the parent resource is `/ed-fi/contacts`. For sources on Data Standard 4.0 or earlier, replace that entry with `/ed-fi/parents` → `/ed-fi/studentParentAssociations`. An entry whose path or prerequisites do not exist in the source's dependency graph is skipped with a warning in the log (it does not fail the run).
+
+How the retry works: a `403 Forbidden` POST response for a configured resource is skipped without publishing an error, because the entire resource is re-published through a second, bounded streaming pass once all of its `updatePrerequisitePaths` resources have completed. Individual failed items are not queued or retried in place — the second pass covers them (which also means the resource's documents are fetched from the source and sent to the target twice). A request that is still `Forbidden` during the second pass is treated as a final error (or as a warning, when the target connection sets `treatForbiddenPostAsWarning`).
 
 The default configuration is as follows:
 ```json
