@@ -165,6 +165,11 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     {
                         await using var responseStream = await apiResponse.Content.ReadAsStreamAsync(message.CancellationSource.Token).ConfigureAwait(false);
 
+                        // The parse below reads the stream synchronously, so a blocked read on a slow body
+                        // would not observe cancellation on its own -- registering disposal aborts the read
+                        // (the resulting exception is swallowed by the cancellation-aware catches below)
+                        using var abortRegistration = message.CancellationSource.Token.Register(() => responseStream.Dispose());
+
                         // JSON is UTF-8 per RFC 8259 (and the Ed-Fi ODS API always emits UTF-8); StreamReader's
                         // default UTF-8-with-BOM-detection deliberately replaces ReadAsStringAsync's charset negotiation
                         using var streamReader = new StreamReader(responseStream);
@@ -174,9 +179,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         pageMessages.AddRange(
                             message.CreateProcessDataMessages(message, streamReader, count => topLevelItemCount = count));
                     }
-                    catch (JsonReaderException ex)
+                    catch (JsonReaderException ex) when (!message.CancellationSource.IsCancellationRequested)
                     {
-                        // An error occurred while parsing the JSON
+                        // An error occurred while parsing the JSON (a parse failure caused by cancellation
+                        // aborting the response stream falls through to the graceful catch below instead)
                         var error = new ErrorItemMessage
                         {
                             Method = HttpMethod.Get.ToString(),
@@ -238,10 +244,12 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
             return transformedMessages;
         }
-        catch (OperationCanceledException ex) when (message.CancellationSource.IsCancellationRequested)
+        catch (Exception ex) when (message.CancellationSource.IsCancellationRequested)
         {
-            // Graceful cancellation of the resource's processing (normal flow) -- abandon the page fetch,
-            // including any in-flight request or retry backoff delay, without publishing an error
+            // Graceful cancellation of the resource's processing (normal flow) -- abandon the page fetch
+            // without publishing an error. Besides OperationCanceledException from the request or retry
+            // backoff, cancellation aborts an in-progress body parse by disposing the response stream,
+            // which surfaces as an ObjectDisposedException/IOException from the reader.
             _logger.Debug(ex, "{ResourceUrl}: Page fetch abandoned because processing of the resource was cancelled.",
                 message.ResourceUrl);
 

@@ -324,6 +324,143 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             errorBlock.Count.ShouldBe(0);
         }
 
+        /// <summary>
+        /// A stream that serves a valid JSON prefix on the first read and then blocks until disposed,
+        /// simulating a slow response body. Disposal (the cancellation-abort path) unblocks the read,
+        /// which then throws.
+        /// </summary>
+        private class StallingStream : Stream
+        {
+            private readonly byte[] _prefix;
+            private readonly SemaphoreSlim _readStalled;
+            private readonly ManualResetEventSlim _unblock = new(false);
+            private bool _prefixServed;
+
+            public StallingStream(byte[] prefix, SemaphoreSlim readStalled)
+            {
+                _prefix = prefix;
+                _readStalled = readStalled;
+            }
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (!_prefixServed)
+                {
+                    _prefixServed = true;
+                    Array.Copy(_prefix, 0, buffer, offset, _prefix.Length);
+
+                    return _prefix.Length;
+                }
+
+                _readStalled.Release();
+                _unblock.Wait(TimeSpan.FromSeconds(30));
+
+                throw new ObjectDisposedException(nameof(StallingStream));
+            }
+
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            protected override void Dispose(bool disposing)
+            {
+                _unblock.Set();
+
+                base.Dispose(disposing);
+            }
+        }
+
+        [Test]
+        public async Task Cancellation_during_a_stalled_body_read_should_abort_parsing_and_return_without_error()
+        {
+            TestHelpers.InitializeLogging();
+
+            var (handler, fakeRequestHandler) = CreateHandler();
+
+            // The body starts with one complete item, then stalls forever -- only cancellation can end the read
+            var readStalled = new SemaphoreSlim(0);
+            var stallingStream = new StallingStream(Encoding.UTF8.GetBytes(@"[{""id"":""1""},"), readStalled);
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                () =>
+                {
+                    var content = new StreamContent(stallingStream);
+                    content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+                });
+
+            var message = CreatePageMessage(limit: 50, isFinalPage: false);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            // The parse blocks synchronously, so run the handler off the test thread
+            var handlerTask = Task.Run(() => handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock));
+
+            (await readStalled.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
+
+            // Cancel while the reader is blocked mid-body; the registered abort must dispose the stream,
+            // unblocking the read, and the handler must treat the outcome as graceful cancellation
+            message.CancellationSource.Cancel();
+
+            (await Task.WhenAny(handlerTask, Task.Delay(TimeSpan.FromSeconds(30)))).ShouldBe(handlerTask);
+
+            (await handlerTask).ShouldBeEmpty();
+            errorBlock.Count.ShouldBe(0);
+        }
+
+        [Test]
+        public async Task Exhausted_transient_retries_should_publish_the_final_failure_and_dispose_every_response()
+        {
+            TestHelpers.InitializeLogging();
+
+            var (handler, fakeRequestHandler) = CreateHandler();
+
+            const string ErrorBody = @"{""message"":""temporarily unavailable""}";
+            var contents = new List<InstrumentedJsonContent>();
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                () =>
+                {
+                    var content = new InstrumentedJsonContent(ErrorBody);
+                    contents.Add(content);
+
+                    return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = content };
+                });
+
+            var message = CreatePageMessage(limit: 50, isFinalPage: false);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            // GetOptions configures MaxRetryAttempts = 2, so exhaustion means 3 attempts in total
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock);
+
+            itemMessages.ShouldBeEmpty();
+            contents.Count.ShouldBe(3);
+
+            // The final failure is published with its status and body text
+            errorBlock.TryReceive(out var error).ShouldBeTrue();
+            error.ResponseStatus.ShouldBe(HttpStatusCode.ServiceUnavailable);
+            error.ResponseContent.ShouldBe(ErrorBody);
+
+            // Every response was disposed: the retried ones by the retry callback, the final one explicitly
+            contents.ShouldAllBe(c => c.ContentDisposed);
+        }
+
         [Test]
         public async Task Precancelled_page_message_should_return_no_items_without_requesting_or_publishing_anything()
         {

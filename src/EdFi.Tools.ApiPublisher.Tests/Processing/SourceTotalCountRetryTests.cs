@@ -89,5 +89,60 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // The transient failure being retried must have been disposed by the retry callback
             transientContent.ContentDisposed.ShouldBeTrue();
         }
+
+        [Test]
+        public async Task Exhausted_transient_retries_should_report_failure_publish_an_error_and_dispose_every_response()
+        {
+            TestHelpers.InitializeLogging();
+
+            var fakeRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+
+            var contents = new System.Collections.Generic.List<InstrumentedJsonContent>();
+
+            A.CallTo(
+                    () => fakeRequestHandler.Get(
+                        A<string>.Ignored,
+                        A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath == "/data/v3/ed-fi/students")))
+                .ReturnsLazily(
+                    () =>
+                    {
+                        var content = new InstrumentedJsonContent(@"{""message"":""temporarily unavailable""}");
+                        contents.Add(content);
+
+                        return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = content };
+                    });
+
+            EdFiApiClient SourceApiClientFactory() =>
+                new EdFiApiClient(
+                    "TestSource",
+                    TestHelpers.GetSourceApiConnectionDetails(),
+                    bearerTokenRefreshMinutes: 27,
+                    ignoreSslErrors: true,
+                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            var sourceClientProvider = A.Fake<ISourceEdFiApiClientProvider>();
+            A.CallTo(() => sourceClientProvider.GetApiClient()).Returns(SourceApiClientFactory());
+
+            var provider = new EdFiApiSourceTotalCountProvider(sourceClientProvider);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            // GetOptions configures MaxRetryAttempts = 2, so exhaustion means 3 attempts in total
+            var (success, totalCount) = await provider.TryGetTotalCountAsync(
+                "/ed-fi/students",
+                TestHelpers.GetOptions(),
+                changeWindow: null,
+                errorBlock,
+                CancellationToken.None);
+
+            success.ShouldBeFalse();
+            totalCount.ShouldBe(0);
+            contents.Count.ShouldBe(3);
+
+            // The final failure is published so overall processing is forced to fail
+            errorBlock.Count.ShouldBe(1);
+
+            // Every response was disposed: the retried ones by the retry callback, the final one explicitly
+            contents.ShouldAllBe(c => c.ContentDisposed);
+        }
     }
 }
