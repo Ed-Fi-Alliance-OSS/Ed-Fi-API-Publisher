@@ -10,5 +10,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 
 public interface ISourceResourceItemProvider
 {
-    Task<(bool success, string itemJson)> TryGetResourceItemAsync(string resourceItemUrl);
+    /// <summary>
+    /// Attempts to retrieve a single resource item from the source by its relative URL.
+    /// </summary>
+    /// <param name="resourceItemUrl">The relative URL of the source item (e.g. "/ed-fi/students/{id}").</param>
+    /// <param name="cancellationToken">Token observed by the request and any retry delays, so that cancelling the
+    /// run releases a handler blocked on dependency resolution rather than leaving it to ride out the retries.</param>
+    Task<(bool success, string itemJson)> TryGetResourceItemAsync(string resourceItemUrl, CancellationToken cancellationToken = default);
 }

@@ -31,7 +31,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
         _rateLimiter = rateLimiter;
     }
 
-    public async Task<(bool success, string itemJson)> TryGetResourceItemAsync(string resourceItemUrl)
+    public async Task<(bool success, string itemJson)> TryGetResourceItemAsync(string resourceItemUrl, CancellationToken cancellationToken = default)
     {
         var sourceEdFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
 
@@ -73,7 +73,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                             ct);
                     },
                     new Context(),
-                    CancellationToken.None);
+                    cancellationToken);
 
             // Detect null content and provide a better error message (which happens only during unit testing if mocked requests aren't properly defined)
             if (getByIdResponse.Content == null)
@@ -82,7 +82,7 @@ public class ApiSourceResourceItemProvider : ISourceResourceItemProvider
                     $"Content of response for '{sourceEdFiApiClient.HttpClient.BaseAddress}{sourceEdFiApiClient.DataManagementApiSegment}{resourceItemUrl}' was null.");
             }
 
-            string responseContent = await getByIdResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            string responseContent = await getByIdResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
             // Did we successfully retrieve the missing dependency?
             if (getByIdResponse.StatusCode == HttpStatusCode.OK)
