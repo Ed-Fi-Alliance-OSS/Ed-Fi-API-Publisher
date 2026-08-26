@@ -100,6 +100,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 missingDependencyByResourcePath.Add(item.ResourcePath, item.DependencyResourcePath);
             }
 
+            var authorizationRetryPipelineResourcePaths = createBlocksRequest.AuthorizationRetryPipelineResourcePaths;
+
             var postResourceBlock = new TransformManyBlock<PostItemMessage, ErrorItemMessage>(
                 async msg =>
                     await HandlePostItemMessage(
@@ -109,7 +111,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         javaScriptModuleFactory,
                         targetEdFiApiClient,
                         knownUnremediatedRequests,
-                        missingDependencyByResourcePath),
+                        missingDependencyByResourcePath,
+                        authorizationRetryPipelineResourcePaths),
                 new ExecutionDataflowBlockOptions
                 {
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
@@ -131,7 +134,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             Func<string> javaScriptModuleFactory,
             EdFiApiClient targetEdFiApiClient,
             ConcurrentDictionary<(string resourceUrl, HttpStatusCode statusCode), byte> knownUnremediatedRequests,
-            Dictionary<string, string> missingDependencyByResourcePath)
+            Dictionary<string, string> missingDependencyByResourcePath,
+            IReadOnlySet<string> authorizationRetryPipelineResourcePaths)
         {
             if (ignoredResourceByUrl.ContainsKey(postItemMessage.ResourceUrl))
             {
@@ -293,7 +297,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         _logger.Information("{ResourceUrl}: Attempting to retrieve missing '{ReferencedResourceName}' reference based on 'authorizationFailureHandling' metadata in apiPublisherSettings.json.",
                             postItemMessage.ResourceUrl, missingDependencyDetails.ReferencedResourceName);
 
-                        var (missingDependencyItemRetrieved, missingItemJson) = await _sourceResourceItemProvider.TryGetResourceItemAsync(missingDependencyDetails.SourceDependencyItemUrl);
+                        // The source lookup (and its retry delays) observes the item's token so cancelling the run
+                        // releases this handler instead of leaving it to ride out the source request and retries
+                        var (missingDependencyItemRetrieved, missingItemJson) = await _sourceResourceItemProvider.TryGetResourceItemAsync(
+                            missingDependencyDetails.SourceDependencyItemUrl,
+                            ct);
 
                         if (missingDependencyItemRetrieved)
                         {
@@ -303,9 +311,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 ResourceUrl = missingDependencyDetails.DependencyResourceUrl,
                                 Item = missingItem,
-                                // Copied as-is (behavior-preserving): reflects whether the CURRENT resource has a
-                                // retry pipeline, which may not hold for the dependency resource being posted here.
-                                HasAuthorizationRetryPipeline = postItemMessage.HasAuthorizationRetryPipeline,
+                                // Derived from the DEPENDENCY resource's own retry pipeline (not copied from the
+                                // current item): a Forbidden response on this post can only be deferred if the
+                                // dependency resource itself has a "#Retry" pass that will re-publish it.
+                                HasAuthorizationRetryPipeline = authorizationRetryPipelineResourcePaths.Contains(missingDependencyDetails.DependencyResourceUrl),
                                 CancellationToken = postItemMessage.CancellationToken,
                             };
 
@@ -316,7 +325,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 javaScriptModuleFactory,
                                 targetEdFiApiClient,
                                 knownUnremediatedRequests,
-                                missingDependencyByResourcePath);
+                                missingDependencyByResourcePath,
+                                authorizationRetryPipelineResourcePaths);
                         }
                     }
 

@@ -70,31 +70,29 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
 
         // Resource paths that have an authorization-retry ("#Retry") pipeline which re-publishes the entire
         // resource after its update prerequisites complete. A 403 on an individual item of such a resource is
-        // skipped (no error published) because the retry pass covers it (see APIPUB-133).
-        var retryPipelineResourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // skipped (no error published) because the retry pass covers it (see APIPUB-133). Computed up front
+        // (rather than while creating the blocks) so every block factory sees the complete set -- a block may
+        // need to know whether a resource OTHER than its own has a retry pass (see missing-dependency posting).
+        var retryPipelineResourcePaths = new HashSet<string>(
+            processingContext.DependencyKeysByResourceKey.Keys
+                .Where(key => key.EndsWith(Conventions.RetryKeySuffix))
+                .Select(ResourcePathHelper.GetResourcePath),
+            StringComparer.OrdinalIgnoreCase);
 
         // Set up streaming resource blocks for all resources
         foreach (var kvp in processingContext.DependencyKeysByResourceKey)
         {
             string resourceKey = kvp.Key;
-            string resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
-
-            // Is this an authorization retry "resource"?
-            bool isRetryPipeline = resourceKey.EndsWith(Conventions.RetryKeySuffix);
 
             var createBlocksRequest = new CreateBlocksRequest(
                 processingContext.Options,
                 processingContext.AuthorizationFailureHandling,
                 processingContext.PublishErrorsIngestionBlock,
-                processingContext.JavaScriptModuleFactory);
+                processingContext.JavaScriptModuleFactory,
+                retryPipelineResourcePaths);
 
             // This creates the actual processing sub-pipeline ingesting TProcessDataMessage through to ErrorItemMessages
             var (processingInputBlock, processingOutputBlock) = createProcessingBlocks(createBlocksRequest);
-
-            if (isRetryPipeline)
-            {
-                retryPipelineResourcePaths.Add(resourcePath);
-            }
 
             streamingPagesByResourceKey.Add(resourceKey, new StreamingPagesItem { CompletionBlock = processingOutputBlock });
 
