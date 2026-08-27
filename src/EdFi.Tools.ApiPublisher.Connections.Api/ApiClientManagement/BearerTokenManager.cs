@@ -468,11 +468,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             string scope = _connectionDetails.Scope;
 
             if (_logger.IsEnabled(LogEventLevel.Debug))
+            {
+                // Only a prefix of the key, enough to tell connections apart in the log without disclosing it
                 _logger.Debug(
-                    "Getting bearer token for {Name} API client with key {Key}...",
+                    "Getting bearer token for {Name} API client with key {KeyPrefix}...",
                     _name,
-                    key[..3]
+                    key?.Length > 3 ? key[..3] : key
                 );
+            }
 
             using var authRequest = new HttpRequestMessage(
                 HttpMethod.Post,

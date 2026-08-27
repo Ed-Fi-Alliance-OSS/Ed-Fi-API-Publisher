@@ -20,26 +20,22 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             var assembly = Assembly.GetExecutingAssembly();
             var fileVersion = FileVersionInfo.GetVersionInfo(assembly.Location);
-            var version = fileVersion.FileVersion;
-            var productInfo = new ProductInfoHeaderValue("Ed-Fi-API-Publisher", version);
+            var productInfo = new ProductInfoHeaderValue("Ed-Fi-API-Publisher", fileVersion.FileVersion);
 
-            var targetFrameWorkAttributes = assembly.CustomAttributes.Where(attribute =>
-                attribute.AttributeType.Name == nameof(TargetFrameworkAttribute)
-            );
-            var customAttribute = targetFrameWorkAttributes.FirstOrDefault();
-            var customAttributeValue = customAttribute?.NamedArguments.FirstOrDefault();
-            if (customAttributeValue != null)
+            // The display name reads like ".NET 10.0": a product and a version. Anything else is left off rather
+            // than risk a malformed header.
+            string[] frameworkNameAndVersion = assembly
+                .GetCustomAttribute<TargetFrameworkAttribute>()
+                ?.FrameworkDisplayName
+                ?.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (frameworkNameAndVersion is { Length: 2 })
             {
-                var dotnetVersionValues = ((CustomAttributeNamedArgument)customAttributeValue).TypedValue.Value.ToString().Split(' ');
-                if (dotnetVersionValues.Length > 0)
-                {
-                    var dotnetInfo = new ProductInfoHeaderValue(
-                        dotnetVersionValues[0],
-                        dotnetVersionValues[1]
-                    );
-                    httpClient.DefaultRequestHeaders.UserAgent.Add(dotnetInfo);
-                }
+                httpClient.DefaultRequestHeaders.UserAgent.Add(
+                    new ProductInfoHeaderValue(frameworkNameAndVersion[0], frameworkNameAndVersion[1])
+                );
             }
+
             httpClient.DefaultRequestHeaders.UserAgent.Add(productInfo);
         }
     }
