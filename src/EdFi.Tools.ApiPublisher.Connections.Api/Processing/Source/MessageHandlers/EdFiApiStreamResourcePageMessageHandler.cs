@@ -109,7 +109,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                                 return RequestHelpers.SendGetRequestAsync(edFiApiClient, message.ResourceUrl, requestUri, ct);
                             },
                             new Context(),
-                            CancellationToken.None);
+                            message.CancellationSource.Token);
 
                     // Detect null content and provide a better error message (which happens only during unit testing if mocked requests aren't properly defined)
                     if (apiResponse.Content == null)
@@ -209,6 +209,16 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             while (true);
 
             return transformedMessages;
+        }
+        catch (OperationCanceledException ex) when (message.CancellationSource.IsCancellationRequested)
+        {
+            // The run is being cancelled, so the request in flight was interrupted on purpose and is not an error.
+            _logger.Debug(
+                ex,
+                "{MessageResourceUrl}: Cancellation requested while retrieving page of source items starting at offset {Offset}.",
+                message.ResourceUrl, offset);
+
+            return Enumerable.Empty<TProcessDataMessage>();
         }
         catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
         {

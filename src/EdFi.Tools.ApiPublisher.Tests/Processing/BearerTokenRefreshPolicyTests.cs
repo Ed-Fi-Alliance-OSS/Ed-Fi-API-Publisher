@@ -41,8 +41,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         [TestCase(30, 28, 15)]
         // The configured interval is the upper bound, so a long lived token does not stretch it
         [TestCase(120, 28, 28)]
-        // Half of a very short lifetime is floored, so that the publisher does not stream token requests
-        [TestCase(1, 28, 0)]
         public void The_refresh_interval_is_capped_at_half_of_the_reported_token_lifetime(
             int tokenLifetimeMinutes,
             int configuredMinutes,
@@ -52,11 +50,24 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 TimeSpan.FromMinutes(configuredMinutes),
                 TimeSpan.FromMinutes(tokenLifetimeMinutes));
 
-            var expected = expectedMinutes == 0
-                ? BearerTokenRefreshPolicy.MinimumRefreshInterval
-                : TimeSpan.FromMinutes(expectedMinutes);
+            Assert.That(interval, Is.EqualTo(TimeSpan.FromMinutes(expectedMinutes)));
+        }
 
-            Assert.That(interval, Is.EqualTo(expected));
+        // Lifetimes short enough that a fixed floor on the interval would place the refresh at or after the expiry
+        [TestCase(60, 30)]
+        [TestCase(45, 22.5)]
+        [TestCase(30, 15)]
+        [TestCase(10, 5)]
+        public void A_short_token_lifetime_is_still_refreshed_before_the_token_expires(
+            double tokenLifetimeSeconds,
+            double expectedIntervalSeconds)
+        {
+            var tokenLifetime = TimeSpan.FromSeconds(tokenLifetimeSeconds);
+
+            var interval = BearerTokenRefreshPolicy.GetRefreshInterval(TimeSpan.FromMinutes(28), tokenLifetime);
+
+            Assert.That(interval, Is.EqualTo(TimeSpan.FromSeconds(expectedIntervalSeconds)));
+            Assert.That(interval, Is.LessThan(tokenLifetime), "The refresh must come before the token expires.");
         }
 
         [TestCase(1, 5)]
@@ -80,7 +91,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         public void With_no_reported_token_lifetime_the_failure_count_is_what_ends_the_run()
         {
             bool shouldRetry = BearerTokenRefreshPolicy.TryGetRetryDelay(
-                BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithUnknownLifetime,
+                BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken,
                 remainingTokenLifetime: null,
                 out _);
 
@@ -90,7 +101,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         [Test]
         public void While_the_current_token_is_still_valid_the_failure_count_does_not_end_the_run()
         {
-            // Well past the count that applies when no lifetime is known
+            // Well past the count that applies when no usable token is left
             const int ConsecutiveFailures = 9;
 
             bool shouldRetry = BearerTokenRefreshPolicy.TryGetRetryDelay(
@@ -117,26 +128,30 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             Assert.That(retryDelay, Is.EqualTo(TimeSpan.FromSeconds(10)));
         }
 
-        [Test]
-        public void Once_the_token_is_about_to_expire_the_run_ends()
+        [TestCaseSource(nameof(LifetimesWithNoUsableTokenLeft))]
+        public void Once_no_usable_token_is_left_the_failure_count_is_what_ends_the_run(TimeSpan remainingTokenLifetime)
         {
-            bool shouldRetry = BearerTokenRefreshPolicy.TryGetRetryDelay(
-                consecutiveFailures: 1,
-                BearerTokenRefreshPolicy.ExpirationMargin,
-                out _);
+            // The token is as good as gone, but that alone does not end the run: the request path recovers from a
+            // rejected token, so a few more attempts are worth making before giving up.
+            Assert.That(
+                BearerTokenRefreshPolicy.TryGetRetryDelay(consecutiveFailures: 1, remainingTokenLifetime, out var retryDelay),
+                Is.True);
+            Assert.That(retryDelay, Is.EqualTo(BearerTokenRefreshPolicy.InitialRetryDelay));
 
-            Assert.That(shouldRetry, Is.False);
+            Assert.That(
+                BearerTokenRefreshPolicy.TryGetRetryDelay(
+                    BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken,
+                    remainingTokenLifetime,
+                    out _),
+                Is.False);
         }
 
-        [Test]
-        public void Once_the_token_has_expired_the_run_ends()
+        private static readonly TimeSpan[] LifetimesWithNoUsableTokenLeft =
         {
-            bool shouldRetry = BearerTokenRefreshPolicy.TryGetRetryDelay(
-                consecutiveFailures: 1,
-                TimeSpan.FromSeconds(-1),
-                out _);
-
-            Assert.That(shouldRetry, Is.False);
-        }
+            // About to expire: only the margin reserved for in-flight requests is left
+            BearerTokenRefreshPolicy.ExpirationMargin,
+            // Already expired
+            TimeSpan.FromSeconds(-1)
+        };
     }
 }

@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -16,7 +17,10 @@ using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using Bogus;
 using FakeItEasy;
+using Microsoft.Extensions.Time.Testing;
 using NUnit.Framework;
+using Serilog.Events;
+using Serilog.Sinks.TestCorrelator;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -60,29 +64,71 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
-        public async Task When_the_source_client_can_no_longer_authenticate_the_run_fails_instead_of_reporting_page_errors()
+        public async Task When_the_source_token_cannot_be_reacquired_the_run_fails_instead_of_reporting_page_errors()
         {
             var fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
                 .AvailableChangeVersions(1100)
                 .ResourceCount(responseTotalCountHeader: 1);
 
-            // The source client has given up on the token, so every page request fails outright. This must fault the
-            // run rather than be recorded as an ordinary page error for each resource still streaming.
+            // The initial token is issued and accepted for the metadata requests; every later token request fails
+            A.CallTo(() => fakeSourceRequestHandler.Post($"{MockRequests.SourceApiBaseUrl}/oauth/token", A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => FakeResponse.OK(new { access_token = "source-token" }))
+                .Once()
+                .Then.ReturnsLazily(
+                    () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                    {
+                        Content = new StringContent("{}", Encoding.UTF8, "application/json")
+                    });
+
+            // The source rejects that token on the page request, so the client has to re-acquire it and cannot
+            string sourceResourceUrl = $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}{StateEducationAgencies}";
+
             A.CallTo(() => fakeSourceRequestHandler.Get(
-                    $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}{StateEducationAgencies}",
-                    A<HttpRequestMessage>.Ignored))
-                .Throws(() => new EdFiApiAuthenticationException("the bearer token could not be obtained"));
+                    sourceResourceUrl,
+                    A<HttpRequestMessage>.That.Matches(request => IsPageRequest(request))))
+                .ReturnsLazily(
+                    () => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                    {
+                        Content = new StringContent("{\"error\":\"invalid_token\"}", Encoding.UTF8, "application/json")
+                    });
 
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
             fakeTargetRequestHandler.EveryDataManagementPostReturns200Ok();
 
-            var caught = await RunAndCaptureAsync(fakeSourceRequestHandler, fakeTargetRequestHandler);
+            // The re-acquisition is retried on a backoff of real seconds, so the run is driven against a fake clock
+            var clock = new FakeTimeProvider();
 
-            // The run has to end. The failure surfaces as the processor's own "did not complete successfully"
-            // exception rather than the authentication failure itself, because the pipeline keeps only the task
-            // statuses and not the exceptions behind them. The authoritative message is the Fatal the API client
-            // logs when it gives up; carrying the cause to the top level belongs to the exit code work.
-            Assert.That(caught, Is.Not.Null, "A source that cannot authenticate must not let the run complete.");
+            using (TestCorrelator.CreateContext())
+            {
+                var caught = await RunAndCaptureAsync(fakeSourceRequestHandler, fakeTargetRequestHandler, timeProvider: clock);
+
+                // The run has to end. The failure surfaces as the processor's own "did not complete successfully"
+                // exception rather than the authentication failure itself, because the pipeline keeps only the task
+                // statuses and not the exceptions behind them. The authoritative message is the Fatal the API client
+                // logs when it gives up; carrying the cause to the top level belongs to the exit code work.
+                Assert.That(caught, Is.Not.Null, "A source that cannot authenticate must not let the run complete.");
+
+                // The re-acquisition was retried as often as the policy allows before the client gave up
+                A.CallTo(() => fakeSourceRequestHandler.Post($"{MockRequests.SourceApiBaseUrl}/oauth/token", A<HttpRequestMessage>.Ignored))
+                    .MustHaveHappened(1 + BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken, Times.Exactly);
+
+                // The rejected page request was sent once and never replayed
+                A.CallTo(() => fakeSourceRequestHandler.Get(
+                        sourceResourceUrl,
+                        A<HttpRequestMessage>.That.Matches(request => IsPageRequest(request))))
+                    .MustHaveHappened(1, Times.Exactly);
+
+                // The one line an operator reading the log needs
+                var fatalMessages = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Where(logEvent => logEvent.Level == LogEventLevel.Fatal)
+                    .Select(logEvent => logEvent.RenderMessage())
+                    .ToList();
+
+                Assert.That(
+                    fatalMessages,
+                    Has.Exactly(1).Contains("Publishing cannot continue"),
+                    $"Fatal log entries: {string.Join(Environment.NewLine, fatalMessages)}");
+            }
         }
 
         [Test]
@@ -182,11 +228,15 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .MustHaveHappened(expectedCount, Times.Exactly);
         }
 
+        private static bool IsPageRequest(HttpRequestMessage request) =>
+            !request.RequestUri.Query.Contains("totalCount", StringComparison.OrdinalIgnoreCase);
+
         private static async Task<Exception> RunAndCaptureAsync(
             IFakeHttpRequestHandler fakeSourceRequestHandler,
             IFakeHttpRequestHandler fakeTargetRequestHandler,
             string includedResource = StateEducationAgencies,
-            string[] resourcesWithUpdatableKeys = null)
+            string[] resourcesWithUpdatableKeys = null,
+            FakeTimeProvider timeProvider = null)
         {
             var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails(
                 include: new[] { includedResource });
@@ -211,9 +261,22 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     sourceApiConnectionDetails,
                     fakeSourceRequestHandler,
                     targetApiConnectionDetails,
-                    fakeTargetRequestHandler);
+                    fakeTargetRequestHandler,
+                    timeProvider: timeProvider);
 
-                await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, CancellationToken.None);
+                if (timeProvider == null)
+                {
+                    await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, CancellationToken.None);
+                }
+                else
+                {
+                    // The processor blocks its calling thread while it waits for the streaming to finish, so the run
+                    // is started on another thread to leave this one free to move the fake clock along while the run
+                    // waits out the token re-acquisition backoff
+                    var run = Task.Run(() => changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, CancellationToken.None));
+
+                    await timeProvider.AdvanceUntilCompletedAsync(run, BearerTokenRefreshPolicy.InitialRetryDelay);
+                }
             }
             catch (Exception ex)
             {

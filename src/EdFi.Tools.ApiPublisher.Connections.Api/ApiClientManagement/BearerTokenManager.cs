@@ -22,7 +22,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     /// This is deliberately separate from <see cref="EdFiApiClient" />. It owns the client used to reach the token
     /// endpoint, which is built on the transport handler directly, so a token request cannot be routed back through
     /// the handler that recovers from a rejected token. Keeping the token state, its timer, its lock and its failure
-    /// counters together also keeps the synchronization they need in one place.
+    /// counters together also keeps the synchronization they need in one place. Time is taken from a
+    /// <see cref="TimeProvider" /> so that the timer, the retry delays and the token's expiry can be driven by a test
+    /// clock.
     /// </remarks>
     public class BearerTokenManager : IBearerTokenProvider, IDisposable
     {
@@ -36,11 +38,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private readonly string _name;
         private readonly string _displayName;
         private readonly ILogger _logger = Log.ForContext(typeof(BearerTokenManager));
+        private readonly TimeProvider _timeProvider;
 
         private readonly HttpClient _tokenRequestHttpClient;
-        private readonly Timer _refreshTimer;
+        private readonly ITimer _refreshTimer;
         private readonly TimeSpan _configuredRefreshInterval;
         private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
+
+        // Cancels the token request or retry delay in flight when the manager is disposed, so that shutdown does not
+        // wait for either to run its course.
+        private readonly CancellationTokenSource _shutdown = new();
+        private readonly CancellationToken _shutdownToken;
 
         private volatile string _bearerToken;
         private volatile bool _authenticationFailed;
@@ -50,20 +58,27 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         // outside of one another's lock, cannot observe a partially written value.
         private long _refreshIntervalTicks;
 
-        // Ticks of the UTC instant at which the current token expires, or 0 when the API reports no lifetime.
+        // UTC ticks of the instant at which the current token expires, or 0 when the API reports no lifetime.
         private long _tokenExpiresAtUtcTicks;
 
+        /// <param name="httpClientHandler">The transport the token requests are sent through. It stays owned by the
+        /// caller, which shares it with the API client's own request pipeline.</param>
+        /// <param name="timeProvider">The clock the refresh timer, the retry delays and the token expiry are measured
+        /// against. Defaults to the system clock.</param>
         public BearerTokenManager(
             string name,
             ApiConnectionDetails connectionDetails,
             int bearerTokenRefreshMinutes,
-            HttpClientHandler httpClientHandler
+            HttpClientHandler httpClientHandler,
+            TimeProvider timeProvider = null
         )
         {
             _connectionDetails =
                 connectionDetails ?? throw new ArgumentNullException(nameof(connectionDetails));
             _name = name;
             _displayName = name?.ToLower();
+            _timeProvider = timeProvider ?? TimeProvider.System;
+            _shutdownToken = _shutdown.Token;
 
             _configuredRefreshInterval = TimeSpan.FromMinutes(bearerTokenRefreshMinutes);
             _refreshIntervalTicks = _configuredRefreshInterval.Ticks;
@@ -77,8 +92,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             // Built on the transport handler itself, so a token request never passes through the handler that
             // recovers from a rejected token. It is also what keeps the "Snapshot-Identifier" header off these
-            // requests.
-            _tokenRequestHttpClient = new HttpClient(httpClientHandler)
+            // requests. The transport is not disposed with this client, because the API client that supplied it
+            // routes its own requests through it as well and disposes it once both are done with it.
+            _tokenRequestHttpClient = new HttpClient(httpClientHandler, disposeHandler: false)
             {
                 BaseAddress = new Uri(tokenEndpointUrl.EnsureSuffixApplied("/"))
             };
@@ -93,13 +109,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             {
                 _tokenRequestHttpClient.Dispose();
                 _tokenRefreshLock.Dispose();
+                _shutdown.Dispose();
 
                 throw;
             }
 
             // Rescheduled after every attempt, so that a failed refresh is retried on a short delay instead of
             // waiting out a full interval
-            _refreshTimer = new Timer(RefreshBearerTokenOnTimer, null, RefreshInterval, Timeout.InfiniteTimeSpan);
+            _refreshTimer = _timeProvider.CreateTimer(
+                RefreshBearerTokenOnTimer,
+                null,
+                RefreshInterval,
+                Timeout.InfiniteTimeSpan
+            );
         }
 
         public string CurrentBearerToken => _bearerToken;
@@ -112,6 +134,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// </summary>
         public TimeSpan RefreshInterval => TimeSpan.FromTicks(Interlocked.Read(ref _refreshIntervalTicks));
 
+        /// <summary>
+        /// Re-acquires the token after a request was rejected. A failed attempt is retried on the policy's backoff
+        /// while the caller waits, because the alternative is to hand the caller a response it would record as an
+        /// ordinary failure and move on from, losing the document or page behind it. Only once the policy gives up
+        /// does this return <b>false</b>, at which point the manager has failed for good.
+        /// </summary>
+        /// <remarks>
+        /// The wait happens inside the caller's request, so the whole retry sequence has to fit inside the
+        /// <see cref="HttpClient.Timeout" /> of the API client (100 seconds by default). With the policy's five
+        /// tolerated failures the delays add up to 75 seconds, which leaves the token requests themselves 25
+        /// seconds between them.
+        /// </remarks>
         public async Task<bool> TryReacquireBearerTokenAsync(
             string staleBearerToken,
             CancellationToken cancellationToken
@@ -122,7 +156,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return false;
             }
 
-            await _tokenRefreshLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                _shutdownToken
+            );
+            var linkedToken = linkedCancellation.Token;
+
+            await _tokenRefreshLock.WaitAsync(linkedToken).ConfigureAwait(false);
 
             try
             {
@@ -134,53 +174,70 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     return true;
                 }
 
+                if (_authenticationFailed)
+                {
+                    // The refresh timer gave up while this request was waiting for the lock.
+                    return false;
+                }
+
                 _logger.Information(
                     "Re-acquiring bearer token for {Name} API client after an unauthorized response.",
                     _displayName
                 );
 
-                await AcquireBearerTokenAsync(cancellationToken).ConfigureAwait(false);
-
-                // The periodic refresh is now due from this acquisition rather than from the previous one.
-                RescheduleRefresh(RefreshInterval);
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                int consecutiveFailures = Interlocked.Increment(ref _consecutiveTokenFailures);
-
-                // The token has already been rejected, so whatever lifetime the API reported for it says nothing
-                // about the time left to recover. Here the failure count is all there is to go on.
-                if (
-                    !BearerTokenRefreshPolicy.TryGetRetryDelay(
-                        consecutiveFailures,
-                        remainingTokenLifetime: null,
-                        out _
-                    )
-                )
+                while (true)
                 {
-                    _authenticationFailed = true;
+                    try
+                    {
+                        await AcquireBearerTokenAsync(linkedToken).ConfigureAwait(false);
 
-                    _logger.Fatal(
-                        ex,
-                        "Re-acquisition of the bearer token after an unauthorized response failed for {Name} API client ({FailureCount} on the request path). Publishing cannot continue and the remaining requests will fail.",
-                        _displayName,
-                        DescribeFailureCount(consecutiveFailures)
-                    );
-                }
-                else
-                {
-                    _logger.Warning(
-                        ex,
-                        "Re-acquisition of the bearer token after an unauthorized response failed for {Name} API client ({FailureCount} on the request path, of {MaxConsecutiveFailures} tolerated).",
-                        _displayName,
-                        DescribeFailureCount(consecutiveFailures),
-                        BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithUnknownLifetime
-                    );
-                }
+                        // The periodic refresh is now due from this acquisition rather than from the previous one.
+                        RescheduleRefresh(RefreshInterval);
 
-                return false;
+                        return true;
+                    }
+                    catch (OperationCanceledException) when (linkedToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        int consecutiveFailures = Interlocked.Increment(ref _consecutiveTokenFailures);
+
+                        // The token has already been rejected, so whatever lifetime the API reported for it says
+                        // nothing about the time left to recover. Here the failure count is all there is to go on.
+                        if (
+                            !BearerTokenRefreshPolicy.TryGetRetryDelay(
+                                consecutiveFailures,
+                                remainingTokenLifetime: null,
+                                out var retryDelay
+                            )
+                        )
+                        {
+                            _authenticationFailed = true;
+
+                            _logger.Fatal(
+                                ex,
+                                "Re-acquisition of the bearer token after an unauthorized response failed for {Name} API client ({FailureCount} on the request path). Publishing cannot continue and the remaining requests will fail.",
+                                _displayName,
+                                DescribeFailureCount(consecutiveFailures)
+                            );
+
+                            return false;
+                        }
+
+                        _logger.Warning(
+                            ex,
+                            "Re-acquisition of the bearer token after an unauthorized response failed for {Name} API client ({FailureCount} on the request path, of {MaxConsecutiveFailures} tolerated). The request waits and the re-acquisition is retried in {DelaySeconds:N0} seconds.",
+                            _displayName,
+                            DescribeFailureCount(consecutiveFailures),
+                            BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken,
+                            retryDelay.TotalSeconds
+                        );
+
+                        await Task.Delay(retryDelay, _timeProvider, linkedToken).ConfigureAwait(false);
+                    }
+                }
             }
             finally
             {
@@ -203,16 +260,24 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             try
             {
-                _logger.Information("Refreshing bearer token for {Name} API client.", _displayName);
+                if (!_tokenRefreshLock.Wait(0, _shutdownToken))
+                {
+                    // A rejected request is re-acquiring the token right now, retrying on its own backoff. Waiting
+                    // for it here would hold a thread pool thread for the whole of that sequence, so look again
+                    // shortly instead. That acquisition reschedules this timer itself when it succeeds.
+                    _logger.Debug(
+                        "Bearer token refresh for {Name} API client deferred: a re-acquisition is already in progress.",
+                        _displayName
+                    );
 
-                _tokenRefreshLock.Wait();
+                    return BearerTokenRefreshPolicy.InitialRetryDelay;
+                }
 
                 try
                 {
-                    AcquireBearerTokenAsync(CancellationToken.None)
-                        .ConfigureAwait(false)
-                        .GetAwaiter()
-                        .GetResult();
+                    _logger.Information("Refreshing bearer token for {Name} API client.", _displayName);
+
+                    AcquireBearerTokenAsync(_shutdownToken).ConfigureAwait(false).GetAwaiter().GetResult();
                 }
                 finally
                 {
@@ -223,7 +288,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
                 return RefreshInterval;
             }
-            catch (ObjectDisposedException)
+            catch (Exception ex) when (ex is ObjectDisposedException || _shutdownToken.IsCancellationRequested)
             {
                 // The manager was disposed while the token was being refreshed, which is an ordinary shutdown and
                 // not a refresh failure.
@@ -236,7 +301,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 var remainingTokenLifetime = GetRemainingTokenLifetime();
 
                 // The current token stays valid until it expires, so publishing is unaffected by a failed refresh
-                // until then. That remaining lifetime is what decides whether there is still time to recover.
+                // until then. That remaining lifetime is what decides whether there is still time to recover; once
+                // it is gone, the failure count does.
                 if (
                     !BearerTokenRefreshPolicy.TryGetRetryDelay(
                         consecutiveFailures,
@@ -249,7 +315,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
                     _logger.Fatal(
                         ex,
-                        "Refresh of the bearer token for {Name} API client failed and can no longer be retried before the token expires ({FailureCount}, remaining token lifetime: {RemainingLifetime}). Publishing cannot continue and the remaining requests will fail.",
+                        "Refresh of the bearer token for {Name} API client failed and can no longer be retried ({FailureCount}, remaining token lifetime: {RemainingLifetime}). Publishing cannot continue and the remaining requests will fail.",
                         _displayName,
                         DescribeFailureCount(consecutiveFailures),
                         DescribeRemainingLifetime(remainingTokenLifetime)
@@ -260,7 +326,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
                 _logger.Warning(
                     ex,
-                    "Refresh of the bearer token failed for {Name} API client ({FailureCount}). The current token is still valid (remaining lifetime: {RemainingLifetime}), so the refresh is retried in {DelaySeconds:N0} seconds.",
+                    "Refresh of the bearer token failed for {Name} API client ({FailureCount}, remaining token lifetime: {RemainingLifetime}). The refresh is retried in {DelaySeconds:N0} seconds.",
                     _displayName,
                     DescribeFailureCount(consecutiveFailures),
                     DescribeRemainingLifetime(remainingTokenLifetime),
@@ -281,9 +347,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (disposing)
             {
+                // Stop the timer before anything it uses is disposed, and cancel whatever token request or retry
+                // delay is in flight so that neither holds up the shutdown.
                 _refreshTimer?.Dispose();
+                _shutdown.Cancel();
+
                 _tokenRequestHttpClient?.Dispose();
                 _tokenRefreshLock?.Dispose();
+                _shutdown.Dispose();
             }
         }
 
@@ -298,7 +369,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             try
             {
                 // No synchronization is needed here, because nothing else can be using the manager yet.
-                AcquireBearerTokenAsync(CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
+                AcquireBearerTokenAsync(_shutdownToken).ConfigureAwait(false).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -325,7 +396,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             Interlocked.Exchange(
                 ref _tokenExpiresAtUtcTicks,
-                tokenLifetime == null ? 0 : DateTime.UtcNow.Add(tokenLifetime.Value).Ticks
+                tokenLifetime is null ? 0 : _timeProvider.GetUtcNow().Add(tokenLifetime.Value).UtcTicks
             );
 
             Interlocked.Exchange(ref _consecutiveTokenFailures, 0);
@@ -345,7 +416,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     key[..3]
                 );
 
-            var authRequest = new HttpRequestMessage(
+            using var authRequest = new HttpRequestMessage(
                 HttpMethod.Post,
                 _connectionDetails.IsOdsAuthService ? "oauth/token" : string.Empty
             );
@@ -387,7 +458,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 }
             }
 
-            var authResponseMessage = await _tokenRequestHttpClient
+            using var authResponseMessage = await _tokenRequestHttpClient
                 .SendAsync(authRequest, cancellationToken)
                 .ConfigureAwait(false);
             string authResponseContent = await authResponseMessage
@@ -451,13 +522,25 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return;
             }
 
-            _logger.Information(
-                "Bearer token refresh interval for {Name} API client set to {IntervalMinutes:N1} minutes (configured interval: {ConfiguredMinutes:N1} minutes, token lifetime reported by the API: {TokenLifetimeMinutes:N1} minutes).",
-                _displayName,
-                interval.TotalMinutes,
-                _configuredRefreshInterval.TotalMinutes,
-                tokenLifetime?.TotalMinutes
-            );
+            if (interval < BearerTokenRefreshPolicy.ShortRefreshIntervalThreshold)
+            {
+                _logger.Warning(
+                    "The {Name} API issues bearer tokens with a lifetime of {TokenLifetimeSeconds:N0} seconds, so the token is refreshed every {IntervalSeconds:N0} seconds for the whole run. Consider a longer token lifetime on the API.",
+                    _displayName,
+                    tokenLifetime?.TotalSeconds,
+                    interval.TotalSeconds
+                );
+            }
+            else
+            {
+                _logger.Information(
+                    "Bearer token refresh interval for {Name} API client set to {IntervalMinutes:N1} minutes (configured interval: {ConfiguredMinutes:N1} minutes, token lifetime reported by the API: {TokenLifetimeMinutes:N1} minutes).",
+                    _displayName,
+                    interval.TotalMinutes,
+                    _configuredRefreshInterval.TotalMinutes,
+                    tokenLifetime?.TotalMinutes
+                );
+            }
 
             Interlocked.Exchange(ref _refreshIntervalTicks, interval.Ticks);
         }
@@ -474,14 +557,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return null;
             }
 
-            return new DateTime(expiresAtUtcTicks, DateTimeKind.Utc) - DateTime.UtcNow;
+            return new DateTimeOffset(expiresAtUtcTicks, TimeSpan.Zero) - _timeProvider.GetUtcNow();
         }
 
         private void RefreshBearerTokenOnTimer(object state)
         {
             var nextRefreshDelay = TryRefreshBearerToken();
 
-            if (nextRefreshDelay != null)
+            if (nextRefreshDelay is not null)
             {
                 RescheduleRefresh(nextRefreshDelay.Value);
             }
@@ -503,7 +586,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             var expiresInToken = authResponseObject["expires_in"];
 
-            if (expiresInToken != null && int.TryParse(expiresInToken.ToString(), out int expiresInSeconds))
+            if (expiresInToken is not null && int.TryParse(expiresInToken.ToString(), out int expiresInSeconds))
             {
                 return expiresInSeconds;
             }
@@ -518,7 +601,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         }
 
         private static string Truncate(string content) =>
-            content != null && content.Length > MaxLoggedAuthResponseLength
+            content is not null && content.Length > MaxLoggedAuthResponseLength
                 ? content[..MaxLoggedAuthResponseLength] + "... (truncated)"
                 : content;
 
@@ -528,7 +611,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 : $"{consecutiveFailures} consecutive failures";
 
         private static string DescribeRemainingLifetime(TimeSpan? remainingTokenLifetime) =>
-            remainingTokenLifetime == null
+            remainingTokenLifetime is null
                 ? "not reported by the API"
                 : $"{remainingTokenLifetime.Value.TotalSeconds:N0}s";
 

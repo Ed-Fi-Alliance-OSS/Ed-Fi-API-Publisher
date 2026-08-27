@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -14,11 +15,15 @@ using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
+using Microsoft.Extensions.Time.Testing;
 using NUnit.Framework;
-using Serilog.Sinks.TestCorrelator;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
+    /// <summary>
+    /// Covers the request path: how a request carrying a rejected token is recovered through the API client's own
+    /// pipeline, and what the caller sees when it cannot be.
+    /// </summary>
     [TestFixture]
     public class BearerTokenTests
     {
@@ -27,6 +32,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private const string ResourceRelativeUrl = "data/v3/ed-fi/schools";
         private const string FirstToken = "first-access-token";
         private const string SecondToken = "second-access-token";
+        private const string RequestBody = "{\"schoolId\":255901001,\"nameOfInstitution\":\"Grand Bend High School\"}";
 
         [Test]
         public void When_the_initial_bearer_token_cannot_be_obtained_the_client_cannot_be_created()
@@ -85,14 +91,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // One token request for the initial acquisition, one for the re-acquisition
             A.CallTo(() => fakeRequestHandler.Post(TokenUrl, A<HttpRequestMessage>.Ignored))
                 .MustHaveHappened(2, Times.Exactly);
-
         }
 
         [Test]
         public async Task When_a_request_with_a_body_is_replayed_the_body_and_its_content_type_are_preserved()
         {
-            const string RequestBody = "{\"schoolId\":255901001,\"nameOfInstitution\":\"Grand Bend High School\"}";
-
             var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
 
             GivenTheTokenEndpointReturns(fakeRequestHandler, FirstToken, SecondToken);
@@ -125,7 +128,106 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
-        public async Task When_the_token_cannot_be_reacquired_the_unauthorized_response_is_returned_to_the_caller()
+        public async Task A_request_that_is_not_rejected_does_not_have_its_body_read_for_a_replay()
+        {
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            GivenTheTokenEndpointReturns(fakeRequestHandler, FirstToken, SecondToken);
+
+            // The fake transport does not read the body, so any serialization of it is the handler's doing
+            A.CallTo(() => fakeRequestHandler.Post(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => Ok());
+
+            TestHelpers.InitializeLogging();
+
+            using var apiClient = CreateApiClient(fakeRequestHandler);
+
+            var content = new SerializationCountingContent(RequestBody);
+
+            var response = await apiClient.HttpClient.PostAsync(ResourceRelativeUrl, content);
+
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(content.SerializationCount, Is.EqualTo(0), "The body must only be buffered when a replay needs it.");
+        }
+
+        [Test]
+        public async Task A_rejected_request_whose_body_cannot_be_read_again_is_not_replayed()
+        {
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            GivenTheTokenEndpointReturns(fakeRequestHandler, FirstToken, SecondToken);
+
+            // Like a real transport, the fake consumes the body as it sends it
+            A.CallTo(() => fakeRequestHandler.Post(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(
+                    (string url, HttpRequestMessage request) =>
+                    {
+                        request.Content.CopyToAsync(Stream.Null).GetAwaiter().GetResult();
+
+                        return Unauthorized();
+                    });
+
+            TestHelpers.InitializeLogging();
+
+            using var apiClient = CreateApiClient(fakeRequestHandler);
+
+            // A body streamed from a source that cannot be rewound cannot be sent a second time
+            var content = new StreamContent(new NonSeekableStream(Encoding.UTF8.GetBytes(RequestBody)));
+
+            var response = await apiClient.HttpClient.PostAsync(ResourceRelativeUrl, content);
+
+            // The unauthorized response is reported rather than a replay with a truncated body
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+
+            A.CallTo(() => fakeRequestHandler.Post(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(1, Times.Exactly);
+        }
+
+        [Test]
+        public async Task When_the_reacquisition_fails_at_first_the_request_waits_and_is_replayed_once_it_succeeds()
+        {
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            // The token endpoint is briefly unavailable when the re-acquisition is first attempted
+            A.CallTo(() => fakeRequestHandler.Post(TokenUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => TokenResponse(FirstToken)).Once()
+                .Then.ReturnsLazily(() => ServiceUnavailable()).Once()
+                .Then.ReturnsLazily(() => TokenResponse(SecondToken));
+
+            A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(
+                    (string url, HttpRequestMessage request) =>
+                        request.Headers.Authorization?.Parameter == FirstToken ? Unauthorized() : Ok());
+
+            TestHelpers.InitializeLogging();
+
+            var clock = new FakeTimeProvider();
+            var startedAt = clock.GetUtcNow();
+
+            using var apiClient = CreateApiClient(fakeRequestHandler, timeProvider: clock);
+
+            var requestTask = apiClient.HttpClient.GetAsync(ResourceRelativeUrl);
+
+            await clock.AdvanceUntilCompletedAsync(requestTask, BearerTokenRefreshPolicy.InitialRetryDelay);
+
+            var response = await requestTask;
+
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), "The request must have been replayed once the token was re-acquired.");
+
+            // The request waited out the backoff rather than giving up on the first failed re-acquisition
+            Assert.That(clock.GetUtcNow() - startedAt, Is.GreaterThanOrEqualTo(BearerTokenRefreshPolicy.InitialRetryDelay));
+
+            // Initial acquisition, the failed re-acquisition, and the one that succeeded
+            A.CallTo(() => fakeRequestHandler.Post(TokenUrl, A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(3, Times.Exactly);
+
+            // Sent once with the rejected token, replayed once with the new one
+            A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(2, Times.Exactly);
+        }
+
+        [Test]
+        public async Task When_the_token_cannot_be_reacquired_at_all_the_request_fails_as_an_authentication_failure()
         {
             var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
 
@@ -140,13 +242,34 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             TestHelpers.InitializeLogging();
 
-            using var apiClient = CreateApiClient(fakeRequestHandler);
+            var clock = new FakeTimeProvider();
 
-            var response = await apiClient.HttpClient.GetAsync(ResourceRelativeUrl);
+            using var apiClient = CreateApiClient(fakeRequestHandler, timeProvider: clock);
 
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+            var caught = await CaptureAsync(
+                clock.AdvanceUntilCompletedAsync(
+                    apiClient.HttpClient.GetAsync(ResourceRelativeUrl),
+                    BearerTokenRefreshPolicy.InitialRetryDelay));
+
+            // Not the unauthorized response, which a caller would record as one failed request and move on from
+            Assert.That(
+                EdFiApiAuthenticationException.IsRepresentedBy(caught),
+                Is.True,
+                $"Unexpected exception: {caught}");
+
+            // The re-acquisition was retried as often as the policy allows before giving up
+            A.CallTo(() => fakeRequestHandler.Post(TokenUrl, A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(1 + BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken, Times.Exactly);
 
             // The request is not replayed when there is no usable token to replay it with
+            A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(1, Times.Exactly);
+
+            // And from here on, nothing is even sent
+            caught = await CaptureAsync(apiClient.HttpClient.GetAsync(ResourceRelativeUrl));
+
+            Assert.That(EdFiApiAuthenticationException.IsRepresentedBy(caught), Is.True, $"Unexpected exception: {caught}");
+
             A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
                 .MustHaveHappened(1, Times.Exactly);
         }
@@ -204,19 +327,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     bearerTokenProvider,
                     "TestSource"))
             {
-                BaseAddress = new System.Uri(MockRequests.SourceApiBaseUrl + "/")
+                BaseAddress = new Uri(MockRequests.SourceApiBaseUrl + "/")
             };
 
-            Exception caught = null;
-
-            try
-            {
-                await httpClient.GetAsync(ResourceRelativeUrl);
-            }
-            catch (Exception ex)
-            {
-                caught = ex;
-            }
+            var caught = await CaptureAsync(httpClient.GetAsync(ResourceRelativeUrl));
 
             Assert.That(caught, Is.Not.Null, "The request should not have been sent without a usable token.");
             Assert.That(
@@ -228,17 +342,32 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .MustNotHaveHappened();
         }
 
+        private static async Task<Exception> CaptureAsync(Task task)
+        {
+            try
+            {
+                await task;
+            }
+            catch (Exception ex)
+            {
+                return ex;
+            }
+
+            return null;
+        }
 
         private static EdFiApiClient CreateApiClient(
             IFakeHttpRequestHandler fakeRequestHandler,
-            int bearerTokenRefreshMinutes = 60)
+            int bearerTokenRefreshMinutes = 60,
+            TimeProvider timeProvider = null)
         {
             return new EdFiApiClient(
                 "TestSource",
                 TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes,
                 ignoreSslErrors: true,
-                new HttpClientHandlerFakeBridge(fakeRequestHandler));
+                new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                timeProvider);
         }
 
         private static void GivenTheTokenEndpointReturns(
@@ -266,5 +395,81 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             {
                 Content = new StringContent("{\"error\":\"invalid_token\"}", Encoding.UTF8, "application/json")
             };
+
+        private static HttpResponseMessage ServiceUnavailable() =>
+            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            };
+
+        /// <summary>
+        /// Request content that counts how many times its body is written out, which is how many times something
+        /// has read it.
+        /// </summary>
+        private sealed class SerializationCountingContent : HttpContent
+        {
+            private readonly byte[] _body;
+
+            public SerializationCountingContent(string body)
+            {
+                _body = Encoding.UTF8.GetBytes(body);
+                Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            }
+
+            public int SerializationCount { get; private set; }
+
+            protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext context)
+            {
+                SerializationCount++;
+
+                return stream.WriteAsync(_body, 0, _body.Length);
+            }
+
+            protected override bool TryComputeLength(out long length)
+            {
+                length = _body.Length;
+
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// A forward-only stream, standing in for a body produced on the fly that cannot be sent a second time.
+        /// </summary>
+        private sealed class NonSeekableStream : Stream
+        {
+            private readonly MemoryStream _inner;
+
+            public NonSeekableStream(byte[] content)
+            {
+                _inner = new MemoryStream(content, writable: false);
+            }
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+
+            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+                _inner.ReadAsync(buffer, offset, count, cancellationToken);
+
+            public override void Flush()
+            {
+            }
+
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
     }
 }

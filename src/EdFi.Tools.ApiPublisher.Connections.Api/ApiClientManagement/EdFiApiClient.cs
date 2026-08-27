@@ -13,6 +13,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     {
         private readonly string _name;
 
+        // The transport is shared by the request pipeline and by the token manager, and owned here: it is created or
+        // taken over by this client and disposed by it, after both of the things that send through it.
+        private readonly HttpClientHandler _httpClientHandler;
         private readonly HttpClient _httpClient;
         private readonly BearerTokenManager _bearerTokenManager;
 
@@ -24,7 +27,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             ApiConnectionDetails apiConnectionDetails,
             int bearerTokenRefreshMinutes,
             bool ignoreSslErrors,
-            HttpClientHandler httpClientHandler = null
+            HttpClientHandler httpClientHandler = null,
+            TimeProvider timeProvider = null
         )
         {
             ConnectionDetails =
@@ -37,43 +41,46 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             _dataManagementApiSegment = new Lazy<string>(
                 () =>
-                    ConnectionDetails.SchoolYear == null
+                    ConnectionDetails.SchoolYear is null
                         ? EdFiApiConstants.DataManagementApiSegment
                         : $"{EdFiApiConstants.DataManagementApiSegment}/{ConnectionDetails.SchoolYear}"
             );
 
             _changeQueriesApiSegment = new Lazy<string>(
                 () =>
-                    ConnectionDetails.SchoolYear == null
+                    ConnectionDetails.SchoolYear is null
                         ? EdFiApiConstants.ChangeQueriesApiSegment
                         : $"{EdFiApiConstants.ChangeQueriesApiSegment}/{ConnectionDetails.SchoolYear}"
             );
 
-            httpClientHandler ??= new HttpClientHandler();
+            _httpClientHandler = httpClientHandler ?? new HttpClientHandler();
 
             if (ignoreSslErrors)
             {
 #pragma warning disable S4830 // Server certificates should be verified during SSL/TLS connections
-                httpClientHandler.ServerCertificateCustomValidationCallback =
+                _httpClientHandler.ServerCertificateCustomValidationCallback =
                     HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
 #pragma warning restore S4830 // Server certificates should be verified during SSL/TLS connections
             }
 
-            // The token manager is created first and obtains the initial token, so a connection that cannot
-            // authenticate fails here rather than on the first request.
-            _bearerTokenManager = new BearerTokenManager(
-                name,
-                apiConnectionDetails,
-                bearerTokenRefreshMinutes,
-                httpClientHandler
-            );
-
             try
             {
+                // The token manager is created first and obtains the initial token, so a connection that cannot
+                // authenticate fails here rather than on the first request.
+                _bearerTokenManager = new BearerTokenManager(
+                    name,
+                    apiConnectionDetails,
+                    bearerTokenRefreshMinutes,
+                    _httpClientHandler,
+                    timeProvider
+                );
+
                 // The handler applies the token to every request and recovers from one the API rejects. It reads the
                 // token from the manager, which is why nothing here has to be published before it is fully built.
+                // Neither client disposes the transport; that is done here, once, after both are gone.
                 _httpClient = new HttpClient(
-                    new BearerTokenHandler(httpClientHandler, _bearerTokenManager, name)
+                    new BearerTokenHandler(_httpClientHandler, _bearerTokenManager, name),
+                    disposeHandler: false
                 )
                 {
                     BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
@@ -81,7 +88,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
             catch
             {
-                _bearerTokenManager.Dispose();
+                _bearerTokenManager?.Dispose();
+                _httpClientHandler.Dispose();
 
                 throw;
             }
@@ -109,8 +117,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (disposing)
             {
-                _httpClient?.Dispose();
+                // The manager goes first so that its timer cannot start a token request on a transport that is
+                // about to be disposed; the transport goes last, once nothing sends through it any more.
                 _bearerTokenManager?.Dispose();
+                _httpClient?.Dispose();
+                _httpClientHandler?.Dispose();
             }
         }
     }

@@ -11,8 +11,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
     /// <summary>
     /// Applies the current bearer token to every outgoing request and, when the API rejects a request as
-    /// unauthorized, re-acquires the token once and replays the request. Handling this in the request pipeline
-    /// covers every call made through the client, including the calls that have no retry policy of their own.
+    /// unauthorized, re-acquires the token and replays the request. Handling this in the request pipeline covers
+    /// every call made through the client, including the calls that have no retry policy of their own. When the
+    /// token cannot be re-acquired at all, the request fails with <see cref="EdFiApiAuthenticationException" />
+    /// rather than with the unauthorized response, which a caller would record as an ordinary failure of that one
+    /// request and move on from.
     /// </summary>
     public class BearerTokenHandler : DelegatingHandler
     {
@@ -68,14 +71,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             if (!tokenIsUsable)
             {
-                // Leave the unauthorized response to the caller. The provider has already reported the failure, and
-                // it fails subsequent requests outright once the token can no longer be obtained at all.
-                return response;
+                // The provider has retried the re-acquisition for as long as its policy allows and has given up, so
+                // the token is not coming back. The provider has already reported that; this only has to keep the
+                // failure from being mistaken for an unauthorized response to this one request.
+                response.Dispose();
+
+                throw new EdFiApiAuthenticationException(
+                    $"The bearer token for the {_displayName} API client could not be re-acquired after '{request.Method} {request.RequestUri}' was rejected as unauthorized, so the request cannot be authenticated."
+                );
             }
 
             var replayRequest = await TryCloneRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
-            if (replayRequest == null)
+            if (replayRequest is null)
             {
                 return response;
             }
@@ -97,7 +105,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             CancellationToken cancellationToken
         )
         {
-            if (request.Content == null)
+            if (request.Content is null)
             {
                 return CloneRequest(request, requestBody: null, requestContentHeaders: null);
             }
@@ -123,7 +131,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             // A body that is no longer fully readable would be replayed truncated, which is worse than reporting
             // the unauthorized response.
-            if (expectedLength != null && requestBody.LongLength != expectedLength.Value)
+            if (expectedLength is not null && requestBody.LongLength != expectedLength.Value)
             {
                 _logger.Warning(
                     "'{Method} {RequestUri}' cannot be replayed because only {ActualLength} of {ExpectedLength} bytes of its body are still readable. The unauthorized response is reported instead.",
@@ -169,7 +177,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 clone.Options.Set(new HttpRequestOptionsKey<object>(option.Key), option.Value);
             }
 
-            if (requestBody != null)
+            if (requestBody is not null)
             {
                 clone.Content = new ByteArrayContent(requestBody);
 

@@ -12,14 +12,16 @@ using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
+using Microsoft.Extensions.Time.Testing;
 using NUnit.Framework;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
     /// <summary>
     /// Covers the token lifecycle on its own: the interval it settles on, what it does with the decision the policy
-    /// hands it, and when it stops trying altogether. Driven through a refresh attempt rather than by waiting for a
-    /// real timer to fire.
+    /// hands it, and when it stops trying altogether. The scheduling decision is exercised directly through a refresh
+    /// attempt, and the timer that acts on it is exercised against a fake clock so that a real
+    /// <see cref="ITimer" /> fires, is rearmed and stops without the test having to wait.
     /// </summary>
     [TestFixture]
     public class BearerTokenRefreshTests
@@ -28,6 +30,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private const string ResourceUrl = MockRequests.SourceApiBaseUrl + "/data/v3/ed-fi/schools";
         private const string ResourceRelativeUrl = "data/v3/ed-fi/schools";
         private const string AnyToken = "any-access-token";
+
+        private static readonly TimeSpan ConfiguredInterval = TimeSpan.FromMinutes(28);
 
         [Test]
         public void The_refresh_interval_is_capped_at_half_of_the_reported_token_lifetime()
@@ -49,7 +53,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             using var tokenManager = CreateTokenManager(fakeRequestHandler);
 
-            Assert.That(tokenManager.RefreshInterval, Is.EqualTo(TimeSpan.FromMinutes(28)));
+            Assert.That(tokenManager.RefreshInterval, Is.EqualTo(ConfiguredInterval));
         }
 
         [Test]
@@ -89,7 +93,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             failTokenRequests.Value = true;
 
-            for (int attempt = 1; attempt < BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithUnknownLifetime; attempt++)
+            for (int attempt = 1; attempt < BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken; attempt++)
             {
                 Assert.That(
                     tokenManager.TryRefreshBearerToken(),
@@ -124,6 +128,103 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void The_timer_refreshes_the_token_when_the_interval_elapses_and_rearms_itself()
+        {
+            var fakeRequestHandler = GivenTheTokenEndpoint(out _, tokenLifetimeSeconds: 1800);
+            var clock = new FakeTimeProvider();
+
+            using var tokenManager = CreateTokenManager(fakeRequestHandler, clock);
+
+            var interval = TimeSpan.FromMinutes(15);
+            Assert.That(tokenManager.RefreshInterval, Is.EqualTo(interval));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(1), "Only the initial acquisition so far.");
+
+            clock.Advance(interval - TimeSpan.FromSeconds(1));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(1), "The timer must not fire early.");
+
+            clock.Advance(TimeSpan.FromSeconds(1));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(2), "The timer should have fired at the interval.");
+
+            // The timer is one-shot and rearmed after each attempt, so a second interval has to produce a third request
+            clock.Advance(interval);
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(3), "The timer should have been rearmed.");
+        }
+
+        [Test]
+        public void The_timer_retries_a_failed_refresh_on_the_backoff_and_returns_to_the_interval_once_it_recovers()
+        {
+            // An hour long token, so the configured interval is the shorter of the two
+            var fakeRequestHandler = GivenTheTokenEndpoint(out var failTokenRequests, tokenLifetimeSeconds: 3600);
+            var clock = new FakeTimeProvider();
+
+            using var tokenManager = CreateTokenManager(fakeRequestHandler, clock);
+
+            Assert.That(tokenManager.RefreshInterval, Is.EqualTo(ConfiguredInterval));
+
+            clock.Advance(ConfiguredInterval);
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(2), "The first scheduled refresh should have succeeded.");
+
+            failTokenRequests.Value = true;
+
+            clock.Advance(ConfiguredInterval);
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(3), "The second scheduled refresh should have been attempted and failed.");
+
+            // Retried 5 seconds later rather than a full interval later
+            clock.Advance(TimeSpan.FromSeconds(4));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(3));
+            clock.Advance(TimeSpan.FromSeconds(1));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(4), "The first retry should have fired after 5 seconds.");
+
+            clock.Advance(TimeSpan.FromSeconds(10));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(5), "The second retry should have fired after 10 seconds.");
+
+            failTokenRequests.Value = false;
+
+            clock.Advance(TimeSpan.FromSeconds(20));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(6), "The third retry should have fired after 20 seconds.");
+            Assert.That(tokenManager.IsAuthenticationFailed, Is.False, "The token was still valid throughout, so the run must not have ended.");
+
+            // Recovered, so the next refresh is a full interval away again
+            clock.Advance(ConfiguredInterval - TimeSpan.FromSeconds(1));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(6));
+            clock.Advance(TimeSpan.FromSeconds(1));
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(7), "The regular interval should have resumed after the recovery.");
+        }
+
+        [Test]
+        public void Once_the_timer_path_gives_up_the_timer_is_not_rearmed()
+        {
+            var fakeRequestHandler = GivenTheTokenEndpoint(out var failTokenRequests, tokenLifetimeSeconds: null);
+            var clock = new FakeTimeProvider();
+
+            using var tokenManager = CreateTokenManager(fakeRequestHandler, clock);
+
+            failTokenRequests.Value = true;
+
+            // The scheduled refresh fails, and so does every retry on the 5, 10, 20 and 40 second backoff. Each retry is
+            // armed from inside the previous attempt, so the clock is advanced one retry at a time.
+            clock.Advance(ConfiguredInterval);
+
+            foreach (int retryDelaySeconds in new[] { 5, 10, 20, 40 })
+            {
+                clock.Advance(TimeSpan.FromSeconds(retryDelaySeconds));
+            }
+
+            Assert.That(
+                CountTokenRequests(fakeRequestHandler),
+                Is.EqualTo(1 + BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken),
+                "The initial acquisition plus every tolerated failure.");
+            Assert.That(tokenManager.IsAuthenticationFailed, Is.True);
+
+            // No further attempt is made, however long the run would otherwise go on
+            clock.Advance(TimeSpan.FromHours(3));
+            Assert.That(
+                CountTokenRequests(fakeRequestHandler),
+                Is.EqualTo(1 + BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken),
+                "The timer must not have been rearmed after giving up.");
+        }
+
+        [Test]
         public async Task Once_authentication_has_failed_the_timer_stops_and_requests_short_circuit()
         {
             var fakeRequestHandler = GivenTheTokenEndpoint(out var failTokenRequests, tokenLifetimeSeconds: null);
@@ -147,7 +248,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             failTokenRequests.Value = true;
 
-            for (int attempt = 0; attempt < BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithUnknownLifetime; attempt++)
+            for (int attempt = 0; attempt < BearerTokenRefreshPolicy.MaxConsecutiveFailuresWithoutUsableToken; attempt++)
             {
                 tokenManager.TryRefreshBearerToken();
             }
@@ -179,6 +280,20 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 $"Unexpected exception: {caught}");
 
             A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored)).MustNotHaveHappened();
+        }
+
+        [Test]
+        public void Disposing_the_manager_stops_the_timer()
+        {
+            var fakeRequestHandler = GivenTheTokenEndpoint(out _, tokenLifetimeSeconds: 1800);
+            var clock = new FakeTimeProvider();
+
+            var tokenManager = CreateTokenManager(fakeRequestHandler, clock);
+            tokenManager.Dispose();
+
+            clock.Advance(TimeSpan.FromHours(1));
+
+            Assert.That(CountTokenRequests(fakeRequestHandler), Is.EqualTo(1), "A disposed manager must not refresh its token.");
         }
 
         [Test]
@@ -229,12 +344,15 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 ? FakeResponse.OK(new { access_token = AnyToken })
                 : FakeResponse.OK(new { access_token = AnyToken, expires_in = expiresInSeconds.Value });
 
-        private static BearerTokenManager CreateTokenManager(IFakeHttpRequestHandler fakeRequestHandler) =>
+        private static BearerTokenManager CreateTokenManager(
+            IFakeHttpRequestHandler fakeRequestHandler,
+            TimeProvider timeProvider = null) =>
             new BearerTokenManager(
                 "TestSource",
                 TestHelpers.GetSourceApiConnectionDetails(),
-                bearerTokenRefreshMinutes: 28,
-                new HttpClientHandlerFakeBridge(fakeRequestHandler));
+                bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
+                new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                timeProvider);
 
         private sealed class MutableFlag
         {

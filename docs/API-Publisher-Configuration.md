@@ -38,8 +38,9 @@ Defines general behavior of the Ed-Fi API Publisher.
 
 The publisher refreshes its bearer token while a run is in progress, and recovers when the API rejects a request as unauthorized by obtaining a new token and sending the request again.
 
-- When the API reports the lifetime of the token it issues, the refresh interval is capped at half of that lifetime so that a failed refresh can be retried before the token expires. The interval is never shortened below 30 seconds. A token whose lifetime is around a minute therefore leaves no room to retry, and the first failed refresh ends the run.
-- A failed refresh is retried on a short, growing delay for as long as the current token remains usable. Publishing is unaffected while that happens, because the token in hand is still valid.
+- When the API reports the lifetime of the token it issues, the refresh interval is capped at half of that lifetime, so that the refresh always runs ahead of the expiry and a failed refresh can be retried before the token expires. This holds however short the lifetime is: an API issuing tokens that live less than a minute is refreshed every few seconds, and a warning is logged at startup pointing that out.
+- A failed refresh is retried on a short, growing delay (5 seconds, doubling, capped at 60) for as long as the current token remains usable. Publishing is unaffected while that happens, because the token in hand is still valid. Once the token has expired, or when the API reports no lifetime, up to five consecutive failures are tolerated before the run ends.
+- When the API rejects a request as unauthorized, the request waits while the token is re-acquired and is then sent again. If the token endpoint is unavailable at that moment, the re-acquisition is retried on the same backoff while the request waits, so a document or page is not lost to a brief outage of the token endpoint.
 - When the token can no longer be obtained at all, the run ends with a `FATAL` log entry rather than continuing to send requests that the API will reject.
 
 **Behavior change:** a run that cannot authenticate now exits with a non-zero exit code. Earlier versions could log the failure, keep going, and still exit `0`, so automation that treats a zero exit code as success will begin to see failures it previously did not.
