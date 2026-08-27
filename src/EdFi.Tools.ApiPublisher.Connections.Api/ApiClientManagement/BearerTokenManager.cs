@@ -34,6 +34,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// </summary>
         private const int MaxLoggedAuthResponseLength = 1000;
 
+        /// <summary>
+        /// How long a disposal waits for a token request or retry delay that is in flight to observe the cancellation
+        /// and let go of the lock, before the lock is disposed regardless. Bounded so that a transport that ignores
+        /// cancellation cannot hold up the shutdown.
+        /// </summary>
+        private static readonly TimeSpan ShutdownGracePeriod = TimeSpan.FromSeconds(5);
+
         private readonly ApiConnectionDetails _connectionDetails;
         private readonly string _name;
         private readonly string _displayName;
@@ -53,6 +60,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private volatile string _bearerToken;
         private volatile bool _authenticationFailed;
         private int _consecutiveTokenFailures;
+
+        // The acquisitions currently holding, or waiting for, the lock. Disposal waits for this to reach zero.
+        private int _activeOperations;
+        private int _disposed;
 
         // Ticks rather than a TimeSpan so that the timer callback and the request path, which write and read these
         // outside of one another's lock, cannot observe a partially written value.
@@ -156,12 +167,26 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return false;
             }
 
-            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                _shutdownToken
-            );
-            var linkedToken = linkedCancellation.Token;
+            Interlocked.Increment(ref _activeOperations);
 
+            try
+            {
+                using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    _shutdownToken
+                );
+
+                return await ReacquireBearerTokenAsync(staleBearerToken, linkedCancellation.Token)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeOperations);
+            }
+        }
+
+        private async Task<bool> ReacquireBearerTokenAsync(string staleBearerToken, CancellationToken linkedToken)
+        {
             await _tokenRefreshLock.WaitAsync(linkedToken).ConfigureAwait(false);
 
             try
@@ -241,7 +266,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
             finally
             {
-                _tokenRefreshLock.Release();
+                ReleaseTokenRefreshLock();
             }
         }
 
@@ -258,6 +283,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return null;
             }
 
+            Interlocked.Increment(ref _activeOperations);
+
+            try
+            {
+                return RefreshBearerToken();
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeOperations);
+            }
+        }
+
+        private TimeSpan? RefreshBearerToken()
+        {
             try
             {
                 if (!_tokenRefreshLock.Wait(0, _shutdownToken))
@@ -281,7 +320,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 }
                 finally
                 {
-                    _tokenRefreshLock.Release();
+                    ReleaseTokenRefreshLock();
                 }
 
                 _logger.Information("Bearer token refreshed successfully for {Name} API client.", _displayName);
@@ -345,16 +384,35 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         protected virtual void Dispose(bool disposing)
         {
-            if (disposing)
+            if (!disposing || Interlocked.Exchange(ref _disposed, 1) == 1)
             {
-                // Stop the timer before anything it uses is disposed, and cancel whatever token request or retry
-                // delay is in flight so that neither holds up the shutdown.
-                _refreshTimer?.Dispose();
-                _shutdown.Cancel();
+                return;
+            }
 
-                _tokenRequestHttpClient?.Dispose();
-                _tokenRefreshLock?.Dispose();
-                _shutdown.Dispose();
+            // Stop the timer before anything it uses is disposed, and cancel whatever token request or retry delay is
+            // in flight so that neither holds up the shutdown.
+            _refreshTimer?.Dispose();
+            _shutdown.Cancel();
+
+            // An operation in flight sees the cancellation at its next await and releases the lock on its way out.
+            // Waiting for that keeps the lock from being disposed while the operation still holds it.
+            SpinWait.SpinUntil(() => Volatile.Read(ref _activeOperations) == 0, ShutdownGracePeriod);
+
+            _tokenRequestHttpClient?.Dispose();
+            _tokenRefreshLock?.Dispose();
+            _shutdown.Dispose();
+        }
+
+        private void ReleaseTokenRefreshLock()
+        {
+            try
+            {
+                _tokenRefreshLock.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The manager was disposed while this operation held the lock and did not let go within the grace
+                // period. There is nothing left to release into.
             }
         }
 

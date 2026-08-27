@@ -8,12 +8,15 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using Microsoft.Extensions.Time.Testing;
 using NUnit.Framework;
+using Serilog.Events;
+using Serilog.Sinks.TestCorrelator;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -54,6 +57,30 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             using var tokenManager = CreateTokenManager(fakeRequestHandler);
 
             Assert.That(tokenManager.RefreshInterval, Is.EqualTo(ConfiguredInterval));
+        }
+
+        [Test]
+        public void A_token_lifetime_under_a_minute_is_honored_and_reported()
+        {
+            var fakeRequestHandler = GivenTheTokenEndpoint(out _, tokenLifetimeSeconds: 20);
+
+            using (TestCorrelator.CreateContext())
+            {
+                using var tokenManager = CreateTokenManager(fakeRequestHandler);
+
+                // Half the lifetime, however short, so that the refresh still comes before the expiry
+                Assert.That(tokenManager.RefreshInterval, Is.EqualTo(TimeSpan.FromSeconds(10)));
+
+                var warnings = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Where(logEvent => logEvent.Level == LogEventLevel.Warning)
+                    .Select(logEvent => logEvent.RenderMessage())
+                    .ToList();
+
+                Assert.That(
+                    warnings,
+                    Has.Exactly(1).Contains("refreshed every"),
+                    $"Warnings: {string.Join(Environment.NewLine, warnings)}");
+            }
         }
 
         [Test]
@@ -280,6 +307,54 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 $"Unexpected exception: {caught}");
 
             A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored)).MustNotHaveHappened();
+        }
+
+        [Test]
+        public async Task Disposing_the_manager_while_a_refresh_is_in_flight_waits_for_it_and_completes_cleanly()
+        {
+            using var tokenRequestStarted = new ManualResetEventSlim();
+            using var releaseTokenRequest = new ManualResetEventSlim();
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            int tokenRequests = 0;
+
+            // The initial acquisition returns at once; the refresh under test is held until the test lets it go
+            A.CallTo(() => fakeRequestHandler.Post(TokenUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(
+                    () =>
+                    {
+                        if (Interlocked.Increment(ref tokenRequests) > 1)
+                        {
+                            tokenRequestStarted.Set();
+                            releaseTokenRequest.Wait(TimeSpan.FromSeconds(10));
+                        }
+
+                        return TokenResponse(expiresInSeconds: null);
+                    });
+
+            TestHelpers.InitializeLogging();
+
+            var tokenManager = CreateTokenManager(fakeRequestHandler);
+
+            var refresh = Task.Run(() => tokenManager.TryRefreshBearerToken());
+
+            Assert.That(tokenRequestStarted.Wait(TimeSpan.FromSeconds(10)), Is.True, "The refresh should have reached the token endpoint.");
+
+            var disposal = Task.Run(() => tokenManager.Dispose());
+
+            // The disposal has to wait for the refresh that holds the lock rather than dispose the lock out from
+            // under it
+            await Task.Delay(200);
+            Assert.That(disposal.IsCompleted, Is.False, "Disposal should wait for the refresh in flight.");
+
+            releaseTokenRequest.Set();
+
+            await Task.WhenAll(refresh, disposal).WaitAsync(TimeSpan.FromSeconds(10));
+
+            // Neither side threw: the refresh reported its outcome through its return value, and the disposal completed
+            Assert.That(refresh.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            Assert.That(disposal.Status, Is.EqualTo(TaskStatus.RanToCompletion));
         }
 
         [Test]

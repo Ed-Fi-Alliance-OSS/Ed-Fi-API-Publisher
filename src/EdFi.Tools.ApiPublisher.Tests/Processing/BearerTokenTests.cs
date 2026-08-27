@@ -184,6 +184,80 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public async Task A_rejected_request_with_a_body_too_large_to_buffer_is_not_replayed()
+        {
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            GivenTheTokenEndpointReturns(fakeRequestHandler, FirstToken, SecondToken);
+
+            A.CallTo(() => fakeRequestHandler.Post(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => Unauthorized());
+
+            TestHelpers.InitializeLogging();
+
+            using var apiClient = CreateApiClient(fakeRequestHandler);
+
+            // Declares a body one byte over the limit; the body itself stays small so the test does not allocate it
+            var content = new SerializationCountingContent(
+                RequestBody,
+                declaredLength: BearerTokenHandler.MaxReplayableBodyLength + 1);
+
+            var response = await apiClient.HttpClient.PostAsync(ResourceRelativeUrl, content);
+
+            // The unauthorized response is reported rather than a copy of the body being made
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+            Assert.That(content.SerializationCount, Is.EqualTo(0), "The oversized body must not have been read for a replay.");
+
+            A.CallTo(() => fakeRequestHandler.Post(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(1, Times.Exactly);
+        }
+
+        [Test]
+        public async Task When_a_request_is_cancelled_while_the_reacquisition_waits_out_the_backoff_the_next_request_still_recovers()
+        {
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            A.CallTo(() => fakeRequestHandler.Post(TokenUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => TokenResponse(FirstToken)).Once()
+                .Then.ReturnsLazily(() => ServiceUnavailable()).Once()
+                .Then.ReturnsLazily(() => TokenResponse(SecondToken));
+
+            A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(
+                    (string url, HttpRequestMessage request) =>
+                        request.Headers.Authorization?.Parameter == FirstToken ? Unauthorized() : Ok());
+
+            TestHelpers.InitializeLogging();
+
+            // A fake clock that is never advanced, so the request stays in its backoff delay until it is cancelled
+            var clock = new FakeTimeProvider();
+
+            using var apiClient = CreateApiClient(fakeRequestHandler, timeProvider: clock);
+
+            using var cancellation = new CancellationTokenSource();
+
+            var cancelledRequest = apiClient.HttpClient.GetAsync(ResourceRelativeUrl, cancellation.Token);
+
+            // The failed re-acquisition (the second token request) is what puts the request into its backoff delay
+            await WaitUntilAsync(() => CountTokenRequests(fakeRequestHandler) == 2);
+
+            cancellation.Cancel();
+
+            var caught = await CaptureAsync(cancelledRequest);
+
+            Assert.That(caught, Is.InstanceOf<OperationCanceledException>(), $"Unexpected exception: {caught}");
+
+            // The cancelled request let go of the token lock on its way out, so the next request re-acquires the token
+            // itself and is replayed, with the token endpoint back
+            var response = await apiClient.HttpClient.GetAsync(ResourceRelativeUrl);
+
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+            A.CallTo(() => fakeRequestHandler.Post(TokenUrl, A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(3, Times.Exactly);
+        }
+
+        [Test]
         public async Task When_the_reacquisition_fails_at_first_the_request_waits_and_is_replayed_once_it_succeeds()
         {
             var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>().SetBaseUrl(MockRequests.SourceApiBaseUrl);
@@ -342,6 +416,21 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .MustNotHaveHappened();
         }
 
+        private static async Task WaitUntilAsync(Func<bool> condition)
+        {
+            var timeout = Task.Delay(TimeSpan.FromSeconds(10));
+
+            while (!condition())
+            {
+                Assert.That(timeout.IsCompleted, Is.False, "The awaited condition was not met in time.");
+
+                await Task.Delay(10);
+            }
+        }
+
+        private static int CountTokenRequests(IFakeHttpRequestHandler fakeRequestHandler) =>
+            Fake.GetCalls(fakeRequestHandler).Count(call => call.Method.Name == "Post");
+
         private static async Task<Exception> CaptureAsync(Task task)
         {
             try
@@ -409,10 +498,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private sealed class SerializationCountingContent : HttpContent
         {
             private readonly byte[] _body;
+            private readonly long? _declaredLength;
 
-            public SerializationCountingContent(string body)
+            public SerializationCountingContent(string body, long? declaredLength = null)
             {
                 _body = Encoding.UTF8.GetBytes(body);
+                _declaredLength = declaredLength;
                 Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
             }
 
@@ -427,7 +518,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             protected override bool TryComputeLength(out long length)
             {
-                length = _body.Length;
+                length = _declaredLength ?? _body.Length;
 
                 return true;
             }
