@@ -25,8 +25,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         [TestCase(HttpStatusCode.OK, AddressTypeDescriptors)]
         [TestCase(HttpStatusCode.BadRequest, StateEducationAgencies)]
         [TestCase(HttpStatusCode.BadRequest, AddressTypeDescriptors)]
-        [TestCase(HttpStatusCode.Unauthorized, StateEducationAgencies)]
-        [TestCase(HttpStatusCode.Unauthorized, AddressTypeDescriptors)]
+        // An unauthorized response is replayed once, after the bearer token has been re-acquired (APIPUB-119)
+        [TestCase(HttpStatusCode.Unauthorized, StateEducationAgencies, true)]
+        [TestCase(HttpStatusCode.Unauthorized, AddressTypeDescriptors, true)]
         [TestCase(HttpStatusCode.PaymentRequired, StateEducationAgencies)]
         [TestCase(HttpStatusCode.PaymentRequired, AddressTypeDescriptors)]
         [TestCase(HttpStatusCode.Forbidden, StateEducationAgencies)]

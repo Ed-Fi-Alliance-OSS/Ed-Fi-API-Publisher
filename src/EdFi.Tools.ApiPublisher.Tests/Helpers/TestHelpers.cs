@@ -261,7 +261,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             ApiConnectionDetails targetApiConnectionDetails,
             IFakeHttpRequestHandler fakeTargetRequestHandler,
             INodeJSService nodeJsService = null,
-            bool withReversePaging = false)
+            bool withReversePaging = false,
+            TimeProvider timeProvider = null)
         {
             EdFiApiClient SourceApiClientFactory() =>
                 new EdFiApiClient(
@@ -269,7 +270,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                     sourceApiConnectionDetails,
                     bearerTokenRefreshMinutes: 27,
                     ignoreSslErrors: true,
-                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeSourceRequestHandler));
+                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeSourceRequestHandler),
+                    timeProvider: timeProvider);
 
             EdFiApiClient TargetApiClientFactory() =>
                 new EdFiApiClient(
@@ -277,7 +279,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                     targetApiConnectionDetails,
                     bearerTokenRefreshMinutes: 27,
                     ignoreSslErrors: true,
-                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeTargetRequestHandler));
+                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeTargetRequestHandler),
+                    timeProvider: timeProvider);
 
             var sourceEdFiApiClientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(SourceApiClientFactory));
             var targetEdFiApiClientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory));

@@ -92,7 +92,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         bool isRateLimitingEnabled = options.EnableRateLimit;
 
                         var retryPolicy = Policy
-                            .Handle<Exception>()
+                            .Handle<Exception>(EdFiApiAuthenticationException.IsNotRepresentedBy)
                             .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                             .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                             {
@@ -241,6 +241,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", message.ResourceUrl);
                         throw;
                     }
+                    catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                    {
+                        // The API client already reported the authentication failure once. Repeating it for every message
+                        // still in flight would bury it, so this only needs to fault the block.
+                        _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", message.ResourceUrl, sourceId);
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         _logger.Error(ex, "{ResourceUrl} (source id: {SourceId}): An unhandled exception occurred in the block created by '{CreateGetItemForKeyChangeBlock}': {Ex}",
@@ -297,7 +304,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     // Rate Limit
                     bool isRateLimitingEnabled = options.EnableRateLimit;
                     var retryPolicy = Policy
-                        .Handle<Exception>()
+                        .Handle<Exception>(EdFiApiAuthenticationException.IsNotRepresentedBy)
                         .OrResult<HttpResponseMessage>(r =>
                             r.StatusCode == HttpStatusCode.Conflict || r.StatusCode.IsPotentiallyTransientFailure())
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
@@ -374,6 +381,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 catch (RateLimitRejectedException ex)
                 {
                     _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
+                    throw;
+                }
+                catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                {
+                    // The API client already reported the authentication failure once. Repeating it for every message
+                    // still in flight would bury it, so this only needs to fault the block.
+                    _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", msg.ResourceUrl, sourceId);
                     throw;
                 }
                 catch (Exception ex)
