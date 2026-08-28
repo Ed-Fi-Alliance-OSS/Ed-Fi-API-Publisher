@@ -174,7 +174,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 int attempts = 0;
                 // Rate Limit
                 bool isRateLimitingEnabled = options.EnableRateLimit;
-                var retryPolicy = Policy.Handle<Exception>()
+                var retryPolicy = Policy.Handle<Exception>(EdFiApiAuthenticationException.IsNotRepresentedBy)
                     .OrResult<HttpResponseMessage>(
                         r =>
                             // Descriptor Conflicts are not to be retried 
@@ -440,6 +440,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     postItemMessage.ResourceUrl, id);
 
                 return Enumerable.Empty<ErrorItemMessage>();
+            }
+            catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+            {
+                // The API client already reported the authentication failure once. Repeating it for every message
+                // still in flight would bury it, so this only needs to fault the block.
+                _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", postItemMessage.ResourceUrl, id);
+                throw;
             }
             catch (Exception ex)
             {

@@ -244,16 +244,22 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
             return transformedMessages;
         }
-        catch (Exception ex) when (message.CancellationSource.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (message.CancellationSource.IsCancellationRequested)
         {
-            // Graceful cancellation of the resource's processing (normal flow) -- abandon the page fetch
-            // without publishing an error. Besides OperationCanceledException from the request or retry
-            // backoff, cancellation aborts an in-progress body parse by disposing the response stream,
-            // which surfaces as an ObjectDisposedException/IOException from the reader.
-            _logger.Debug(ex, "{ResourceUrl}: Page fetch abandoned because processing of the resource was cancelled.",
-                message.ResourceUrl);
+            // The run is being cancelled, so the request in flight was interrupted on purpose and is not an error.
+            _logger.Debug(
+                ex,
+                "{MessageResourceUrl}: Cancellation requested while retrieving page of source items starting at offset {Offset}.",
+                message.ResourceUrl, offset);
 
-            return Array.Empty<TProcessDataMessage>();
+            return Enumerable.Empty<TProcessDataMessage>();
+        }
+        catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+        {
+            // The source API client can no longer authenticate, so nothing that follows can succeed. Faulting the
+            // block reports one authoritative failure instead of an per-page error for every resource still
+            // streaming, each of which would rediscover the same dead token.
+            throw;
         }
         catch (Exception ex)
         {

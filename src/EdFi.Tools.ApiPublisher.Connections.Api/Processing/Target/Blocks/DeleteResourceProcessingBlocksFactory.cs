@@ -96,7 +96,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         bool isRateLimitingEnabled = options.EnableRateLimit;
 
                         var retryPolicy = Policy
-                            .Handle<Exception>()
+                            .Handle<Exception>(EdFiApiAuthenticationException.IsNotRepresentedBy)
                             .OrResult<HttpResponseMessage>(r => r.StatusCode.IsPotentiallyTransientFailure())
                             .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
                             {
@@ -205,6 +205,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                         return Enumerable.Empty<DeleteItemMessage>();
                     }
+                    catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                    {
+                        // The API client already reported the authentication failure once. Repeating it for every message
+                        // still in flight would bury it, so this only needs to fault the block.
+                        _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", msg.ResourceUrl, id);
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         _logger.Error(ex, "{ResourceUrl} (source id: {Id}): An unhandled exception occurred in the GetItemForDeletion block: {Ex}", msg.ResourceUrl, id, ex);
@@ -264,7 +271,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     bool isRateLimitingEnabled = options.EnableRateLimit;
 
                     var retryPolicy = Policy
-                        .Handle<Exception>()
+                        .Handle<Exception>(EdFiApiAuthenticationException.IsNotRepresentedBy)
                         .OrResult<HttpResponseMessage>(r =>
                             r.StatusCode == HttpStatusCode.Conflict || r.StatusCode.IsPotentiallyTransientFailure())
                         .WaitAndRetryAsync(delay, (result, ts, retryAttempt, ctx) =>
@@ -344,6 +351,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         msg.ResourceUrl, sourceId);
 
                     return Enumerable.Empty<ErrorItemMessage>();
+                }
+                catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                {
+                    // The API client already reported the authentication failure once. Repeating it for every message
+                    // still in flight would bury it, so this only needs to fault the block.
+                    _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", msg.ResourceUrl, sourceId);
+                    throw;
                 }
                 catch (Exception ex)
                 {

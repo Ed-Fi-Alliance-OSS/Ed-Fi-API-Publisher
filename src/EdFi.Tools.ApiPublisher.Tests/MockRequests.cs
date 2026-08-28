@@ -305,6 +305,8 @@ namespace EdFi.Tools.ApiPublisher.Tests
 
         public static IFakeHttpRequestHandler OAuthToken(this IFakeHttpRequestHandler fakeRequestHandler)
         {
+            // A fresh response per token request: the client disposes each response it reads, and the token is
+            // requested more than once over a run
             A.CallTo(() => fakeRequestHandler.Post($"{fakeRequestHandler.BaseUrl}/oauth/token", A<HttpRequestMessage>.Ignored))
                 .ReturnsLazily(
                     () => FakeResponse.OK(
