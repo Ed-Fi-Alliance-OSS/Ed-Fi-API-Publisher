@@ -262,7 +262,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             IFakeHttpRequestHandler fakeTargetRequestHandler,
             INodeJSService nodeJsService = null,
             bool withReversePaging = false,
-            TimeProvider timeProvider = null)
+            TimeProvider timeProvider = null,
+            IErrorPublisher errorPublisher = null)
         {
             EdFiApiClient SourceApiClientFactory() =>
                 new EdFiApiClient(
@@ -288,7 +289,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             var resourceDependencyMetadataProvider = new EdFiApiGraphMLDependencyMetadataProvider(targetEdFiApiClientProvider);
             var resourceDependencyProvider = new ResourceDependencyProvider(resourceDependencyMetadataProvider);
             var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
-            var errorPublisher = A.Fake<IErrorPublisher>();
+            errorPublisher ??= A.Fake<IErrorPublisher>();
 
             nodeJsService ??= A.Fake<INodeJSService>();
 

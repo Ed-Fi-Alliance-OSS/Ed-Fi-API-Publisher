@@ -128,8 +128,56 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 
+            // A message can arrive without its item data: a deferred authorization-failure retry re-queues
+            // the same message object, whose Item reference was already released by the original invocation
+            if (postItemMessage.Item is null)
+            {
+                _logger.Error(
+                    "{ResourceUrl} (source id: {Id}): Source item data is no longer available for processing and the item cannot be published.",
+                    postItemMessage.ResourceUrl, postItemMessage.Id ?? "unknown");
+
+                return new[]
+                {
+                    new ErrorItemMessage
+                    {
+                        Method = HttpMethod.Post.ToString(),
+                        ResourceUrl = postItemMessage.ResourceUrl,
+                        Id = postItemMessage.Id,
+                    }
+                };
+            }
+
             var idToken = postItemMessage.Item["id"];
-            string id = idToken.Value<string>();
+            string id = idToken.SafeValue();
+
+            // A source item without a valid id cannot be published -- report it as a controlled error
+            // rather than letting the processing block fault (which would abandon the remaining items)
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                _logger.Error(
+                    "{ResourceUrl}: Source item has a missing or invalid 'id' property and will not be published.",
+                    postItemMessage.ResourceUrl);
+
+                // Unlike an ordinary POST failure, there is no target response to correlate the source
+                // payload against, so it is not retained in the error record (avoids logging potentially
+                // sensitive source data for a class of error that previously never reached this far).
+                var invalidIdError = new ErrorItemMessage
+                {
+                    Method = HttpMethod.Post.ToString(),
+                    ResourceUrl = postItemMessage.ResourceUrl,
+                    Id = idToken?.ToString(Newtonsoft.Json.Formatting.None),
+                    Body = null,
+                };
+
+                postItemMessage.Item = null;
+
+                return new[] { invalidIdError };
+            }
+
+            // Preserve the id independently of Item so it remains available for identifying this message
+            // even if Item is released before a deferred authorization-failure retry re-enters this method
+            // for the same message object (see the Item-is-null guard above).
+            postItemMessage.Id = id;
 
             try
             {
@@ -606,7 +654,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug("{ResourceUrl}: Adding individual action message of type '{NameofPostItemMessage}' for item '{ItemId}'...",
-                        message.ResourceUrl, nameof(PostItemMessage), item["id"]?.Value<string>() ?? "unknown");
+                        message.ResourceUrl, nameof(PostItemMessage), item["id"].SafeValue() ?? "unknown");
                 }
 
                 yield return itemMessage;
