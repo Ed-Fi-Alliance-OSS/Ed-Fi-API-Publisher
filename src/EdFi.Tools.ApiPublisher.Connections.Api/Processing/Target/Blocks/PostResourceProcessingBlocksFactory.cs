@@ -161,11 +161,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 // Unlike an ordinary POST failure, there is no target response to correlate the source
                 // payload against, so it is not retained in the error record (avoids logging potentially
                 // sensitive source data for a class of error that previously never reached this far).
+                // The same applies to the id itself: a scalar reaching this point can only be null, empty or
+                // whitespace, but an object or array could carry arbitrary nested source data, so only its
+                // token type is recorded -- never its contents.
                 var invalidIdError = new ErrorItemMessage
                 {
                     Method = HttpMethod.Post.ToString(),
                     ResourceUrl = postItemMessage.ResourceUrl,
-                    Id = idToken?.ToString(Newtonsoft.Json.Formatting.None),
+                    Id = idToken switch
+                    {
+                        null => null,
+                        JValue => idToken.ToString(Newtonsoft.Json.Formatting.None),
+                        _ => $"<invalid id: {idToken.Type}>",
+                    },
                     Body = null,
                 };
 

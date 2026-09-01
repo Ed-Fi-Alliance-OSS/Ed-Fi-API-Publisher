@@ -41,9 +41,13 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     {
         private const string ResourcePath = "/ed-fi/stateEducationAgencies";
 
+        // Stands in for nested source data that must never reach the error log by way of the invalid id
+        private const string SensitiveNestedValue = "123-45-6789";
+
         [TestCase("missing")]
         [TestCase("null")]
         [TestCase("object")]
+        [TestCase("array")]
         [TestCase("empty")]
         public async Task When_a_source_item_has_an_invalid_id_it_is_reported_as_an_error_and_the_remaining_items_are_still_published(
             string invalidIdVariant)
@@ -69,7 +73,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     invalidItem["id"] = JValue.CreateNull();
                     break;
                 case "object":
-                    invalidItem["id"] = new JObject();
+                    invalidItem["id"] = new JObject { ["ssn"] = SensitiveNestedValue };
+                    break;
+                case "array":
+                    invalidItem["id"] = new JArray(SensitiveNestedValue);
                     break;
                 case "empty":
                     invalidItem["id"] = string.Empty;
@@ -103,7 +110,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var changeProcessorConfiguration = TestHelpers.CreateChangeProcessorConfiguration(options);
 
+            var publishedErrors = new List<ErrorItemMessage>();
             var errorPublisher = A.Fake<IErrorPublisher>();
+
+            A.CallTo(() => errorPublisher.PublishErrorsAsync(A<ErrorItemMessage[]>.Ignored))
+                .Invokes((ErrorItemMessage[] errors) => publishedErrors.AddRange(errors))
+                .Returns(Task.CompletedTask);
 
             var changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
                 options,
@@ -128,14 +140,24 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // The invalid item must be counted in the run's error set, but its (potentially sensitive)
                 // source payload must not be retained -- unlike an ordinary POST failure, there is no target
                 // response to correlate it against, so the diagnostic value doesn't justify logging it in full
-                A.CallTo(
-                        () => errorPublisher.PublishErrorsAsync(
-                            A<ErrorItemMessage[]>.That.Matches(
-                                errors => errors.Length == 1
-                                    && errors[0].Method == HttpMethod.Post.ToString()
-                                    && errors[0].ResourceUrl == ResourcePath
-                                    && errors[0].Body == null)))
-                    .MustHaveHappenedOnceExactly();
+                var error = publishedErrors.ShouldHaveSingleItem();
+                error.Method.ShouldBe(HttpMethod.Post.ToString());
+                error.ResourceUrl.ShouldBe(ResourcePath);
+                error.Body.ShouldBeNull();
+
+                // The recorded id is a diagnostic only. A non-scalar id (object/array) could carry arbitrary
+                // nested source data, so only its token type may be recorded -- never its contents.
+                (error.Id ?? string.Empty).ShouldNotContain(SensitiveNestedValue);
+
+                switch (invalidIdVariant)
+                {
+                    case "object":
+                        error.Id.ShouldBe("<invalid id: Object>");
+                        break;
+                    case "array":
+                        error.Id.ShouldBe("<invalid id: Array>");
+                        break;
+                }
 
                 // A controlled error message must be logged for the operator
                 var errorMessages = TestCorrelator.GetLogEventsFromCurrentContext()
