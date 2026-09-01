@@ -244,15 +244,19 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
             return transformedMessages;
         }
-        catch (OperationCanceledException ex) when (message.CancellationSource.IsCancellationRequested)
+        catch (Exception ex) when (message.CancellationSource.IsCancellationRequested)
         {
-            // The run is being cancelled, so the request in flight was interrupted on purpose and is not an error.
+            // Graceful cancellation of the resource's processing (normal flow) -- abandon the page fetch
+            // without publishing an error. Besides OperationCanceledException from the request or retry
+            // backoff, cancellation aborts an in-progress body parse by disposing the response stream,
+            // which surfaces as an ObjectDisposedException/IOException from the reader (or an
+            // ArgumentException from StreamReader when the token was already cancelled at registration).
             _logger.Debug(
                 ex,
                 "{MessageResourceUrl}: Cancellation requested while retrieving page of source items starting at offset {Offset}.",
                 message.ResourceUrl, offset);
 
-            return Enumerable.Empty<TProcessDataMessage>();
+            return Array.Empty<TProcessDataMessage>();
         }
         catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
         {
