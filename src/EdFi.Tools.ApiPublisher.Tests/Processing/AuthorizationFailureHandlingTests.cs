@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using NUnit.Framework;
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,8 +38,13 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
-            A.CallTo(() => fakeTargetRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
-                .Returns(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK));
+            // Accept every resource POST. The match is limited to the data management path so that this later
+            // rule does not shadow the baseline handler's /oauth/token response, which the target client must
+            // obtain before publishing can start.
+            A.CallTo(() => fakeTargetRequestHandler.Post(
+                    A<string>.That.Matches(url => url.Contains(MockRequests.DataManagementPath)),
+                    A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => new HttpResponseMessage(HttpStatusCode.OK));
 
             var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails();
 
