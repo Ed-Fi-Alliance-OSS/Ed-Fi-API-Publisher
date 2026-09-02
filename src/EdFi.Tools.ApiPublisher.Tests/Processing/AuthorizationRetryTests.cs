@@ -9,7 +9,9 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using NUnit.Framework;
+using Shouldly;
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -88,6 +90,18 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var errorPublisher = A.Fake<IErrorPublisher>();
 
+            // Capture every published error so a failure names the offending resource instead of just "found it once"
+            var publishedErrors = new ConcurrentQueue<ErrorItemMessage>();
+
+            A.CallTo(() => errorPublisher.PublishErrorsAsync(A<ErrorItemMessage[]>.Ignored))
+                .Invokes((ErrorItemMessage[] messages) =>
+                {
+                    foreach (var errorItemMessage in messages)
+                    {
+                        publishedErrors.Enqueue(errorItemMessage);
+                    }
+                });
+
             var changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
                 options,
                 sourceApiConnectionDetails,
@@ -118,9 +132,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         A<HttpRequestMessage>.Ignored))
                 .MustHaveHappened(TotalItems, Times.Exactly);
 
-            // The deferred Forbidden responses must not have produced any published errors
-            A.CallTo(() => errorPublisher.PublishErrorsAsync(A<ErrorItemMessage[]>.That.Matches(messages => messages.Length > 0)))
-                .MustNotHaveHappened();
+            // The deferred Forbidden responses must not have produced any published errors for the resources under
+            // test (the retry semantics being proven)...
+            publishedErrors
+                .Where(e => e.ResourceUrl.EndsWith(Students) || e.ResourceUrl.EndsWith(StudentSchoolAssociations))
+                .Select(DescribeError)
+                .ShouldBeEmpty();
+
+            // ...and the full-catalog run completed with no errors at all (self-describing, so an unrelated failure
+            // elsewhere in the dependency graph is reported by resource rather than mistaken for a retry defect)
+            publishedErrors.Select(DescribeError).ShouldBeEmpty();
         }
+
+        private static string DescribeError(ErrorItemMessage error)
+            => $"{error.Method} {error.ResourceUrl} -> {error.ResponseStatus?.ToString() ?? error.Exception?.GetType().Name ?? "(no status)"}";
     }
 }

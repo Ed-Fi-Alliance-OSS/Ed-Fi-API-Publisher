@@ -49,6 +49,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
         string changeWindowQueryStringParameters = ApiRequestHelper.GetChangeWindowQueryStringParameters(message.ChangeWindow);
 
+        // Deadline for reading a response body (one per response, see below); declared here so the catch filters
+        // can tell a timed-out read apart from the resource's own cancellation
+        CancellationTokenSource bodyReadDeadline = null;
+
         try
         {
             var transformedMessages = new List<TProcessDataMessage>();
@@ -117,6 +121,13 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             new Context(),
                             message.CancellationSource.Token);
 
+                    // With ResponseHeadersRead (see APIPUB-134) HttpClient.Timeout covers only the wait for the headers,
+                    // so the body read gets its own deadline of the same length -- restoring the bound that applied to
+                    // the whole response before streaming. Linked to the resource's token so cancellation still wins.
+                    bodyReadDeadline?.Dispose();
+                    bodyReadDeadline = CancellationTokenSource.CreateLinkedTokenSource(message.CancellationSource.Token);
+                    bodyReadDeadline.CancelAfter(edFiApiClient.HttpClient.Timeout);
+
                     // Detect null content and provide a better error message (which happens only during unit testing if mocked requests aren't properly defined)
                     if (apiResponse.Content == null)
                     {
@@ -128,7 +139,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     if (!apiResponse.IsSuccessStatusCode)
                     {
                         // Error bodies are small, so buffering them as a string is deliberate (see APIPUB-134)
-                        string errorContent = await apiResponse.Content.ReadAsStringAsync(message.CancellationSource.Token).ConfigureAwait(false);
+                        string errorContent = await apiResponse.Content.ReadAsStringAsync(bodyReadDeadline.Token).ConfigureAwait(false);
 
                         var error = new ErrorItemMessage
                         {
@@ -163,12 +174,13 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
                     try
                     {
-                        await using var responseStream = await apiResponse.Content.ReadAsStreamAsync(message.CancellationSource.Token).ConfigureAwait(false);
+                        await using var responseStream = await apiResponse.Content.ReadAsStreamAsync(bodyReadDeadline.Token).ConfigureAwait(false);
 
-                        // The parse below reads the stream synchronously, so a blocked read on a slow body
-                        // would not observe cancellation on its own -- registering disposal aborts the read
-                        // (the resulting exception is swallowed by the cancellation-aware catches below)
-                        using var abortRegistration = message.CancellationSource.Token.Register(() => responseStream.Dispose());
+                        // The parse below reads the stream synchronously, so a blocked read on a slow body would
+                        // observe neither cancellation nor the deadline on its own -- registering disposal aborts
+                        // the read (the resulting ObjectDisposedException/IOException is classified by the
+                        // timeout-aware and cancellation-aware catches below)
+                        using var abortRegistration = bodyReadDeadline.Token.Register(() => responseStream.Dispose());
 
                         // JSON is UTF-8 per RFC 8259 (and the Ed-Fi ODS API always emits UTF-8); StreamReader's
                         // default UTF-8-with-BOM-detection deliberately replaces ReadAsStringAsync's charset negotiation
@@ -179,10 +191,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         pageMessages.AddRange(
                             message.CreateProcessDataMessages(message, streamReader, count => topLevelItemCount = count));
                     }
-                    catch (JsonReaderException ex) when (!message.CancellationSource.IsCancellationRequested)
+                    catch (JsonReaderException ex) when (!bodyReadDeadline.IsCancellationRequested)
                     {
-                        // An error occurred while parsing the JSON (a parse failure caused by cancellation
-                        // aborting the response stream falls through to the graceful catch below instead)
+                        // An error occurred while parsing the JSON (a parse failure caused by cancellation or the
+                        // body-read deadline aborting the response stream falls through to the catches below instead)
                         var error = new ErrorItemMessage
                         {
                             Method = HttpMethod.Get.ToString(),
@@ -244,6 +256,28 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
             return transformedMessages;
         }
+        catch (Exception ex) when (bodyReadDeadline?.IsCancellationRequested == true && !message.CancellationSource.IsCancellationRequested)
+        {
+            // The body-read deadline expired: the source stopped sending mid-body. As before streaming, a response
+            // that does not arrive within HttpClient.Timeout is a page failure -- published, not retried.
+            var timeoutException = new TimeoutException(
+                $"Reading the response body for page items {offset} to {offset + limit - 1} did not complete within the HTTP client timeout of {edFiApiClient.HttpClient.Timeout.TotalSeconds:N0} seconds.",
+                ex);
+
+            _logger.Error(ex, "{ResourceUrl}: {TimeoutMessage}", message.ResourceUrl, timeoutException.Message);
+
+            var error = new ErrorItemMessage
+            {
+                Method = HttpMethod.Get.ToString(),
+                ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
+                Exception = timeoutException,
+            };
+
+            // Publish the failure
+            await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
+
+            return Array.Empty<TProcessDataMessage>();
+        }
         catch (Exception ex) when (message.CancellationSource.IsCancellationRequested)
         {
             // Graceful cancellation of the resource's processing (normal flow) -- abandon the page fetch
@@ -281,6 +315,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
             return Array.Empty<TProcessDataMessage>();
+        }
+        finally
+        {
+            bodyReadDeadline?.Dispose();
         }
     }
 }

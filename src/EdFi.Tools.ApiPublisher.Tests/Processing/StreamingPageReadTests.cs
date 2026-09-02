@@ -66,17 +66,26 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         private static (EdFiApiStreamResourcePageMessageHandler handler, IFakeHttpRequestHandler fakeRequestHandler)
-            CreateHandler()
+            CreateHandler(TimeSpan? httpClientTimeout = null, string profileName = null)
         {
             var fakeRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
 
-            EdFiApiClient SourceApiClientFactory() =>
-                new EdFiApiClient(
+            EdFiApiClient SourceApiClientFactory()
+            {
+                var client = new EdFiApiClient(
                     "TestSource",
-                    TestHelpers.GetSourceApiConnectionDetails(),
+                    TestHelpers.GetSourceApiConnectionDetails(profileName: profileName),
                     bearerTokenRefreshMinutes: 27,
                     ignoreSslErrors: true,
                     httpClientHandler: new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+                if (httpClientTimeout.HasValue)
+                {
+                    client.HttpClient.Timeout = httpClientTimeout.Value;
+                }
+
+                return client;
+            }
 
             var sourceClientProvider = A.Fake<ISourceEdFiApiClientProvider>();
             A.CallTo(() => sourceClientProvider.GetApiClient()).Returns(SourceApiClientFactory());
@@ -89,11 +98,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             string resourceLocalPath,
             Func<HttpResponseMessage> createResponse)
         {
+            SetupPageGet(fakeRequestHandler, resourceLocalPath, _ => createResponse());
+        }
+
+        private static void SetupPageGet(
+            IFakeHttpRequestHandler fakeRequestHandler,
+            string resourceLocalPath,
+            Func<HttpRequestMessage, HttpResponseMessage> createResponse)
+        {
             A.CallTo(
                     () => fakeRequestHandler.Get(
                         A<string>.Ignored,
                         A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath == resourceLocalPath)))
-                .ReturnsLazily(createResponse);
+                .ReturnsLazily((string _, HttpRequestMessage request) => createResponse(request));
         }
 
         private static StreamResourcePageMessage<PostItemMessage> CreatePageMessage(int limit, bool isFinalPage)
@@ -107,6 +124,85 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 CancellationSource = new CancellationTokenSource(),
                 CreateProcessDataMessages = CreatePostFactory().CreateProcessDataMessages,
             };
+        }
+
+        private static StreamResourcePageMessage<GetItemForDeletionMessage> CreateDeletesPageMessage(int limit, bool isFinalPage)
+        {
+            var deleteFactory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+
+            return new StreamResourcePageMessage<GetItemForDeletionMessage>
+            {
+                ResourceUrl = "/ed-fi/students/deletes",
+                Offset = 0,
+                Limit = limit,
+                IsFinalPage = isFinalPage,
+                CancellationSource = new CancellationTokenSource(),
+                CreateProcessDataMessages = deleteFactory.CreateProcessDataMessages,
+            };
+        }
+
+        private static (StallingStream stream, SemaphoreSlim readStalled) SetupStalledPageGet(IFakeHttpRequestHandler fakeRequestHandler)
+        {
+            // The body starts with one complete item, then stalls forever -- only an external abort can end the read
+            var readStalled = new SemaphoreSlim(0);
+            var stallingStream = new StallingStream(Encoding.UTF8.GetBytes(@"[{""id"":""1""},"), readStalled);
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                () =>
+                {
+                    var content = new StreamContent(stallingStream);
+                    content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+                });
+
+            return (stallingStream, readStalled);
+        }
+
+        [Test]
+        public async Task Page_body_should_be_streamed_when_a_profile_is_applied()
+        {
+            TestHelpers.InitializeLogging();
+
+            // The Profile branch of SendGetRequestAsync builds an explicit request (SendAsync) rather than using
+            // GetAsync, so it needs its own proof that headers-read streaming is in effect
+            const string ProfileName = "Unit-Test-Source-Profile";
+
+            var (handler, fakeRequestHandler) = CreateHandler(profileName: ProfileName);
+
+            var content = new InstrumentedJsonContent(@"[{""id"":""1""},{""id"":""2""},{""id"":""3""}]");
+            HttpRequestMessage capturedRequest = null;
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                request =>
+                {
+                    capturedRequest = request;
+
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+                });
+
+            var message = CreatePageMessage(limit: 50, isFinalPage: false);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
+                .ToArray();
+
+            itemMessages.Length.ShouldBe(3);
+            errorBlock.Count.ShouldBe(0);
+
+            // The request actually took the Profile branch
+            capturedRequest.ShouldNotBeNull();
+            capturedRequest.Headers.Accept.ToString().ShouldBe($"application/vnd.ed-fi.student.{ProfileName.ToLower()}.readable+json");
+
+            // ...and was still streamed: no whole-body buffering, exactly one forward-only stream, all disposed
+            content.BufferingAttempted.ShouldBeFalse();
+            content.StreamsCreated.ShouldBe(1);
+            content.LastStream.Disposed.ShouldBeTrue();
+            content.ContentDisposed.ShouldBeTrue();
         }
 
         [Test]
@@ -181,6 +277,76 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             pageRequestCount.ShouldBe(2);
             itemMessages.Length.ShouldBe(3);
             itemMessages.Select(m => m.Item["id"]!.Value<string>()).ShouldBe(new[] { "1", "2", "3" });
+        }
+
+        [Test]
+        public async Task Final_page_should_not_continue_when_the_page_is_short()
+        {
+            TestHelpers.InitializeLogging();
+
+            var (handler, fakeRequestHandler) = CreateHandler();
+
+            int pageRequestCount = 0;
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                () =>
+                {
+                    pageRequestCount++;
+
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new InstrumentedJsonContent(@"[{""id"":""1""},{""id"":""2""},{""id"":""3""}]")
+                    };
+                });
+
+            // Final page comes back short (3 items < limit), so there is nothing more to fetch
+            var message = CreatePageMessage(limit: 50, isFinalPage: true);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
+                .ToArray();
+
+            pageRequestCount.ShouldBe(1);
+            itemMessages.Length.ShouldBe(3);
+            errorBlock.Count.ShouldBe(0);
+        }
+
+        [Test]
+        public async Task Final_page_should_not_continue_when_the_item_count_is_not_reported()
+        {
+            TestHelpers.InitializeLogging();
+
+            var (handler, fakeRequestHandler) = CreateHandler();
+
+            int pageRequestCount = 0;
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students/deletes",
+                () =>
+                {
+                    pageRequestCount++;
+
+                    // A full page (2 elements == limit) whose items lack the key values the delete factory
+                    // requires: the factory cancels the resource and stops early WITHOUT reporting a count
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new InstrumentedJsonContent(@"[{""id"":""a1""},{""id"":""a2""}]")
+                    };
+                });
+
+            var message = CreateDeletesPageMessage(limit: 2, isFinalPage: true);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock);
+
+            // "No count reported" must mean "no continuation" -- even though the page was full
+            pageRequestCount.ShouldBe(1);
+            itemMessages.ShouldBeEmpty();
+            message.CancellationSource.IsCancellationRequested.ShouldBeTrue();
+            errorBlock.Count.ShouldBe(0);
         }
 
         [Test]
@@ -389,20 +555,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var (handler, fakeRequestHandler) = CreateHandler();
 
-            // The body starts with one complete item, then stalls forever -- only cancellation can end the read
-            var readStalled = new SemaphoreSlim(0);
-            var stallingStream = new StallingStream(Encoding.UTF8.GetBytes(@"[{""id"":""1""},"), readStalled);
-
-            SetupPageGet(
-                fakeRequestHandler,
-                "/data/v3/ed-fi/students",
-                () =>
-                {
-                    var content = new StreamContent(stallingStream);
-                    content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-
-                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
-                });
+            var (_, readStalled) = SetupStalledPageGet(fakeRequestHandler);
 
             var message = CreatePageMessage(limit: 50, isFinalPage: false);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
@@ -420,6 +573,63 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             (await handlerTask).ShouldBeEmpty();
             errorBlock.Count.ShouldBe(0);
+        }
+
+        [Test]
+        public async Task Stalled_body_read_should_time_out_at_the_http_client_timeout_and_publish_an_error()
+        {
+            TestHelpers.InitializeLogging();
+
+            // With ResponseHeadersRead, HttpClient.Timeout no longer covers the body, so the handler must bound
+            // the body read itself using the same timeout (restoring the pre-streaming behavior, where the
+            // whole response had to arrive within HttpClient.Timeout)
+            var (handler, fakeRequestHandler) = CreateHandler(httpClientTimeout: TimeSpan.FromMilliseconds(500));
+
+            var (stallingStream, readStalled) = SetupStalledPageGet(fakeRequestHandler);
+
+            var message = CreatePageMessage(limit: 50, isFinalPage: false);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            var handlerTask = Task.Run(() => handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock));
+
+            (await readStalled.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
+
+            // Nobody cancels: the deadline alone must end the read (well inside the stream's own 30s guard)
+            (await Task.WhenAny(handlerTask, Task.Delay(TimeSpan.FromSeconds(15)))).ShouldBe(handlerTask);
+
+            (await handlerTask).ShouldBeEmpty();
+
+            // The timeout is a page failure (not a graceful cancellation): published, with a clear cause
+            message.CancellationSource.IsCancellationRequested.ShouldBeFalse();
+            errorBlock.TryReceive(out var error).ShouldBeTrue();
+            error.Exception.ShouldBeOfType<TimeoutException>();
+            error.ResourceUrl.ShouldEndWith("/ed-fi/students");
+            errorBlock.Count.ShouldBe(0);
+        }
+
+        [Test]
+        public async Task Short_http_client_timeout_should_not_affect_a_body_that_arrives_promptly()
+        {
+            TestHelpers.InitializeLogging();
+
+            var (handler, fakeRequestHandler) = CreateHandler(httpClientTimeout: TimeSpan.FromMilliseconds(500));
+
+            var content = new InstrumentedJsonContent(@"[{""id"":""1""},{""id"":""2""},{""id"":""3""}]");
+
+            SetupPageGet(
+                fakeRequestHandler,
+                "/data/v3/ed-fi/students",
+                () => new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+
+            var message = CreatePageMessage(limit: 50, isFinalPage: false);
+            var errorBlock = new BufferBlock<ErrorItemMessage>();
+
+            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
+                .ToArray();
+
+            itemMessages.Length.ShouldBe(3);
+            errorBlock.Count.ShouldBe(0);
+            content.ContentDisposed.ShouldBeTrue();
         }
 
         [Test]

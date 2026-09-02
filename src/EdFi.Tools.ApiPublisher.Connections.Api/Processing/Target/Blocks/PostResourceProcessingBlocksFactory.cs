@@ -41,6 +41,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly ISourceResourceItemProvider _sourceResourceItemProvider;
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
+        // Dependency resources for which a deferred (Forbidden) dependency post has already been reported at Warning level
+        private readonly ConcurrentDictionary<string, byte> _dependencyDeferralWarnedByResourceUrl = new();
+
         public PostResourceProcessingBlocksFactory(
             INodeJSService nodeJsService,
             ITargetEdFiApiClientProvider targetEdFiApiClientProvider,
@@ -135,7 +138,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             EdFiApiClient targetEdFiApiClient,
             ConcurrentDictionary<(string resourceUrl, HttpStatusCode statusCode), byte> knownUnremediatedRequests,
             Dictionary<string, string> missingDependencyByResourcePath,
-            IReadOnlySet<string> authorizationRetryPipelineResourcePaths)
+            IReadOnlySet<string> authorizationRetryPipelineResourcePaths,
+            bool isDependencyPost = false)
         {
             if (ignoredResourceByUrl.ContainsKey(postItemMessage.ResourceUrl))
             {
@@ -326,7 +330,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 targetEdFiApiClient,
                                 knownUnremediatedRequests,
                                 missingDependencyByResourcePath,
-                                authorizationRetryPipelineResourcePaths);
+                                authorizationRetryPipelineResourcePaths,
+                                isDependencyPost: true);
                         }
                     }
 
@@ -360,7 +365,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     if (apiResponse.StatusCode == HttpStatusCode.Forbidden
                         && postItemMessage.HasAuthorizationRetryPipeline)
                     {
-                        if (_logger.IsEnabled(LogEventLevel.Debug))
+                        if (isDependencyPost && _dependencyDeferralWarnedByResourceUrl.TryAdd(postItemMessage.ResourceUrl, 0))
+                        {
+                            // An item fetched by id to resolve a missing reference is not necessarily inside the change
+                            // window that the retry pass re-streams (unlike a main-pass item, which always is), so the
+                            // first such deferral per resource is surfaced at Warning level rather than Debug
+                            _logger.Warning("{ResourceUrl} (source id: {Id}): Authorization failed on POST of an item retrieved to resolve a missing reference -- the item will be re-published by the authorization retry pass after pertinent associations are processed, provided it lies within the current change window. If the reference remains unresolved, the failure of the item that references it will be reported. (Reported once per resource.)",
+                                postItemMessage.ResourceUrl, id);
+                        }
+                        else if (_logger.IsEnabled(LogEventLevel.Debug))
                         {
                             _logger.Debug("{ResourceUrl} (source id: {Id}): Authorization failed -- the item will be re-published by the authorization retry pass after pertinent associations are processed.",
                                 postItemMessage.ResourceUrl, id);
