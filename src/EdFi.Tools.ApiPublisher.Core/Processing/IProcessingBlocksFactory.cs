@@ -35,8 +35,10 @@ public interface IProcessingBlocksFactory<TProcessDataMessage>
     /// The reader is only valid while the returned enumerable is being enumerated.</param>
     /// <param name="reportTopLevelItemCount">Optional callback invoked exactly once with the count of top-level array
     /// elements in the page (which can exceed the number of messages produced, since implementations may skip
-    /// elements) when enumeration completes normally. Not invoked if enumeration stops early (implementations
-    /// only stop early alongside cancellation). Implementations must tolerate null.</param>
+    /// elements) when enumeration completes normally. Implementations MUST NOT invoke it if enumeration stops early,
+    /// and MUST only stop early after cancelling the message's <c>CancellationSource</c>: the page handler treats
+    /// "no count reported" as "do not continue paging", which is only safe because a stopped-early page always
+    /// coincides with the resource being cancelled. Implementations must tolerate null.</param>
     /// <returns>An enumerable of 0 or more messages representing the data to be processed.</returns>
     IEnumerable<TProcessDataMessage> CreateProcessDataMessages(
         StreamResourcePageMessage<TProcessDataMessage> message,

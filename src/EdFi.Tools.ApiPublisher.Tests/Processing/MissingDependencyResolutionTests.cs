@@ -124,32 +124,95 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .Where(m => m.Contains(Students) && m.Contains("re-published by the authorization retry pass"))
                 .ToList();
 
+            var studentDeferralWarnings = logEvents
+                .Where(e => e.Level == LogEventLevel.Warning)
+                .Select(e => e.RenderMessage())
+                .Where(m => m.Contains(Students) && m.Contains("re-published by the authorization retry pass"))
+                .ToList();
+
             if (dependencyHasRetryPipeline)
             {
-                // Deferred to the students "#Retry" pass -- nothing to report as an error
+                // Deferred to the students "#Retry" pass -- nothing to report as an error...
                 studentForbiddenErrors.ShouldBeEmpty();
                 studentDeferrals.ShouldHaveSingleItem();
+
+                // ...but unlike a main-pass deferral, an item fetched by id to satisfy a reference is not guaranteed
+                // to be inside the change window the retry pass re-streams, so the deferral is surfaced as a Warning
+                studentDeferralWarnings.ShouldHaveSingleItem();
+                studentDeferralWarnings[0].ShouldContain("change window");
             }
             else
             {
                 // No retry pass will ever re-publish the student, so the failure must not be silently discarded
                 studentForbiddenErrors.ShouldHaveSingleItem();
                 studentDeferrals.ShouldBeEmpty();
+                studentDeferralWarnings.ShouldBeEmpty();
             }
         }
 
-        private static IFakeHttpRequestHandler CreateTargetHandlerWithUnresolvedStudentReference(HttpStatusCode studentPostStatus)
+        [Test]
+        public async Task Deferral_warning_for_a_dependency_post_should_be_reported_once_per_dependency_resource()
+        {
+            TestHelpers.InitializeLogging();
+
+            var fakeTargetRequestHandler = CreateTargetHandlerWithUnresolvedStudentReference(
+                studentPostStatus: HttpStatusCode.Forbidden,
+                unresolvedReferenceResponses: 2);
+
+            // Two associations referencing missing students; both dependency posts are Forbidden and deferred
+            var messages = new[]
+            {
+                CreateStudentSchoolAssociationMessage(CancellationToken.None, hasAuthorizationRetryPipeline: false),
+                CreateStudentSchoolAssociationMessage(CancellationToken.None, hasAuthorizationRetryPipeline: false),
+            };
+
+            var retryPipelineResourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { Students };
+
+            IReadOnlyList<LogEvent> logEvents;
+
+            using (TestCorrelator.CreateContext())
+            {
+                await ProcessAsync(messages, fakeTargetRequestHandler, CreateProviderReturningMissingStudent(), retryPipelineResourcePaths);
+
+                logEvents = TestCorrelator.GetLogEventsFromCurrentContext().ToList();
+            }
+
+            A.CallTo(() => fakeTargetRequestHandler.Post(A<string>.That.EndsWith(Students), A<HttpRequestMessage>.Ignored))
+                .MustHaveHappenedTwiceExactly();
+
+            var renderedByLevel = logEvents
+                .Select(e => (e.Level, Message: e.RenderMessage()))
+                .Where(e => e.Message.Contains(Students) && e.Message.Contains("re-published by the authorization retry pass"))
+                .ToList();
+
+            // Both deferrals are logged, but only the first one at Warning level -- the rest stay at Debug so a
+            // large batch of associations referencing deferred students does not flood the log
+            renderedByLevel.Count.ShouldBe(2);
+            renderedByLevel.Count(e => e.Level == LogEventLevel.Warning).ShouldBe(1);
+            renderedByLevel.Count(e => e.Level == LogEventLevel.Debug).ShouldBe(1);
+        }
+
+        private static IFakeHttpRequestHandler CreateTargetHandlerWithUnresolvedStudentReference(
+            HttpStatusCode studentPostStatus,
+            int unresolvedReferenceResponses = 1)
         {
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
-            // First POST of the association reports the unresolved student reference; the retry (after the
-            // dependency has been posted) succeeds
+            // The first POST(s) of the association report the unresolved student reference; subsequent POSTs (the
+            // retries after the dependency has been posted) succeed
+            var unresolvedReference = (HttpStatusCode.BadRequest, JObject.Parse("{ \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tStudent reference could not be resolved.\\n\" }"));
+
             fakeTargetRequestHandler.PostResource(
                 $"{EdFiApiConstants.DataManagementApiSegment}{StudentSchoolAssociations}",
-                (HttpStatusCode.BadRequest, JObject.Parse("{ \"message\": \"Validation of 'StudentSchoolAssociation' failed.\\r\\n\\tStudent reference could not be resolved.\\n\" }")),
-                (HttpStatusCode.OK, null));
+                Enumerable.Repeat(unresolvedReference, unresolvedReferenceResponses)
+                    .Append((HttpStatusCode.OK, (JObject)null))
+                    .ToArray());
 
-            fakeTargetRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}{Students}", studentPostStatus);
+            // Every dependency post of the student gets the same status (a single registered response would only
+            // be served once, after which the fake falls back to its default)
+            fakeTargetRequestHandler.PostResource(
+                $"{EdFiApiConstants.DataManagementApiSegment}{Students}",
+                Enumerable.Repeat(studentPostStatus, 2).ToArray());
 
             return fakeTargetRequestHandler;
         }
@@ -188,8 +251,17 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             };
         }
 
-        private static async Task<IReadOnlyCollection<ErrorItemMessage>> ProcessAsync(
+        private static Task<IReadOnlyCollection<ErrorItemMessage>> ProcessAsync(
             PostItemMessage message,
+            IFakeHttpRequestHandler fakeTargetRequestHandler,
+            ISourceResourceItemProvider sourceResourceItemProvider,
+            IReadOnlySet<string> authorizationRetryPipelineResourcePaths)
+        {
+            return ProcessAsync(new[] { message }, fakeTargetRequestHandler, sourceResourceItemProvider, authorizationRetryPipelineResourcePaths);
+        }
+
+        private static async Task<IReadOnlyCollection<ErrorItemMessage>> ProcessAsync(
+            IReadOnlyCollection<PostItemMessage> messages,
             IFakeHttpRequestHandler fakeTargetRequestHandler,
             ISourceResourceItemProvider sourceResourceItemProvider,
             IReadOnlySet<string> authorizationRetryPipelineResourcePaths)
@@ -239,7 +311,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var errorSink = new ActionBlock<ErrorItemMessage>(errors.Enqueue);
             outputBlock.LinkTo(errorSink, new DataflowLinkOptions { PropagateCompletion = true });
 
-            (await inputBlock.SendAsync(message)).ShouldBeTrue();
+            foreach (var message in messages)
+            {
+                (await inputBlock.SendAsync(message)).ShouldBeTrue();
+            }
+
             inputBlock.Complete();
 
             await errorSink.Completion.WaitAsync(TimeSpan.FromSeconds(30));

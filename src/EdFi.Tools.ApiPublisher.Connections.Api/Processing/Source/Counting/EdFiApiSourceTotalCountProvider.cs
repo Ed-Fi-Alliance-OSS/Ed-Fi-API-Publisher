@@ -198,7 +198,12 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         CancellationToken cancellationToken
     )
     {
-        string responseContent = await apiResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        // With ResponseHeadersRead (see APIPUB-134) HttpClient.Timeout covers only the wait for the headers, so the
+        // (small) error body read gets its own deadline of the same length rather than waiting indefinitely
+        using var bodyReadDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bodyReadDeadline.CancelAfter(_sourceEdFiApiClientProvider.GetApiClient().HttpClient.Timeout);
+
+        string responseContent = await apiResponse.Content.ReadAsStringAsync(bodyReadDeadline.Token).ConfigureAwait(false);
         string message = string.Empty;
 
         // Was this an authorization failure?

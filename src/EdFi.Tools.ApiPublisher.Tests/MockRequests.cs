@@ -121,18 +121,13 @@ namespace EdFi.Tools.ApiPublisher.Tests
             string url,
             params HttpStatusCode[] responseCodes)
         {
-            var mocker = A.CallTo(
+            ConfigureResponseSequence(
+                A.CallTo(
                     () => fakeRequestHandler.Post(
                         A<string>.Ignored,
                         A<HttpRequestMessage>.That.Matches(
-                            msg => (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)))))
-                .Returns(CreateMessageWithAppropriateBody(responseCodes.First()))
-                .Once();
-
-            foreach (var httpStatusCode in responseCodes.Skip(1))
-            {
-                mocker.Then.Returns(CreateMessageWithAppropriateBody(httpStatusCode));
-            }
+                            msg => (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url))))),
+                responseCodes.Select(CreateMessageWithAppropriateBody).ToArray());
 
             return fakeRequestHandler;
 
@@ -156,18 +151,13 @@ namespace EdFi.Tools.ApiPublisher.Tests
 
         public static IFakeHttpRequestHandler PostResource(this IFakeHttpRequestHandler fakeRequestHandler, string url, params (HttpStatusCode, JObject)[] responses)
         {
-            var mocker = A.CallTo(
+            ConfigureResponseSequence(
+                A.CallTo(
                     () => fakeRequestHandler.Post(
                         A<string>.Ignored,
                         A<HttpRequestMessage>.That.Matches(
-                            msg => (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url)))))
-                .Returns(CreateMessageWithAppropriateBody(responses.First()))
-                .Once();
-
-            foreach (var httpStatusCode in responses.Skip(1))
-            {
-                mocker.Then.Returns(CreateMessageWithAppropriateBody(httpStatusCode));
-            }
+                            msg => (msg.RequestUri.LocalPath == url || Regex.IsMatch(msg.RequestUri.LocalPath, url))))),
+                responses.Select(CreateMessageWithAppropriateBody).ToArray());
 
             return fakeRequestHandler;
 
@@ -188,6 +178,30 @@ namespace EdFi.Tools.ApiPublisher.Tests
                         Encoding.UTF8,
                         "application/json")
                 };
+            }
+        }
+
+        /// <summary>
+        /// Configures the call to return the supplied responses in order: every response but the last is served
+        /// exactly once and the last one is served for all remaining calls (a single response is served once, after
+        /// which the call falls through to any other matching configuration -- the historical behavior). Each
+        /// <c>Then</c> must chain from the PREVIOUS step: chaining every step from the first one instead makes the
+        /// last response shadow the intermediate ones, which are then never served.
+        /// </summary>
+        private static void ConfigureResponseSequence(
+            IReturnValueArgumentValidationConfiguration<HttpResponseMessage> callConfiguration,
+            HttpResponseMessage[] responses)
+        {
+            var thenConfiguration = callConfiguration.Returns(responses[0]).Once();
+
+            for (int i = 1; i < responses.Length; i++)
+            {
+                var returnsConfiguration = thenConfiguration.Then.Returns(responses[i]);
+
+                if (i < responses.Length - 1)
+                {
+                    thenConfiguration = returnsConfiguration.Once();
+                }
             }
         }
 
