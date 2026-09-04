@@ -11,6 +11,7 @@ using Serilog;
 using Serilog.Events;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,11 +31,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         }
 
         public TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>> CreateBlock<TProcessDataMessage>(
-            Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
+            Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             Options options,
             CancellationToken cancellationToken)
         {
+            // NOTE: This block is deliberately left unbounded (see APIPUB-112). It receives exactly one
+            // StreamResourceMessage per resource and its output holds only lightweight offset/limit page
+            // messages, while its delegate performs the dependency waits and processing-semaphore acquisition
+            // below -- bounding it would risk interfering with that coordination for no memory benefit.
             return new TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>>(
                 async msg =>
                 {
@@ -82,7 +87,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             StreamResourceMessage message,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             Options options,
-            Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
+            Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
             CancellationToken cancellationToken)
         {
             // ==============================================================

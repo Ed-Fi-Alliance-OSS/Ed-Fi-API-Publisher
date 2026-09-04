@@ -3,7 +3,6 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -19,8 +18,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public string[] DependencyPaths { get; set; }
         public bool ShouldSkip { get; set; }
 
-        // Source Ed-Fi ODS API processing context (resource-specific) 
-        public Action<object> PostAuthorizationFailureRetry { get; set; }
+        // Source Ed-Fi ODS API processing context (resource-specific)
+        // Indicates an authorization-retry ("#Retry") pipeline exists for this resource, which re-publishes
+        // the entire resource after its update prerequisites complete (see APIPUB-133), so a 403 on an
+        // individual item can be safely skipped without publishing an error.
+        public bool HasAuthorizationRetryPipeline { get; set; }
 
         // -------------------------------------------------
         // Source Ed-Fi ODS API processing context (shared)

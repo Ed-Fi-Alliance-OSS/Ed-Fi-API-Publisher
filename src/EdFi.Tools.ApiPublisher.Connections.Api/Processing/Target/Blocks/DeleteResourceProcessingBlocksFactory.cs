@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -45,14 +46,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         public (ITargetBlock<GetItemForDeletionMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
+            int boundedCapacity = createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+
             TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> getItemForDeletionBlock =
                 CreateGetItemForDeletionBlock(
                     _targetEdFiApiClientProvider.GetApiClient(),
                     createBlocksRequest.Options,
-                    createBlocksRequest.ErrorHandlingBlock);
+                    createBlocksRequest.ErrorHandlingBlock,
+                    boundedCapacity);
 
             TransformManyBlock<DeleteItemMessage, ErrorItemMessage> deleteResourceBlock
-                = CreateDeleteResourceBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options);
+                = CreateDeleteResourceBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options, boundedCapacity);
 
             getItemForDeletionBlock.LinkTo(deleteResourceBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
@@ -62,7 +66,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage> CreateGetItemForDeletionBlock(
             EdFiApiClient targetApiClient,
             Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            int boundedCapacity)
         {
             var getItemForDeletionBlock = new TransformManyBlock<GetItemForDeletionMessage, DeleteItemMessage>(
                 async msg =>
@@ -120,11 +125,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
 
                             return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}?{queryString}", ct);
-                        }, new Context(), CancellationToken.None);
+                        }, new Context(), msg.CancellationToken);
 
                         string responseContent = null;
 
-                        responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        responseContent = await apiResponse.Content.ReadAsStringAsync(msg.CancellationToken).ConfigureAwait(false);
 
                         if (!apiResponse.IsSuccessStatusCode)
                         {
@@ -142,7 +147,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             };
 
                             // Publish the failure
-                            errorHandlingBlock.Post(error);
+                            await errorHandlingBlock.SendErrorAsync(error, msg.CancellationToken).ConfigureAwait(false);
 
                             // No delete to process
                             return Enumerable.Empty<DeleteItemMessage>();
@@ -162,7 +167,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             _logger.Debug("{ResourceUrl} (source id: {Id}): GET by key returned {StatusCode}", msg.ResourceUrl, id, apiResponse.StatusCode);
                         }
 
-                        var getByKeyResults = JArray.Parse(responseContent);
+                        var getByKeyResults = JArray.Parse(responseContent, JsonHelpers.NoLineInfoLoadSettings);
 
                         // If the item to be deleted cannot be found...
                         if (getByKeyResults.Count == 0)
@@ -183,6 +188,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 ResourceUrl = msg.ResourceUrl,
                                 Id = getByKeyResults[0]["id"].Value<string>(),
                                 SourceId = msg.Id,
+                                CancellationToken = msg.CancellationToken,
                             }
                         };
                     }
@@ -192,12 +198,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                         throw;
                     }
-                    catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                    catch (OperationCanceledException ex) when (msg.CancellationToken.IsCancellationRequested)
                     {
-                        // The API client already reported the authentication failure once. Repeating it for every message
-                        // still in flight would bury it, so this only needs to fault the block.
-                        _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", msg.ResourceUrl, id);
-                        throw;
+                        // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                        _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): GET by key abandoned because processing of the resource was cancelled.",
+                            msg.ResourceUrl, id);
+
+                        return Enumerable.Empty<DeleteItemMessage>();
                     }
                     catch (Exception ex)
                     {
@@ -207,7 +214,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
                 }, new ExecutionDataflowBlockOptions
                 {
-                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                    // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                    BoundedCapacity = boundedCapacity
                 });
 
             return getItemForDeletionBlock;
@@ -236,7 +246,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         }
 
         private TransformManyBlock<DeleteItemMessage, ErrorItemMessage> CreateDeleteResourceBlock(
-            EdFiApiClient targetApiClient, Options options)
+            EdFiApiClient targetApiClient, Options options, int boundedCapacity)
         {
             var deleteResourceBlock = new TransformManyBlock<DeleteItemMessage, ErrorItemMessage>(
                 async msg =>
@@ -283,12 +293,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
 
                             return targetApiClient.HttpClient.DeleteAsync($"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}/{id}", ct);
-                        }, new Context(), CancellationToken.None);
+                        }, new Context(), msg.CancellationToken);
 
                     // Failure
                     if (!apiResponse.IsSuccessStatusCode)
                     {
-                        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        string responseContent = await apiResponse.Content.ReadAsStringAsync(msg.CancellationToken).ConfigureAwait(false);
 
                         var message = $"{msg.ResourceUrl} (source id: {sourceId}): DELETE returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
                         _logger.Error(message);
@@ -328,12 +338,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                     throw;
                 }
-                catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                catch (OperationCanceledException ex) when (msg.CancellationToken.IsCancellationRequested)
                 {
-                    // The API client already reported the authentication failure once. Repeating it for every message
-                    // still in flight would bury it, so this only needs to fault the block.
-                    _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", msg.ResourceUrl, sourceId);
-                    throw;
+                    // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                    _logger.Debug(ex, "{ResourceUrl} (source id: {SourceId}): DELETE abandoned because processing of the resource was cancelled.",
+                        msg.ResourceUrl, sourceId);
+
+                    return Enumerable.Empty<ErrorItemMessage>();
                 }
                 catch (Exception ex)
                 {
@@ -344,19 +355,29 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
             }, new ExecutionDataflowBlockOptions
             {
-                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                BoundedCapacity = boundedCapacity
             });
 
             return deleteResourceBlock;
         }
 
-        public IEnumerable<GetItemForDeletionMessage> CreateProcessDataMessages(StreamResourcePageMessage<GetItemForDeletionMessage> message, string json)
+        public IEnumerable<GetItemForDeletionMessage> CreateProcessDataMessages(
+            StreamResourcePageMessage<GetItemForDeletionMessage> message,
+            TextReader jsonReader,
+            Action<int> reportTopLevelItemCount)
         {
-            JArray items = JArray.Parse(json);
-
-            // Iterate through the page of items
-            foreach (var item in items.OfType<JObject>())
+            // Iterate through the page of items, materializing one element at a time (see APIPUB-134)
+            foreach (var token in JsonHelpers.EnumerateTopLevelArrayItems(jsonReader, reportTopLevelItemCount))
             {
+                // Non-object elements are counted by the splitter but produce no message
+                if (token is not JObject item)
+                {
+                    continue;
+                }
+
                 // Stop processing individual items if cancellation has been requested
                 if (message.CancellationSource.IsCancellationRequested)
                 {

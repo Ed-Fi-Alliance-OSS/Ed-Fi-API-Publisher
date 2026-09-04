@@ -25,8 +25,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 #nullable enable
         public string? Id { get; set; }
 
-        //[JsonIgnore]
-        public JObject? Body { get; set; }
+        /// <summary>
+        /// The JSON body of the failed request as a raw JSON string, serialized once at error creation.
+        /// Typed as <see cref="JRaw" /> (rather than a parsed token type) so that errors queued for
+        /// publishing retain a single string instead of a full parsed token graph (see APIPUB-112), and so
+        /// that no implicit conversion can silently assign non-JSON content.
+        /// </summary>
+        public JRaw? Body { get; set; }
 
         public HttpStatusCode? ResponseStatus { get; set; }
 

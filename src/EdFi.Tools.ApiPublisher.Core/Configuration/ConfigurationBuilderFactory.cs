@@ -67,6 +67,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--maxDegreeOfParallelismForStreamResourcePages"] = "Options:MaxDegreeOfParallelismForStreamResourcePages",
                     ["--streamingPagesWaitDurationSeconds"] = "Options:StreamingPagesWaitDurationSeconds",
                     ["--streamingPageSize"] = "Options:StreamingPageSize",
+                    ["--processingBlockBoundedCapacity"] = "Options:ProcessingBlockBoundedCapacity",
                     ["--includeDescriptors"] = "Options:IncludeDescriptors",
                     ["--errorPublishingBatchSize"] = "Options:ErrorPublishingBatchSize",
                     ["--ignoreSslErrors"] = "Options:IgnoreSslErrors",

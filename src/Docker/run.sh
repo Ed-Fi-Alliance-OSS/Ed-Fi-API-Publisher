@@ -7,6 +7,9 @@
 set -e
 set +x
 
+# Default to automatic processing block bounded capacity when not provided (see APIPUB-112)
+export PROCESSING_BLOCK_BOUNDED_CAPACITY="${PROCESSING_BLOCK_BOUNDED_CAPACITY:-0}"
+
 envsubst < /app/apiPublisherSettings.template.json > /app/apiPublisherSettings.json
 envsubst < /app/logging.template.json > /app/logging.json
 envsubst < /app/configurationStoreSettings.template.json > /app/configurationStoreSettings.json

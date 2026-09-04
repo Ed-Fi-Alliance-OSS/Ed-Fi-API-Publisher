@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -46,14 +47,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         public (ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
+            int boundedCapacity = createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+
             TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> getItemForKeyChangeBlock
                 = CreateGetItemForKeyChangeBlock(
                     _targetEdFiApiClientProvider.GetApiClient(),
                     createBlocksRequest.Options,
-                    createBlocksRequest.ErrorHandlingBlock);
+                    createBlocksRequest.ErrorHandlingBlock,
+                    boundedCapacity);
 
             TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> changeKeyResourceBlock
-                = CreateChangeKeyBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options);
+                = CreateChangeKeyBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options, boundedCapacity);
 
             getItemForKeyChangeBlock.LinkTo(changeKeyResourceBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
@@ -63,7 +67,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> CreateGetItemForKeyChangeBlock(
             EdFiApiClient targetApiClient,
             Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            int boundedCapacity)
         {
             var getItemForKeyChangeBlock = new TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage>(
                 async message =>
@@ -122,7 +127,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             }
 
                             return targetApiClient.HttpClient.GetAsync($"{targetApiClient.DataManagementApiSegment}{message.ResourceUrl}?{queryString}", ct);
-                        }, new Context(), CancellationToken.None);
+                        }, new Context(), message.CancellationToken);
 
                         // Detect null content and provide a better error message (which happens during unit testing if mocked requests aren't properly defined)
                         if (apiResponse.Content == null)
@@ -130,7 +135,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             throw new NullReferenceException($"Content of response for '{targetApiClient.HttpClient.BaseAddress}{message.ResourceUrl}?{queryString}' was null.");
                         }
 
-                        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        string responseContent = await apiResponse.Content.ReadAsStringAsync(message.CancellationToken).ConfigureAwait(false);
 
                         // Failure
                         if (!apiResponse.IsSuccessStatusCode)
@@ -149,7 +154,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             };
 
                             // Publish the failure
-                            errorHandlingBlock.Post(error);
+                            await errorHandlingBlock.SendErrorAsync(error, message.CancellationToken).ConfigureAwait(false);
 
                             // No key changes to process
                             return Enumerable.Empty<ChangeKeyMessage>();
@@ -168,7 +173,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 message.ResourceUrl, sourceId, apiResponse.StatusCode);
                         }
 
-                        var getByKeyResults = JArray.Parse(responseContent);
+                        var getByKeyResults = JArray.Parse(responseContent, JsonHelpers.NoLineInfoLoadSettings);
 
                         // If the item whose key is to be changed cannot be found...
                         if (getByKeyResults.Count == 0)
@@ -231,8 +236,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 ResourceUrl = message.ResourceUrl,
                                 Id = targetId,
-                                Body = existingResourceItem.ToString(),
+                                // Serialized compactly: the body rides in pipeline messages and is retained
+                                // verbatim on error messages, matching the POST path (see APIPUB-112)
+                                Body = existingResourceItem.ToString(Formatting.None),
                                 SourceId = message.SourceId,
+                                CancellationToken = message.CancellationToken,
                             }
                         };
                     }
@@ -242,12 +250,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", message.ResourceUrl);
                         throw;
                     }
-                    catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                    catch (OperationCanceledException ex) when (message.CancellationToken.IsCancellationRequested)
                     {
-                        // The API client already reported the authentication failure once. Repeating it for every message
-                        // still in flight would bury it, so this only needs to fault the block.
-                        _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", message.ResourceUrl, sourceId);
-                        throw;
+                        // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                        _logger.Debug(ex, "{ResourceUrl} (source id: {SourceId}): GET by key abandoned because processing of the resource was cancelled.",
+                            message.ResourceUrl, sourceId);
+
+                        return Enumerable.Empty<ChangeKeyMessage>();
                     }
                     catch (Exception ex)
                     {
@@ -258,7 +267,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
                 }, new ExecutionDataflowBlockOptions
                 {
-                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                    // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                    BoundedCapacity = boundedCapacity
                 });
 
             return getItemForKeyChangeBlock;
@@ -287,7 +299,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         }
 
         private TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> CreateChangeKeyBlock(
-            EdFiApiClient targetApiClient, Options options)
+            EdFiApiClient targetApiClient, Options options, int boundedCapacity)
         {
             var changeKey = new TransformManyBlock<ChangeKeyMessage, ErrorItemMessage>(
                 async msg =>
@@ -338,12 +350,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 $"{targetApiClient.DataManagementApiSegment}{msg.ResourceUrl}/{id}",
                                 new StringContent(msg.Body, Encoding.UTF8, "application/json"),
                                 ct);
-                        }, new Context(), CancellationToken.None);
+                        }, new Context(), msg.CancellationToken);
 
                     // Failure
                     if (!apiResponse.IsSuccessStatusCode)
                     {
-                        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        string responseContent = await apiResponse.Content.ReadAsStringAsync(msg.CancellationToken).ConfigureAwait(false);
 
                         var message = $"{msg.ResourceUrl} (source id: {sourceId}): PUT returned {apiResponse.StatusCode}{Environment.NewLine}{responseContent}";
                         _logger.Error(message);
@@ -354,7 +366,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             Method = HttpMethod.Put.ToString(),
                             ResourceUrl = msg.ResourceUrl,
                             Id = id,
-                            Body = ParseToJObjectOrDefault(msg.Body),
+                            Body = JsonHelpers.ToValidatedJsonRawOrDefault(msg.Body),
                             ResponseStatus = apiResponse.StatusCode,
                             ResponseContent = responseContent
                         };
@@ -384,12 +396,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
                     throw;
                 }
-                catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                catch (OperationCanceledException ex) when (msg.CancellationToken.IsCancellationRequested)
                 {
-                    // The API client already reported the authentication failure once. Repeating it for every message
-                    // still in flight would bury it, so this only needs to fault the block.
-                    _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", msg.ResourceUrl, sourceId);
-                    throw;
+                    // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                    _logger.Debug(ex, "{ResourceUrl} (source id: {SourceId}): PUT abandoned because processing of the resource was cancelled.",
+                        msg.ResourceUrl, sourceId);
+
+                    return Enumerable.Empty<ErrorItemMessage>();
                 }
                 catch (Exception ex)
                 {
@@ -399,29 +412,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
             }, new ExecutionDataflowBlockOptions
             {
-                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                BoundedCapacity = boundedCapacity
             });
 
             return changeKey;
-
-            JObject ParseToJObjectOrDefault(string json)
-            {
-                JObject body = null;
-
-                try
-                {
-                    body = JObject.Parse(json);
-                }
-                catch
-                {
-                    // ignored
-                }
-
-                return body;
-            }
         }
 
-        public IEnumerable<GetItemForKeyChangeMessage> CreateProcessDataMessages(StreamResourcePageMessage<GetItemForKeyChangeMessage> message, string json)
+        public IEnumerable<GetItemForKeyChangeMessage> CreateProcessDataMessages(
+            StreamResourcePageMessage<GetItemForKeyChangeMessage> message,
+            TextReader jsonReader,
+            Action<int> reportTopLevelItemCount)
         {
             // Detect cancellation and quit returning messages
             if (message.CancellationSource.IsCancellationRequested)
@@ -429,11 +432,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 yield break;
             }
 
-            JArray items = JArray.Parse(json);
-
-            // Iterate through the page of items
-            foreach (var item in items.OfType<JObject>())
+            // Iterate through the page of items, materializing one element at a time (see APIPUB-134)
+            foreach (var token in JsonHelpers.EnumerateTopLevelArrayItems(jsonReader, reportTopLevelItemCount))
             {
+                // Non-object elements are counted by the splitter but produce no message
+                if (token is not JObject item)
+                {
+                    continue;
+                }
+
                 // Detect cancellation and quit returning messages
                 if (message.CancellationSource.IsCancellationRequested)
                 {

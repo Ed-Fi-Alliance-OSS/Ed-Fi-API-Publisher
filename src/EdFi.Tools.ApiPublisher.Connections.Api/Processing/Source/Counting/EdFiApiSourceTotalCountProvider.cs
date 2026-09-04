@@ -13,6 +13,7 @@ using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
@@ -78,6 +79,10 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                         options.MaxRetryAttempts,
                         ts.TotalSeconds
                     );
+
+                    // With ResponseHeadersRead (see APIPUB-134), an abandoned response pins a
+                    // connection until finalized -- release the transient failure being retried
+                    result.Result?.Dispose();
                 }
             );
         IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled
@@ -85,7 +90,8 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
             : retryPolicy;
         try
         {
-            var apiResponse = await policy.ExecuteAsync(
+            // Dispose explicitly: with ResponseHeadersRead (see APIPUB-134) an open response holds a live connection
+            using var apiResponse = await policy.ExecuteAsync(
                 async (ctx, ct) =>
                 {
                     attempt++;
@@ -113,14 +119,11 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 cancellationToken
             );
 
-            string responseContent = null;
-
             if (!apiResponse.IsSuccessStatusCode)
             {
-                var messge = $"{resourceUrl}: Count request returned {apiResponse.StatusCode}\r{responseContent}";
-                _logger.Error(messge);
+                _logger.Error("{Url}: Count request returned {StatusCode}.", resourceUrl, apiResponse.StatusCode);
 
-                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
+                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse, cancellationToken)
                     .ConfigureAwait(false);
 
                 // Allow processing to continue with no additional work on this resource
@@ -136,7 +139,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 );
 
                 // Publish an error for the resource. Feature is not supported.
-                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse)
+                await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse, cancellationToken)
                     .ConfigureAwait(false);
 
                 // Allow processing to continue as best it can with no additional work on this resource
@@ -167,15 +170,15 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                     totalCountHeaderValue
                 );
 
-                errorHandlingBlock.Post(
-                    new ErrorItemMessage
-                    {
-                        ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
-                        Method = HttpMethod.Get.ToString(),
-                        ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = $"Total-Count: {totalCountHeaderValue}",
-                    }
-                );
+                await errorHandlingBlock.SendErrorAsync(
+                        new ErrorItemMessage
+                        {
+                            ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
+                            Method = HttpMethod.Get.ToString(),
+                            ResponseStatus = apiResponse.StatusCode,
+                            ResponseContent = $"Total-Count: {totalCountHeaderValue}",
+                        }, cancellationToken)
+                    .ConfigureAwait(false);
 
                 // Allow processing to continue without performing additional work on this resource.
                 return (false, 0);
@@ -191,10 +194,16 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
     private async Task HandleResourceCountRequestErrorAsync(
         string resourceUrl,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock,
-        HttpResponseMessage apiResponse
+        HttpResponseMessage apiResponse,
+        CancellationToken cancellationToken
     )
     {
-        string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+        // With ResponseHeadersRead (see APIPUB-134) HttpClient.Timeout covers only the wait for the headers, so the
+        // (small) error body read gets its own deadline of the same length rather than waiting indefinitely
+        using var bodyReadDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bodyReadDeadline.CancelAfter(_sourceEdFiApiClientProvider.GetApiClient().HttpClient.Timeout);
+
+        string responseContent = await apiResponse.Content.ReadAsStringAsync(bodyReadDeadline.Token).ConfigureAwait(false);
         string message = string.Empty;
 
         // Was this an authorization failure?
@@ -215,15 +224,16 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         _logger.Error(message);
 
         // Publish an error for the resource to allow processing to continue, but to force failure.
-        errorHandlingBlock.Post(
-            new ErrorItemMessage
-            {
-                ResourceUrl =
-                    $"{_sourceEdFiApiClientProvider.GetApiClient().DataManagementApiSegment}{resourceUrl}",
-                Method = HttpMethod.Get.ToString(),
-                ResponseStatus = apiResponse.StatusCode,
-                ResponseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false),
-            }
-        );
+        await errorHandlingBlock.SendErrorAsync(
+                new ErrorItemMessage
+                {
+                    ResourceUrl =
+                        $"{_sourceEdFiApiClientProvider.GetApiClient().DataManagementApiSegment}{resourceUrl}",
+                    Method = HttpMethod.Get.ToString(),
+                    ResponseStatus = apiResponse.StatusCode,
+                    ResponseContent = responseContent,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 }

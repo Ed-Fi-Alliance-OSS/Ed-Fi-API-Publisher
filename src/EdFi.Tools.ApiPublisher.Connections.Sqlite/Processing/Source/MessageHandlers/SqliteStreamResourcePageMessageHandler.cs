@@ -5,6 +5,7 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Microsoft.Data.Sqlite;
@@ -82,7 +83,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 };
 
                 // Publish the failure
-                errorHandlingBlock.Post(error);
+                await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
                 return Array.Empty<TProcessDataMessage>();
             }
@@ -90,7 +91,11 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
             // Transform the page content to item actions
             try
             {
-                transformedMessages.AddRange(message.CreateProcessDataMessages(message, json!));
+                // No count callback: SQLite source pages are rowid partitions, so final-page continuation
+                // (the count's only consumer) never applies here
+                using var jsonReader = new StringReader(json!);
+
+                transformedMessages.AddRange(message.CreateProcessDataMessages(message, jsonReader, null));
             }
             catch (JsonReaderException ex)
             {
@@ -106,7 +111,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 };
 
                 // Publish the failure
-                errorHandlingBlock.Post(error);
+                await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
                 return Array.Empty<TProcessDataMessage>();
             }

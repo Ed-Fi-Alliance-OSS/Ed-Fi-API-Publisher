@@ -261,6 +261,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.MaxDegreeOfParallelismForStreamResourcePages)} must be greater than 0.");
             }
 
+            if (options.ProcessingBlockBoundedCapacity < -1)
+            {
+                validationErrors.Add($"{nameof(options.ProcessingBlockBoundedCapacity)} value of '{options.ProcessingBlockBoundedCapacity}' is invalid. It must be -1 (unbounded), 0 (automatic), or a positive number.");
+            }
+
             if (!string.IsNullOrEmpty(options.RemediationsScriptFile) && !File.Exists(options.RemediationsScriptFile))
             {
                 validationErrors.Add($"{nameof(options.RemediationsScriptFile)} must be a local file path to an existing JavaScript module.");
