@@ -6,6 +6,7 @@
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -24,11 +25,14 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 {
     private readonly Func<SqliteConnection> _createConnection;
 
-    private readonly ILogger _logger = Log.ForContext(typeof(UpsertProcessingBlocksFactory));
+    private readonly ILogger _logger;
 
     protected SqlLiteProcessingBlocksFactoryBase(Func<SqliteConnection> createConnection)
     {
         _createConnection = createConnection;
+
+        // Log under the concrete factory type (upserts, deletes or key changes), not a fixed one
+        _logger = Log.ForContext(GetType());
     }
 
     protected abstract string TableSuffix { get; }
@@ -39,17 +43,13 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
     public (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
         CreateBlocksRequest createBlocksRequest)
     {
-        // Retry pipelines are never bounded: they are fed by a synchronous Post that would silently drop
-        // declined messages. This connector's flows are not currently retry-routed, but the flag is honored
-        // locally so the invariant holds here rather than by distant composition (see APIPUB-112).
-        //
         // Unlike the API target blocks, every message this block receives carries a WHOLE PAGE of items
         // (see CreateProcessDataMessages below), so the item-denominated capacity must be converted to
         // page messages -- applying it directly would admit that many whole pages (at shipped defaults,
         // roughly 500 pages against a documented ceiling of ~5,500 items).
         int resolvedItemCapacity = createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
 
-        int boundedCapacity = createBlocksRequest.IsRetryPipeline || resolvedItemCapacity == -1
+        int boundedCapacity = resolvedItemCapacity == -1
             ? DataflowBlockOptions.Unbounded
             : Math.Max(1, resolvedItemCapacity / Math.Max(1, createBlocksRequest.Options.StreamingPageSize));
 
@@ -134,7 +134,7 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
                     var error = new ErrorItemMessage
                     {
                         ResourceUrl = msg.ResourceUrl,
-                        ResponseContent = msg.Json.Substring(0, 200) + "...",
+                        ResponseContent = msg.Json is { Length: > 200 } ? msg.Json[..200] + "..." : msg.Json,
                         Exception = ex
                     };
 
@@ -155,8 +155,17 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 
     public IEnumerable<TProcessDataMessage> CreateProcessDataMessages(
         StreamResourcePageMessage<TProcessDataMessage> message,
-        string json)
+        TextReader jsonReader,
+        Action<int> reportTopLevelItemCount)
     {
+        // EXEMPTION (APIPUB-134): this connector stores whole pages as TEXT rows in SQLite, so the page is
+        // deliberately buffered to a string here rather than streamed item-by-item.
+        string json = jsonReader.ReadToEnd();
+
+        // The API source handler still needs the top-level item count for final-page continuation when
+        // downloading to SQLite; run the streaming counting pass only when a caller asks for the count.
+        reportTopLevelItemCount?.Invoke(JsonHelpers.CountTopLevelArrayItems(json));
+
         yield return new TProcessDataMessage
         {
             ResourceUrl = message.ResourceUrl,

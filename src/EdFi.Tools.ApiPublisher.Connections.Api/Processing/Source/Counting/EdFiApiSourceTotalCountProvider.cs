@@ -79,6 +79,10 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                         options.MaxRetryAttempts,
                         ts.TotalSeconds
                     );
+
+                    // With ResponseHeadersRead (see APIPUB-134), an abandoned response pins a
+                    // connection until finalized -- release the transient failure being retried
+                    result.Result?.Dispose();
                 }
             );
         IAsyncPolicy<HttpResponseMessage> policy = isRateLimitingEnabled
@@ -86,7 +90,8 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
             : retryPolicy;
         try
         {
-            var apiResponse = await policy.ExecuteAsync(
+            // Dispose explicitly: with ResponseHeadersRead (see APIPUB-134) an open response holds a live connection
+            using var apiResponse = await policy.ExecuteAsync(
                 async (ctx, ct) =>
                 {
                     attempt++;
@@ -114,12 +119,9 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 cancellationToken
             );
 
-            string responseContent = null;
-
             if (!apiResponse.IsSuccessStatusCode)
             {
-                var messge = $"{resourceUrl}: Count request returned {apiResponse.StatusCode}\r{responseContent}";
-                _logger.Error(messge);
+                _logger.Error("{Url}: Count request returned {StatusCode}.", resourceUrl, apiResponse.StatusCode);
 
                 await HandleResourceCountRequestErrorAsync(resourceUrl, errorHandlingBlock, apiResponse, cancellationToken)
                     .ConfigureAwait(false);
@@ -196,7 +198,12 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         CancellationToken cancellationToken
     )
     {
-        string responseContent = await apiResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        // With ResponseHeadersRead (see APIPUB-134) HttpClient.Timeout covers only the wait for the headers, so the
+        // (small) error body read gets its own deadline of the same length rather than waiting indefinitely
+        using var bodyReadDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bodyReadDeadline.CancelAfter(_sourceEdFiApiClientProvider.GetApiClient().HttpClient.Timeout);
+
+        string responseContent = await apiResponse.Content.ReadAsStringAsync(bodyReadDeadline.Token).ConfigureAwait(false);
         string message = string.Empty;
 
         // Was this an authorization failure?

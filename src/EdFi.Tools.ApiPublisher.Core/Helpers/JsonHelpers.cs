@@ -5,6 +5,8 @@
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace EdFi.Tools.ApiPublisher.Core.Helpers
@@ -52,6 +54,57 @@ namespace EdFi.Tools.ApiPublisher.Core.Helpers
             }
 
             return body;
+        }
+
+        /// <summary>
+        /// Streams the elements of a top-level JSON array in a single forward-only pass, materializing one
+        /// element at a time rather than a whole-page token graph or string (see APIPUB-134). Line-info
+        /// annotations are suppressed on the loaded tokens (see <see cref="NoLineInfoLoadSettings" />).
+        /// Rejects input that is not a top-level array and rejects trailing non-whitespace content after the
+        /// array. Invokes <paramref name="reportItemCount" /> with the total element count only when
+        /// enumeration completes normally (a consumer that stops enumerating early never receives a count).
+        /// The supplied reader is not closed.
+        /// </summary>
+        /// <param name="textReader">A reader positioned at the start of the JSON text, expected to be a top-level array.</param>
+        /// <param name="reportItemCount">Optional callback that receives the top-level element count on normal completion.</param>
+        /// <returns>An enumerable yielding one <see cref="JToken" /> per top-level array element.</returns>
+        /// <exception cref="JsonReaderException">Thrown if the text is not valid JSON, is not a top-level array, or has trailing content.</exception>
+        public static IEnumerable<JToken> EnumerateTopLevelArrayItems(TextReader textReader, Action<int> reportItemCount = null)
+        {
+            using var reader = new JsonTextReader(textReader) { CloseInput = false };
+
+            if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+            {
+                throw new JsonReaderException("Expected a top-level JSON array.");
+            }
+
+            int count = 0;
+
+            while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+            {
+                if (reader.TokenType == JsonToken.Comment)
+                {
+                    continue;
+                }
+
+                count++;
+
+                // ReadFrom consumes the element and leaves the reader on its last token, so the
+                // loop's Read() advances to the next element (or the closing EndArray)
+                yield return JToken.ReadFrom(reader, NoLineInfoLoadSettings);
+            }
+
+            if (reader.TokenType != JsonToken.EndArray)
+            {
+                throw new JsonReaderException("Unexpected end of JSON while reading a top-level array.");
+            }
+
+            if (reader.Read())
+            {
+                throw new JsonReaderException("Unexpected content after top-level JSON array.");
+            }
+
+            reportItemCount?.Invoke(count);
         }
 
         /// <summary>

@@ -41,6 +41,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly ISourceResourceItemProvider _sourceResourceItemProvider;
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
+        // Dependency resources for which a deferred (Forbidden) dependency post has already been reported at Warning level
+        private readonly ConcurrentDictionary<string, byte> _dependencyDeferralWarnedByResourceUrl = new();
+
         public PostResourceProcessingBlocksFactory(
             INodeJSService nodeJsService,
             ITargetEdFiApiClientProvider targetEdFiApiClientProvider,
@@ -100,6 +103,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 missingDependencyByResourcePath.Add(item.ResourcePath, item.DependencyResourcePath);
             }
 
+            var authorizationRetryPipelineResourcePaths = createBlocksRequest.AuthorizationRetryPipelineResourcePaths;
+
             var postResourceBlock = new TransformManyBlock<PostItemMessage, ErrorItemMessage>(
                 async msg =>
                     await HandlePostItemMessage(
@@ -109,18 +114,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         javaScriptModuleFactory,
                         targetEdFiApiClient,
                         knownUnremediatedRequests,
-                        missingDependencyByResourcePath),
+                        missingDependencyByResourcePath,
+                        authorizationRetryPipelineResourcePaths),
                 new ExecutionDataflowBlockOptions
                 {
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
 
                     // Bound the input buffer so a slow target exerts backpressure on source page streaming
                     // instead of buffering parsed source items in memory without limit (see APIPUB-112).
-                    // Retry pipelines receive their items via a synchronous Post that would silently drop
-                    // declined messages, so they remain unbounded.
-                    BoundedCapacity = createBlocksRequest.IsRetryPipeline
-                        ? DataflowBlockOptions.Unbounded
-                        : options.ResolvedProcessingBlockBoundedCapacity,
+                    // This applies to authorization-retry ("#Retry") pipelines too: since APIPUB-133 they are
+                    // fed exclusively by their own page streaming (no synchronous Post feed remains).
+                    BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity,
                 });
 
             return (postResourceBlock, postResourceBlock);
@@ -133,15 +137,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             Func<string> javaScriptModuleFactory,
             EdFiApiClient targetEdFiApiClient,
             ConcurrentDictionary<(string resourceUrl, HttpStatusCode statusCode), byte> knownUnremediatedRequests,
-            Dictionary<string, string> missingDependencyByResourcePath)
+            Dictionary<string, string> missingDependencyByResourcePath,
+            IReadOnlySet<string> authorizationRetryPipelineResourcePaths,
+            bool isDependencyPost = false)
         {
             if (ignoredResourceByUrl.ContainsKey(postItemMessage.ResourceUrl))
             {
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 
-            var idToken = postItemMessage.Item["id"];
-            string id = idToken.Value<string>();
+            string id = postItemMessage.Item["id"].Value<string>();
 
             try
             {
@@ -205,7 +210,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                         postItemMessage.ResourceUrl,
                                         id,
                                         result.Result,
-                                        postItemMessage.Item.ToString());
+                                        postItemMessage.Item.ToString(),
+                                        postItemMessage.CancellationToken);
 
                                     if (!remediationResult.FoundRemediation)
                                     {
@@ -233,7 +239,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                         ctx["ModifiedRequestBody"] = remediationResult.ModifiedRequestBody;
                                     }
                                 }
-                                string responseContent = await result.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                string responseContent = await result.Result.Content.ReadAsStringAsync(postItemMessage.CancellationToken).ConfigureAwait(false);
 
                                 var message = $"{postItemMessage.ResourceUrl} (source id: {id}): POST attempt #{attempts} failed with status '{result.Result.StatusCode}'. Retrying... (retry #{retryAttempt} of {options.MaxRetryAttempts} with {ts.TotalSeconds:N1}s delay):{Environment.NewLine}{responseContent}";
                                 _logger.Warning(message);
@@ -295,7 +301,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         _logger.Information("{ResourceUrl}: Attempting to retrieve missing '{ReferencedResourceName}' reference based on 'authorizationFailureHandling' metadata in apiPublisherSettings.json.",
                             postItemMessage.ResourceUrl, missingDependencyDetails.ReferencedResourceName);
 
-                        var (missingDependencyItemRetrieved, missingItemJson) = await _sourceResourceItemProvider.TryGetResourceItemAsync(missingDependencyDetails.SourceDependencyItemUrl);
+                        // The source lookup (and its retry delays) observes the item's token so cancelling the run
+                        // releases this handler instead of leaving it to ride out the source request and retries
+                        var (missingDependencyItemRetrieved, missingItemJson) = await _sourceResourceItemProvider.TryGetResourceItemAsync(
+                            missingDependencyDetails.SourceDependencyItemUrl,
+                            ct);
 
                         if (missingDependencyItemRetrieved)
                         {
@@ -305,7 +315,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 ResourceUrl = missingDependencyDetails.DependencyResourceUrl,
                                 Item = missingItem,
-                                PostAuthorizationFailureRetry = postItemMessage.PostAuthorizationFailureRetry, // TODO: Is this appropriate to copy?
+                                // Derived from the DEPENDENCY resource's own retry pipeline (not copied from the
+                                // current item): a Forbidden response on this post can only be deferred if the
+                                // dependency resource itself has a "#Retry" pass that will re-publish it.
+                                HasAuthorizationRetryPipeline = authorizationRetryPipelineResourcePaths.Contains(missingDependencyDetails.DependencyResourceUrl),
+                                CancellationToken = postItemMessage.CancellationToken,
                             };
 
                             await HandlePostItemMessage(
@@ -315,14 +329,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 javaScriptModuleFactory,
                                 targetEdFiApiClient,
                                 knownUnremediatedRequests,
-                                missingDependencyByResourcePath);
+                                missingDependencyByResourcePath,
+                                authorizationRetryPipelineResourcePaths,
+                                isDependencyPost: true);
                         }
                     }
 
                     return response;
                 },
                         new Context(),
-                        CancellationToken.None);
+                        postItemMessage.CancellationToken);
 
                 // Failure
                 if (!apiResponse.IsSuccessStatusCode)
@@ -343,32 +359,36 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         return Enumerable.Empty<ErrorItemMessage>();
                     }
 
-                    // Gracefully handle authorization errors by using the retry action delegate
-                    // (if present) to post the message to the retry "resource" queue 
+                    // Gracefully handle authorization errors when the resource has an authorization-retry
+                    // ("#Retry") pipeline: the item is skipped without an error because the retry pipeline
+                    // re-publishes the entire resource once its update prerequisites complete (see APIPUB-133).
                     if (apiResponse.StatusCode == HttpStatusCode.Forbidden
-                        // Determine if current resource has an authorization retry queue
-                        && postItemMessage.PostAuthorizationFailureRetry != null)
+                        && postItemMessage.HasAuthorizationRetryPipeline)
                     {
-                        if (_logger.IsEnabled(LogEventLevel.Debug))
+                        if (isDependencyPost && _dependencyDeferralWarnedByResourceUrl.TryAdd(postItemMessage.ResourceUrl, 0))
                         {
-                            _logger.Debug("{ResourceUrl} (source id: {Id}): Authorization failed -- deferring for retry after pertinent associations are processed.",
+                            // An item fetched by id to resolve a missing reference is not necessarily inside the change
+                            // window that the retry pass re-streams (unlike a main-pass item, which always is), so the
+                            // first such deferral per resource is surfaced at Warning level rather than Debug
+                            _logger.Warning("{ResourceUrl} (source id: {Id}): Authorization failed on POST of an item retrieved to resolve a missing reference -- the item will be re-published by the authorization retry pass after pertinent associations are processed, provided it lies within the current change window. If the reference remains unresolved, the failure of the item that references it will be reported. (Reported once per resource.)",
+                                postItemMessage.ResourceUrl, id);
+                        }
+                        else if (_logger.IsEnabled(LogEventLevel.Debug))
+                        {
+                            _logger.Debug("{ResourceUrl} (source id: {Id}): Authorization failed -- the item will be re-published by the authorization retry pass after pertinent associations are processed.",
                                 postItemMessage.ResourceUrl, id);
                         }
 
-                        // Re-add the identifier, and pass the message along to the "retry" resource (after associations have been processed)
-                        postItemMessage.Item.Add("id", idToken);
-                        postItemMessage.PostAuthorizationFailureRetry(postItemMessage);
-
-                        // Deferring for retry - no errors to publish
+                        // Deferring to the retry pass - no errors to publish
                         return Enumerable.Empty<ErrorItemMessage>();
                     }
 
-                    string responseContent = await apiResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    string responseContent = await apiResponse.Content.ReadAsStringAsync(postItemMessage.CancellationToken).ConfigureAwait(false);
                     var message = string.Empty;
 
                     // If the failure is Forbidden, and we should treat it as a warning
                     if (apiResponse.StatusCode == HttpStatusCode.Forbidden
-                        && postItemMessage.PostAuthorizationFailureRetry == null
+                        && !postItemMessage.HasAuthorizationRetryPipeline
                         && targetEdFiApiClient.ConnectionDetails?.TreatForbiddenPostAsWarning == true)
                     {
                         // Warn and ignore all future data for this resource
@@ -426,12 +446,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", postItemMessage.ResourceUrl);
                 return Enumerable.Empty<ErrorItemMessage>();
             }
-            catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+            catch (OperationCanceledException ex) when (postItemMessage.CancellationToken.IsCancellationRequested)
             {
-                // The API client already reported the authentication failure once. Repeating it for every message
-                // still in flight would bury it, so this only needs to fault the block.
-                _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): Abandoning the request because the API client can no longer authenticate.", postItemMessage.ResourceUrl, id);
-                throw;
+                // Graceful cancellation of the resource's processing -- abandon the item without faulting the block
+                _logger.Debug(ex, "{ResourceUrl} (source id: {Id}): POST abandoned because processing of the resource was cancelled.",
+                    postItemMessage.ResourceUrl, id);
+
+                return Enumerable.Empty<ErrorItemMessage>();
             }
             catch (Exception ex)
             {
@@ -449,7 +470,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             {
                 try
                 {
-                    string content = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+                    string content = response.Content.ReadAsStringAsync(postItemMessage.CancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
                     var responseMessageToken = JObject.Parse(content, JsonHelpers.NoLineInfoLoadSettings);
 
                     // If the failure message is related to a missing reference ("reference cannot be resolve")
@@ -489,7 +510,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             {
                 try
                 {
-                    var responseMessageToken = JObject.Parse(await response.Content.ReadAsStringAsync(), JsonHelpers.NoLineInfoLoadSettings);
+                    var responseMessageToken = JObject.Parse(await response.Content.ReadAsStringAsync(postItemMessage.CancellationToken), JsonHelpers.NoLineInfoLoadSettings);
 
                     // If the failure message is related to a missing reference ("reference cannot be resolve")
                     return responseMessageToken["message"]?.Value<string>();
@@ -599,13 +620,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             public string DependencyResourceUrl { get; set; }
         }
 
-        public IEnumerable<PostItemMessage> CreateProcessDataMessages(StreamResourcePageMessage<PostItemMessage> message, string json)
+        public IEnumerable<PostItemMessage> CreateProcessDataMessages(
+            StreamResourcePageMessage<PostItemMessage> message,
+            TextReader jsonReader,
+            Action<int> reportTopLevelItemCount)
         {
-            JArray items = JArray.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
-
-            // Iterate through the page of items
-            foreach (var item in items.OfType<JObject>())
+            // Iterate through the page of items, materializing one element at a time (see APIPUB-134)
+            foreach (var token in JsonHelpers.EnumerateTopLevelArrayItems(jsonReader, reportTopLevelItemCount))
             {
+                // Non-object elements are counted by the splitter but produce no message
+                if (token is not JObject item)
+                {
+                    continue;
+                }
+
                 var itemMessage = CreateItemActionMessage(message, item);
 
                 // Stop processing individual items if cancellation has been requested
@@ -632,7 +660,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 {
                     Item = j,
                     ResourceUrl = msg.ResourceUrl,
-                    PostAuthorizationFailureRetry = msg.PostAuthorizationFailureRetry,
+                    HasAuthorizationRetryPipeline = msg.HasAuthorizationRetryPipeline,
+                    CancellationToken = msg.CancellationSource.Token,
                 };
             }
         }
@@ -645,7 +674,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             string resourceUrl,
             string sourceId,
             HttpResponseMessage responseMessage,
-            string requestBody)
+            string requestBody,
+            CancellationToken cancellationToken)
         {
             string remediationFunctionName = $"{resourceUrl}/{(int)responseMessage.StatusCode}";
 
@@ -661,12 +691,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         {
                             resourceUrl = resourceUrl,
                             requestBody = requestBody,
-                            responseBody = await responseMessage.Content.ReadAsStringAsync(),
+                            responseBody = await responseMessage.Content.ReadAsStringAsync(cancellationToken),
                             responseStatusCode = (int)responseMessage.StatusCode,
                             targetConnectionName = targetEdFiApiClient.ConnectionDetails.Name,
                             sourceConnectionName = sourceConnectionName,
                         }
-                    });
+                    },
+                    cancellationToken);
 
                 var remediationPlan = JsonSerializer.Deserialize<RemediationPlan>(remediationPlanContent);
 
@@ -706,7 +737,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         remediationRequest.resource,
                         $"{targetEdFiApiClient.DataManagementApiSegment}{remediationRequest.resource}",
                         remediationRequestBodyJson,
-                        CancellationToken.None);
+                        cancellationToken);
 
                     if (remediationResponse.IsSuccessStatusCode)
                     {

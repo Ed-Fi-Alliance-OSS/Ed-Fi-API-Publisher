@@ -93,10 +93,13 @@ public static class RequestHelpers
                 });
 
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(contentType));
-            return await edFiApiClient.HttpClient.SendAsync(request, ct);
+
+            // Complete as soon as headers arrive so page bodies can be streamed rather than buffered (see APIPUB-134)
+            return await edFiApiClient.HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         }
 
-        return await edFiApiClient.HttpClient.GetAsync(requestUri, ct);
+        // Complete as soon as headers arrive so page bodies can be streamed rather than buffered (see APIPUB-134)
+        return await edFiApiClient.HttpClient.GetAsync(requestUri, HttpCompletionOption.ResponseHeadersRead, ct);
     }
 
     private static bool ShouldApplyProfileContentType(string requestUri)

@@ -27,7 +27,7 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
         StreamResourceMessage message,
         Options options,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock,
-        Func<StreamResourcePageMessage<TProcessDataMessage>, string, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
+        Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> createProcessDataMessages,
         CancellationToken cancellationToken)
     {
         if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
@@ -104,7 +104,7 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
                 {
                     // Resource-specific context
                     ResourceUrl = message.ResourceUrl,
-                    PostAuthorizationFailureRetry = message.PostAuthorizationFailureRetry,
+                    HasAuthorizationRetryPipeline = message.HasAuthorizationRetryPipeline,
 
                     // Page-strategy specific context
                     Limit = limitOnWindow,
