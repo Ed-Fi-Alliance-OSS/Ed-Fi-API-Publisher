@@ -146,8 +146,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 
-            // A message can arrive without its item data: a deferred authorization-failure retry re-queues
-            // the same message object, whose Item reference was already released by the original invocation
+            // Item is released (set to null) once a message has been processed so the JObject can be GC'd.
+            // Guard against a message re-entering processing after that point rather than letting the
+            // block fault on a null dereference (which would abandon the remaining items).
             if (postItemMessage.Item is null)
             {
                 _logger.Error(
@@ -201,8 +202,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             }
 
             // Preserve the id independently of Item so it remains available for identifying this message
-            // even if Item is released before a deferred authorization-failure retry re-enters this method
-            // for the same message object (see the Item-is-null guard above).
+            // after Item has been released by the finally block below (see the Item-is-null guard above).
             postItemMessage.Id = id;
 
             try

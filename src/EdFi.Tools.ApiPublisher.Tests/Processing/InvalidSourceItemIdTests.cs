@@ -22,6 +22,7 @@ using Serilog.Sinks.TestCorrelator;
 using Shouldly;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -198,7 +199,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             List<GetItemForDeletionMessage> items = null;
 
-            Should.NotThrow(() => items = factory.CreateProcessDataMessages(message, json).ToList());
+            using var jsonReader = new StringReader(json);
+
+            Should.NotThrow(() => items = factory.CreateProcessDataMessages(message, jsonReader, null).ToList());
 
             items.Count.ShouldBe(2, "both items -- including the one without an id -- must be yielded");
             items[1].Id.ShouldBeNullOrEmpty();
@@ -265,12 +268,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
-        public async Task When_an_authorization_retry_is_deferred_the_id_survives_the_release_of_Item()
+        public async Task When_an_authorization_failure_is_deferred_to_the_retry_pass_the_id_survives_the_release_of_Item()
         {
-            // Reproduces the actual race (not just the symptom): a Forbidden POST with a configured retry
-            // delegate re-queues the SAME PostItemMessage object, and the original invocation's finally
-            // block then releases Item on that same object. The id must already be stamped by then so
-            // that a later re-entry for this object (or a failure report about it) can identify it.
+            // A Forbidden POST on a resource with an authorization-retry ("#Retry") pipeline is skipped
+            // without publishing an error (APIPUB-133), and the finally block then releases Item on the
+            // message. The id must already be stamped by then so that anything that later needs to identify
+            // this message (e.g. the Item-is-null guard's failure report) still can.
             TestHelpers.InitializeLogging();
 
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
@@ -298,27 +301,27 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     new BufferBlock<ErrorItemMessage>(),
                     javaScriptModuleFactory: null));
 
-            PostItemMessage retriedMessage = null;
-
             var message = new PostItemMessage
             {
                 ResourceUrl = ResourcePath,
                 Item = new JObject { ["id"] = "0123456789abcdef0123456789abcdef" },
-                PostAuthorizationFailureRetry = msg => retriedMessage = (PostItemMessage)msg,
+                HasAuthorizationRetryPipeline = true,
             };
 
             ingestionBlock.Post(message);
             ingestionBlock.Complete();
 
+            var errors = new List<ErrorItemMessage>();
+
             while (await outputBlock.OutputAvailableAsync())
             {
-                await outputBlock.ReceiveAsync();
+                errors.Add(await outputBlock.ReceiveAsync());
             }
 
             await outputBlock.Completion;
 
-            retriedMessage.ShouldBeSameAs(message, "the retry delegate re-queues the SAME message object");
-            message.Item.ShouldBeNull("the finally block releases Item after the retry delegate has been invoked");
+            errors.ShouldBeEmpty("a 403 on a resource with a retry pipeline is deferred, not reported as an error");
+            message.Item.ShouldBeNull("the finally block releases Item after the deferral");
             message.Id.ShouldBe(
                 "0123456789abcdef0123456789abcdef",
                 "the id must survive so a subsequent retry invocation can identify the item");
@@ -420,7 +423,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             List<GetItemForKeyChangeMessage> items = null;
 
-            Should.NotThrow(() => items = factory.CreateProcessDataMessages(message, json).ToList());
+            using var jsonReader = new StringReader(json);
+
+            Should.NotThrow(() => items = factory.CreateProcessDataMessages(message, jsonReader, null).ToList());
 
             items.Count.ShouldBe(2, "both items -- including the one without an id -- must be yielded");
             items[1].SourceId.ShouldBeNullOrEmpty();

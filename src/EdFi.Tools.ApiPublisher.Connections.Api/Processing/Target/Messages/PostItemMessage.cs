@@ -13,8 +13,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
 
         /// <summary>
         /// The source item's "id", stamped the first time processing reads a valid id from
-        /// <see cref="Item"/> so that it survives even after <see cref="Item"/> is later released (e.g. by
-        /// a deferred authorization-failure retry re-entering processing for this same message object).
+        /// <see cref="Item"/> so that it survives after <see cref="Item"/> is released once the item has
+        /// been processed.
         /// </summary>
         public string Id { get; set; }
 
