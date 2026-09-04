@@ -5,6 +5,7 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Microsoft.Data.Sqlite;
@@ -82,7 +83,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 };
 
                 // Publish the failure
-                errorHandlingBlock.Post(error);
+                await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
                 return Array.Empty<TProcessDataMessage>();
             }
@@ -106,7 +107,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 };
 
                 // Publish the failure
-                errorHandlingBlock.Post(error);
+                await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
                 return Array.Empty<TProcessDataMessage>();
             }

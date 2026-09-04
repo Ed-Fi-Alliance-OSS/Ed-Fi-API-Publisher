@@ -26,6 +26,32 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
 
     public class Options
     {
+        /// <summary>
+        /// Multiplier applied to <see cref="MaxDegreeOfParallelismForPostResourceItem" /> when deriving the
+        /// automatic processing-block capacity: enough buffered items to keep every POST worker busy through
+        /// several rounds of refills without reintroducing meaningful memory retention (see APIPUB-112).
+        /// </summary>
+        public const int AutoCapacityPostParallelismMultiplier = 4;
+
+        /// <summary>
+        /// Multiplier applied to <see cref="MaxDegreeOfParallelismForStreamResourcePages" /> when deriving the
+        /// page-streaming block's capacity floor: one page in flight per fetch worker plus one queued behind it,
+        /// so page-fetch parallelism is never starved by the bound. At shipped defaults this floor -- not
+        /// <see cref="ProcessingBlockBoundedCapacity" /> -- produces the dominant retention term
+        /// (floor x <see cref="StreamingPageSize" /> items per resource), so the effective levers for reducing
+        /// retention are <see cref="MaxDegreeOfParallelismForStreamResourcePages" /> and
+        /// <see cref="StreamingPageSize" />, not this option (see API-Publisher-Configuration.md).
+        /// </summary>
+        public const int PagesCapacityStreamParallelismMultiplier = 2;
+
+        /// <summary>
+        /// Maximum number of already-formed error batches allowed to queue for publication behind the
+        /// (bounded) error ingestion block. Total pending errors can therefore reach approximately
+        /// <see cref="ResolvedErrorPublishingBoundedCapacity" /> plus this value x
+        /// <see cref="ErrorPublishingBatchSize" /> (150 at shipped defaults), not the ingestion bound alone.
+        /// </summary>
+        public const int MaxQueuedErrorBatches = 4;
+
         private readonly ILogger _logger = Log.Logger;
 
         public int BearerTokenRefreshMinutes { get; set; } = 12;
@@ -68,6 +94,65 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         }
 
         public int MaxDegreeOfParallelismForStreamResourcePages { get; set; } = 5;
+
+        /// <summary>
+        /// Caps the number of items that each resource-processing Dataflow block will buffer so that a slow
+        /// target exerts backpressure on source page streaming, rather than buffering source items in memory
+        /// without limit (see APIPUB-112). A value of 0 (the default) derives the capacity automatically from
+        /// <see cref="StreamingPageSize" /> and <see cref="MaxDegreeOfParallelismForPostResourceItem" />;
+        /// -1 disables the bound entirely (restoring the pre-APIPUB-112 behavior). Values below -1 are invalid:
+        /// they are rejected by CLI options validation, and the resolved capacity properties throw if one is
+        /// ever used directly.
+        /// </summary>
+        public int ProcessingBlockBoundedCapacity { get; set; }
+
+        /// <summary>
+        /// Gets the effective bounded capacity to apply to resource-processing Dataflow blocks. Returns -1
+        /// (equivalent to <c>DataflowBlockOptions.Unbounded</c>) when bounding has been explicitly disabled.
+        /// An explicit capacity is never allowed below <see cref="MaxDegreeOfParallelismForPostResourceItem" />
+        /// so that item-level parallelism cannot be starved by the bound.
+        /// </summary>
+        public int ResolvedProcessingBlockBoundedCapacity
+            => ProcessingBlockBoundedCapacity switch
+            {
+                < -1 => throw new InvalidOperationException(
+                    $"Processing block bounded capacity of '{ProcessingBlockBoundedCapacity}' is invalid. Valid values are -1 (unbounded), 0 (automatic), or a positive capacity."),
+                -1 => -1,
+                0 => Math.Max(StreamingPageSize, AutoCapacityPostParallelismMultiplier * MaxDegreeOfParallelismForPostResourceItem),
+                _ => Math.Max(ProcessingBlockBoundedCapacity, MaxDegreeOfParallelismForPostResourceItem),
+            };
+
+        /// <summary>
+        /// Gets the effective bounded capacity for the block that fetches pages of source items. This capacity
+        /// is denominated in page messages rather than items because of how a TransformManyBlock's bound works:
+        /// expanded outputs do count toward the bound once produced, but input acceptance is gated in message
+        /// units (each unprocessed input counts as 1) and every accepted input is still processed even after
+        /// expansion has pushed the count past the bound. Upstream delivers all page messages instantly, so an
+        /// item-denominated bound of N would admit up to N whole page messages -- N x StreamingPageSize items --
+        /// before the first expansion lands (verified by the TransformManyBlock semantics test in
+        /// BackpressureTests). With a page-denominated bound, worst-case per-resource retention is approximately
+        /// (this value x StreamingPageSize) + <see cref="ResolvedProcessingBlockBoundedCapacity" /> items.
+        /// Returns -1 when bounding is disabled.
+        /// </summary>
+        public int ResolvedStreamResourcePagesBlockBoundedCapacity
+            => ResolvedProcessingBlockBoundedCapacity == -1
+                ? -1
+                : Math.Max(
+                    PagesCapacityStreamParallelismMultiplier * MaxDegreeOfParallelismForStreamResourcePages,
+                    ResolvedProcessingBlockBoundedCapacity / Math.Max(1, StreamingPageSize));
+
+        /// <summary>
+        /// Gets the effective bounded capacity for the error publishing ingestion block. Errors awaiting
+        /// publication would otherwise queue without limit when they are produced faster than they can be
+        /// published (e.g. during a sustained authorization-failure storm -- see APIPUB-112). The capacity
+        /// is denominated in error messages and is kept at twice <see cref="ErrorPublishingBatchSize" /> so
+        /// batches can always form. Returns -1 when bounding is disabled via
+        /// <see cref="ProcessingBlockBoundedCapacity" />.
+        /// </summary>
+        public int ResolvedErrorPublishingBoundedCapacity
+            => ResolvedProcessingBlockBoundedCapacity == -1
+                ? -1
+                : 2 * Math.Max(1, ErrorPublishingBatchSize);
 
         public int StreamingPagesWaitDurationSeconds { get; set; } = 10;
 

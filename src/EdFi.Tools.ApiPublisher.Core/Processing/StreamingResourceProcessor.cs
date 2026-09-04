@@ -75,20 +75,37 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             string resourceKey = kvp.Key;
             string resourcePath = ResourcePathHelper.GetResourcePath(resourceKey);
 
+            // Is this an authorization retry "resource"?
+            bool isRetryPipeline = resourceKey.EndsWith(Conventions.RetryKeySuffix);
+
             var createBlocksRequest = new CreateBlocksRequest(
                 processingContext.Options,
                 processingContext.AuthorizationFailureHandling,
                 processingContext.PublishErrorsIngestionBlock,
-                processingContext.JavaScriptModuleFactory);
+                processingContext.JavaScriptModuleFactory)
+            {
+                IsRetryPipeline = isRetryPipeline,
+            };
 
             // This creates the actual processing sub-pipeline ingesting TProcessDataMessage through to ErrorItemMessages
             var (processingInputBlock, processingOutputBlock) = createProcessingBlocks(createBlocksRequest);
 
-            // Is this an authorization retry "resource"? 
-            if (resourceKey.EndsWith(Conventions.RetryKeySuffix))
+            if (isRetryPipeline)
             {
-                // Save an action delegate for processing the item, keyed by the resource path
-                postAuthorizationRetryByResourceKey.Add(resourcePath, msg => processingInputBlock.Post((TProcessDataMessage)msg));
+                // Save an action delegate for processing the item, keyed by the resource path.
+                // NOTE: Retry pipeline blocks are never bounded, so the Post here can only be declined if the
+                // block has already completed (see APIPUB-112).
+                postAuthorizationRetryByResourceKey.Add(
+                    resourcePath,
+                    msg =>
+                    {
+                        if (!processingInputBlock.Post((TProcessDataMessage)msg))
+                        {
+                            _logger.Error(
+                                "{ResourcePath}: Authorization retry message was declined by the retry processing block and will not be reprocessed.",
+                                resourcePath);
+                        }
+                    });
             }
 
             streamingPagesByResourceKey.Add(resourceKey, new StreamingPagesItem { CompletionBlock = processingOutputBlock });
@@ -97,9 +114,12 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>> streamResourceBlock =
                 _streamResourceBlockFactory.CreateBlock(createProcessDataMessages, processingContext.PublishErrorsIngestionBlock, processingContext.Options, cancellationToken);
 
-            // Create a new StreamResourcePages block
+            // Create a new StreamResourcePages block (unbounded for retry pipelines -- see CreateBlocksRequest.IsRetryPipeline)
             TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> streamResourcePagesBlock =
-                _streamResourcePagesBlockFactory.CreateBlock<TProcessDataMessage>(processingContext.Options, processingContext.PublishErrorsIngestionBlock);
+                _streamResourcePagesBlockFactory.CreateBlock<TProcessDataMessage>(
+                    processingContext.Options,
+                    processingContext.PublishErrorsIngestionBlock,
+                    applyBoundedCapacity: !isRetryPipeline);
 
             // Link together the general pipeline
             streamResourceBlock.LinkTo(streamResourcePagesBlock, linkOptions);
@@ -109,7 +129,9 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             streamingResourceBlockByResourceKey.Add(resourceKey, streamResourceBlock);
         }
 
-        var cancellationSource = new CancellationTokenSource();
+        // Linked to the run's token so external cancellation also releases producers parked on bounded
+        // blocks via the per-message cancellation source (see APIPUB-112)
+        var cancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         // Initiate streaming of all resources, with dependencies
         foreach (var kvp in processingContext.DependencyKeysByResourceKey)

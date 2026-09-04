@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
+using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -45,14 +46,22 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         public (ITargetBlock<GetItemForKeyChangeMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
             CreateBlocksRequest createBlocksRequest)
         {
+            // Retry pipelines are never bounded (see CreateBlocksRequest.IsRetryPipeline). Key changes are not
+            // currently routed through retry pipelines, but honor the flag here so the invariant is local
+            // rather than implied by the calling composition.
+            int boundedCapacity = createBlocksRequest.IsRetryPipeline
+                ? DataflowBlockOptions.Unbounded
+                : createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+
             TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> getItemForKeyChangeBlock
                 = CreateGetItemForKeyChangeBlock(
                     _targetEdFiApiClientProvider.GetApiClient(),
                     createBlocksRequest.Options,
-                    createBlocksRequest.ErrorHandlingBlock);
+                    createBlocksRequest.ErrorHandlingBlock,
+                    boundedCapacity);
 
             TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> changeKeyResourceBlock
-                = CreateChangeKeyBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options);
+                = CreateChangeKeyBlock(_targetEdFiApiClientProvider.GetApiClient(), createBlocksRequest.Options, boundedCapacity);
 
             getItemForKeyChangeBlock.LinkTo(changeKeyResourceBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
@@ -62,7 +71,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage> CreateGetItemForKeyChangeBlock(
             EdFiApiClient targetApiClient,
             Options options,
-            ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            int boundedCapacity)
         {
             var getItemForKeyChangeBlock = new TransformManyBlock<GetItemForKeyChangeMessage, ChangeKeyMessage>(
                 async message =>
@@ -148,7 +158,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             };
 
                             // Publish the failure
-                            errorHandlingBlock.Post(error);
+                            await errorHandlingBlock.SendErrorAsync(error, message.CancellationToken).ConfigureAwait(false);
 
                             // No key changes to process
                             return Enumerable.Empty<ChangeKeyMessage>();
@@ -167,7 +177,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 message.ResourceUrl, sourceId, apiResponse.StatusCode);
                         }
 
-                        var getByKeyResults = JArray.Parse(responseContent);
+                        var getByKeyResults = JArray.Parse(responseContent, JsonHelpers.NoLineInfoLoadSettings);
 
                         // If the item whose key is to be changed cannot be found...
                         if (getByKeyResults.Count == 0)
@@ -230,7 +240,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             {
                                 ResourceUrl = message.ResourceUrl,
                                 Id = targetId,
-                                Body = existingResourceItem.ToString(),
+                                // Serialized compactly: the body rides in pipeline messages and is retained
+                                // verbatim on error messages, matching the POST path (see APIPUB-112)
+                                Body = existingResourceItem.ToString(Formatting.None),
                                 SourceId = message.SourceId,
                             }
                         };
@@ -257,7 +269,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
                 }, new ExecutionDataflowBlockOptions
                 {
-                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                    // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                    BoundedCapacity = boundedCapacity
                 });
 
             return getItemForKeyChangeBlock;
@@ -286,7 +301,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         }
 
         private TransformManyBlock<ChangeKeyMessage, ErrorItemMessage> CreateChangeKeyBlock(
-            EdFiApiClient targetApiClient, Options options)
+            EdFiApiClient targetApiClient, Options options, int boundedCapacity)
         {
             var changeKey = new TransformManyBlock<ChangeKeyMessage, ErrorItemMessage>(
                 async msg =>
@@ -353,7 +368,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             Method = HttpMethod.Put.ToString(),
                             ResourceUrl = msg.ResourceUrl,
                             Id = id,
-                            Body = ParseToJObjectOrDefault(msg.Body),
+                            Body = JsonHelpers.ToValidatedJsonRawOrDefault(msg.Body),
                             ResponseStatus = apiResponse.StatusCode,
                             ResponseContent = responseContent
                         };
@@ -398,26 +413,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 #pragma warning restore S2139
             }, new ExecutionDataflowBlockOptions
             {
-                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem
+                MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
+
+                // Bound the buffers so a slow target exerts backpressure on source page streaming (see APIPUB-112)
+                BoundedCapacity = boundedCapacity
             });
 
             return changeKey;
-
-            JObject ParseToJObjectOrDefault(string json)
-            {
-                JObject body = null;
-
-                try
-                {
-                    body = JObject.Parse(json);
-                }
-                catch
-                {
-                    // ignored
-                }
-
-                return body;
-            }
         }
 
         public IEnumerable<GetItemForKeyChangeMessage> CreateProcessDataMessages(StreamResourcePageMessage<GetItemForKeyChangeMessage> message, string json)
@@ -428,7 +430,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 yield break;
             }
 
-            JArray items = JArray.Parse(json);
+            JArray items = JArray.Parse(json, JsonHelpers.NoLineInfoLoadSettings);
 
             // Iterate through the page of items
             foreach (var item in items.OfType<JObject>())

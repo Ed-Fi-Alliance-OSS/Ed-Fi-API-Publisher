@@ -35,6 +35,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             Options options,
             CancellationToken cancellationToken)
         {
+            // NOTE: This block is deliberately left unbounded (see APIPUB-112). It receives exactly one
+            // StreamResourceMessage per resource and its output holds only lightweight offset/limit page
+            // messages, while its delegate performs the dependency waits and processing-semaphore acquisition
+            // below -- bounding it would risk interfering with that coordination for no memory benefit.
             return new TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>>(
                 async msg =>
                 {

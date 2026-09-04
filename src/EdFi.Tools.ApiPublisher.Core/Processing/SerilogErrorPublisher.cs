@@ -12,8 +12,10 @@ using System.Threading.Tasks;
 namespace EdFi.Tools.ApiPublisher.Core.Processing
 {
     /// <summary>
-    /// Publishes errors without the original request content (due to security considerations) by logging
-    /// the JSON serialized representations of the <see cref="ErrorItemMessage" />.
+    /// Publishes errors by logging the JSON serialized representations of the <see cref="ErrorItemMessage" />.
+    /// NOTE: the serialized output currently includes the failed request body (<see cref="ErrorItemMessage.Body" />),
+    /// which may contain PII -- whether to exclude it (e.g. by restoring the [JsonIgnore] on that property)
+    /// is a pending decision tracked as a follow-up to APIPUB-112.
     /// </summary>
     public class SerilogErrorPublisher : IErrorPublisher
     {

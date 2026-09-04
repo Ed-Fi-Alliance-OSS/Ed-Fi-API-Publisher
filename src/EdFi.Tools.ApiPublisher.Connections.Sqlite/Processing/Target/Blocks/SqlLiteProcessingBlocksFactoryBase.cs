@@ -39,6 +39,20 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
     public (ITargetBlock<TProcessDataMessage>, ISourceBlock<ErrorItemMessage>) CreateProcessingBlocks(
         CreateBlocksRequest createBlocksRequest)
     {
+        // Retry pipelines are never bounded: they are fed by a synchronous Post that would silently drop
+        // declined messages. This connector's flows are not currently retry-routed, but the flag is honored
+        // locally so the invariant holds here rather than by distant composition (see APIPUB-112).
+        //
+        // Unlike the API target blocks, every message this block receives carries a WHOLE PAGE of items
+        // (see CreateProcessDataMessages below), so the item-denominated capacity must be converted to
+        // page messages -- applying it directly would admit that many whole pages (at shipped defaults,
+        // roughly 500 pages against a documented ceiling of ~5,500 items).
+        int resolvedItemCapacity = createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
+
+        int boundedCapacity = createBlocksRequest.IsRetryPipeline || resolvedItemCapacity == -1
+            ? DataflowBlockOptions.Unbounded
+            : Math.Max(1, resolvedItemCapacity / Math.Max(1, createBlocksRequest.Options.StreamingPageSize));
+
         var block = new TransformManyBlock<ResourceJsonMessage, ErrorItemMessage>(
             async msg =>
             {
@@ -127,7 +141,14 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
                     return new[] { error };
                 }
             },
-            new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = 1 });
+            new ExecutionDataflowBlockOptions
+            {
+                MaxDegreeOfParallelism = 1,
+
+                // The single-threaded SQLite writer is the slowest consumer in the codebase; bound its buffer
+                // so a slow write path exerts backpressure on source page streaming (see APIPUB-112)
+                BoundedCapacity = boundedCapacity
+            });
 
         return (block, block);
     }

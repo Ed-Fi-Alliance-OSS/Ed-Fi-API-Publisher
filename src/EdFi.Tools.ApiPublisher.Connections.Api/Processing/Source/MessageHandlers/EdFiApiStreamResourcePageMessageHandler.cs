@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
+using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Newtonsoft.Json;
@@ -134,7 +135,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         };
 
                         // Publish the failure
-                        errorHandlingBlock.Post(error);
+                        await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
                         _logger.Error("{ResourceUrl}: GET page items failed with response status '{StatusCode}'.",
                             message.ResourceUrl, apiResponse.StatusCode);
@@ -169,7 +170,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         };
 
                         // Publish the failure
-                        errorHandlingBlock.Post(error);
+                        await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
                         var logMessage = $"{message.ResourceUrl}: JSON parsing of source page data failed: {ex}{Environment.NewLine}{responseContent}";
                         _logger.Error(ex, logMessage);
@@ -180,7 +181,8 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     if (!options.UseReversePaging)
                     {
                         // Perform limit/offset final page check (for need for possible continuation)
-                        if (message.IsFinalPage && JArray.Parse(responseContent).Count == limit)
+                        // (Item count is derived without re-parsing the page into a JToken graph -- see APIPUB-112)
+                        if (message.IsFinalPage && JsonHelpers.CountTopLevelArrayItems(responseContent) == limit)
                         {
                             if (_logger.IsEnabled(LogEventLevel.Debug))
                             {
@@ -240,7 +242,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             };
 
             // Publish the failure
-            errorHandlingBlock.Post(error);
+            await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
             return Array.Empty<TProcessDataMessage>();
         }

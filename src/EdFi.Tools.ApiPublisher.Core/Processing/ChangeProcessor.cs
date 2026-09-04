@@ -95,6 +95,26 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             try
             {
+                // Surface the effective backpressure configuration at Information level so operators (and support)
+                // can tell from the log whether a run is bounded, and that paused page fetching is intentional.
+                // Kept inside the try because the resolved properties throw for invalid (< -1) values when a
+                // library consumer bypasses CLI options validation.
+                if (options.ProcessingBlockBoundedCapacity == -1)
+                {
+                    _logger.Information(
+                        "Processing block bounding is disabled (processingBlockBoundedCapacity is -1); pipeline buffers may grow without limit while the target is slower than the source.");
+                }
+                else
+                {
+                    _logger.Information(
+                        "Processing block bounding is active (processingBlockBoundedCapacity setting: {ConfiguredCapacity}): up to {ItemCapacity} items per resource-processing block, {PageCapacity} page messages per page-streaming block, and roughly {ErrorCapacity} pending errors (ingestion queue plus queued publishing batches) will be buffered. When buffers are full, source page fetching pauses until the target catches up -- slower or paused page fetching under a slow target is the bound working, not a hang.",
+                        options.ProcessingBlockBoundedCapacity,
+                        options.ResolvedProcessingBlockBoundedCapacity,
+                        options.ResolvedStreamResourcePagesBlockBoundedCapacity,
+                        options.ResolvedErrorPublishingBoundedCapacity
+                            + (Options.MaxQueuedErrorBatches * Math.Max(1, options.ErrorPublishingBatchSize)));
+                }
+
                 // Check Ed-Fi API and Standard versions for compatibility
                 await _edFiVersionsChecker.CheckApiVersionsAsync(configuration).ConfigureAwait(false);
 
@@ -180,6 +200,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // Wait for all errors to be published.
                 _logger.Debug($"Waiting for all errors to be published.");
                 publishErrorsCompletionBlock.Completion.Wait();
+
+                // A failing error publisher no longer faults the pipeline (a faulted sink would sever its
+                // links and strand producers, hanging the run); surface the recorded failure here instead --
+                // the same point where a publisher fault surfaced before bounding was introduced -- so the
+                // run still fails with a non-zero exit rather than reporting success with unpublished errors.
+                if (_publishErrorsBlocksFactory.FirstPublishingException is not null)
+                {
+                    throw new AggregateException(
+                        "Error publishing failed, so the published error information is incomplete.",
+                        _publishErrorsBlocksFactory.FirstPublishingException);
+                }
 
                 EnsureProcessingWasSuccessful(keyChangesTaskStatuses, postTaskStatuses, deleteTaskStatuses);
 
@@ -404,8 +435,35 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             void AdjustDependenciesForConfiguredAuthorizationConcerns()
             {
+                // Skip entries that reference resources unknown to the source's dependency graph (e.g. a
+                // "/ed-fi/parents" entry against a Data Standard 5.x source, where the resource is
+                // "/ed-fi/contacts"). Registering such an entry used to crash the run with a
+                // KeyNotFoundException when the retry node's prerequisite was looked up for streaming.
+                var applicableAuthorizationFailureHandling = authorizationFailureHandling
+                    .Where(
+                        x =>
+                        {
+                            var missingPaths = new[] { x.Path }
+                                .Concat(x.UpdatePrerequisitePaths)
+                                .Where(path => !postDependencyKeysByResourceKey.ContainsKey(path))
+                                .ToArray();
+
+                            if (missingPaths.Length > 0)
+                            {
+                                _logger.Warning(
+                                    "The authorizationFailureHandling entry for '{Path}' will be ignored because the following resource path(s) do not exist in the source API's dependency graph (the entry may target a different Data Standard version): {MissingPaths}",
+                                    x.Path,
+                                    string.Join(", ", missingPaths));
+
+                                return false;
+                            }
+
+                            return true;
+                        })
+                    .ToArray();
+
                 // Adjust dependencies for authorization failure handling metadata
-                var dependencyAdjustments = authorizationFailureHandling
+                var dependencyAdjustments = applicableAuthorizationFailureHandling
                     .Select(x => new
                     {
                         RetryResourceKey = $"{x.Path}{Conventions.RetryKeySuffix}",

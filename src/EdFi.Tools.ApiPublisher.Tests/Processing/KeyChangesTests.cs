@@ -221,6 +221,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 }
             }
 
+            [Test]
+            public void Should_PUT_key_change_updates_as_compact_single_line_JSON()
+            {
+                // The updated resource body rides in pipeline messages and is retained verbatim on error
+                // messages, so it must be serialized compactly like the POST path (see APIPUB-112)
+                A.CallTo(
+                        () => _fakeTargetRequestHandler.Put(
+                            A<string>.Ignored,
+                            A<HttpRequestMessage>.That.Matches(
+                                msg => msg.Content.ReadAsStringAsync().Result.Contains('\n'))))
+                    .MustNotHaveHappened();
+            }
+
             // [Test]
             // public void Should_log_something()
             // {

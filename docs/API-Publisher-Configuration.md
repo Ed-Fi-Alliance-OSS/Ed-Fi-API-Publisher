@@ -5,7 +5,7 @@ The Ed-Fi API Publisher provides a hierarchical organization of configuration in
 The first layer of configuration values are provided by the _publisherSettings.json_ file, which should reside in the same folder as the Ed-Fi API Publisher's binaries. This file contains the general Options available for altering the runtime behavior.
 The Options values can also be supplied (overridden) using environment variables or command-line arguments, as needed.
 
-Command-line arguments take precedence over environment variables, which in turn take precedence over the values defined in the _publisherSettings.json_ configuration file. To use environment variables to provide configuration values, use the "Configuration Path" from the tables below, and add an `EdFi:Publisher:` prefix to the name of each variable. For example, to specify a named connection for the source API using an environment variable, use an environment variable name of `EdFi:Publisher:Connections:Source:Name`.
+Command-line arguments take precedence over environment variables, which in turn take precedence over the values defined in the _publisherSettings.json_ configuration file. To use environment variables to provide configuration values, use the "Configuration Path" from the tables below, and add an `EdFi:ApiPublisher:` prefix to the name of each variable. For example, to specify a named connection for the source API using an environment variable, use an environment variable name of `EdFi:ApiPublisher:Connections:Source:Name`.
 
 ## Options
 
@@ -21,6 +21,7 @@ Defines general behavior of the Ed-Fi API Publisher.
 | Options:MaxDegreeOfParallelismForStreamResourcePages<br/>`--maxDegreeOfParallelismForStreamResourcePages` | Indicates the total number of threads that could be simultaneously issuing paged GET requests against the source API for each resource being processed.<br/>(_Default value: 5_)                                                                                                           |
 | Options:StreamingPagesWaitDurationSeconds<br/>`--streamingPagesWaitDurationSeconds`                       | Indicates the number of seconds to wait for the streaming of any of the currently streaming resources to complete before providing an update on progress using the logger.<br/>(_Default value: 10_)                                                                                       |
 | Options:StreamingPageSize<br/>`--streamingPageSize`                                                       | Indicates the number of items to include in each page when streaming resources from the source API.<br/>(_Default value: 75_)                                                                                                                                                              |
+| Options:ProcessingBlockBoundedCapacity<br/>`--processingBlockBoundedCapacity`                             | Caps the number of items each resource-processing block will buffer so that a slow target exerts backpressure on source page streaming instead of buffering source items in memory without limit. Use `0` for an automatic capacity, `-1` to disable the bounds entirely, or any positive number for an explicit capacity; any other value fails options validation. See [Backpressure and the memory ceiling](#backpressure-and-the-memory-ceiling) below for how the ceiling is derived and which settings actually control it.<br/>(_Default value: 0_) |
 | Options:IncludeDescriptors<br/>`--includeDescriptors`                                                     | Indicates whether or not to attempt to publish descriptors.<br/>(_Default value: false_)                                                                                                                                                                                                   |
 | Options:ErrorPublishingBatchSize<br/>`--errorPublishingBatchSize`                                         | Indicates the number of items to batch in each call to the error writer. This could be used to optimize the size of a batch write depending on the operating environment (e.g. Amazon DynamoDB allows for 25 items to be written in a BatchWriteItem operation).<br/>(_Default value: 25_) |
 | Options:RemediationsScriptFile<br/>`--remediationsScriptFile`                                             | Indicates the file system path to a JavaScript file containing [remediations](Remediations.md) for failed POST requests against the target API. |
@@ -44,6 +45,23 @@ The publisher refreshes its bearer token while a run is in progress, and recover
 - When the token can no longer be obtained at all, the run ends with a `FATAL` log entry rather than continuing to send requests that the API will reject.
 
 **Behavior change:** a run that cannot authenticate now exits with a non-zero exit code. Earlier versions could log the failure, keep going, and still exit `0`, so automation that treats a zero exit code as success will begin to see failures it previously did not.
+
+### Backpressure and the memory ceiling
+
+When the target API is slower than the source, the publisher's internal buffers are bounded so that source page fetching pauses instead of accumulating fetched items in memory without limit. `ProcessingBlockBoundedCapacity` controls this behavior:
+
+- `0` (default) — automatic: the item buffer per resource-processing block is `max(StreamingPageSize, 4 × MaxDegreeOfParallelismForPostResourceItem)`.
+- `-1` — disables all the buffering bounds (the memory-growth rollback lever; the compact error bodies and other memory improvements still apply).
+- Any positive number — an explicit item capacity (values below `MaxDegreeOfParallelismForPostResourceItem` are raised to it so POST workers are never starved).
+- Any other value fails options validation with a non-zero exit.
+
+The same option governs the error publishing queue, so a sustained error storm also exerts backpressure instead of queueing errors in memory without limit. The ingestion queue is capped at `2 × ErrorPublishingBatchSize` pending errors, and up to 4 more already-formed batches can be queued for publication behind it — a total of roughly `6 × ErrorPublishingBatchSize` pending errors (150 at shipped defaults), each of which can carry a full document body. Both are unbounded under `-1`.
+
+**What the ceiling actually is.** The capacity is per block, not a process-wide total. Each live resource pipeline can hold up to roughly `(pagesBlockCapacity × StreamingPageSize) + itemCapacity` items across its buffers, where `pagesBlockCapacity = max(2 × MaxDegreeOfParallelismForStreamResourcePages, itemCapacity ÷ StreamingPageSize)`, and up to `MaxDegreeOfParallelismForResourceProcessing` resource pipelines stream concurrently. Delete and key-change pipelines chain two bounded item blocks, so their per-resource item term is `2 × itemCapacity`. With shipped defaults that is on the order of thousands of items per resource rather than hundreds — still a fixed configuration-derived ceiling that does not grow with resource size. (Two small resource-proportional allocations remain: the per-resource list of page descriptors and the final-page continuation accumulator — both hold lightweight offset/limit entries rather than documents.)
+
+**Which settings actually lower the ceiling.** At typical settings the dominant term is the page buffer floor — `2 × MaxDegreeOfParallelismForStreamResourcePages` whole pages, kept so page-fetch workers are never starved — and `ProcessingBlockBoundedCapacity` cannot reduce it. For example, at `StreamingPageSize=500` and `MaxDegreeOfParallelismForStreamResourcePages=10`, the page buffer holds up to `2 × 10 = 20` pages = 10,000 items per resource no matter what this option is set to; lowering the option from automatic (500) to 100 only trims the much smaller item buffer. To materially reduce per-resource retention, lower `MaxDegreeOfParallelismForStreamResourcePages` and/or `StreamingPageSize` (and `MaxDegreeOfParallelismForResourceProcessing` to reduce how many resources buffer concurrently); use `ProcessingBlockBoundedCapacity` to raise the item buffer above its automatic value or to disable bounding entirely.
+
+**Operational notes.** Slower or paused source page fetching while the target catches up is the bound working as intended, not a hang — the log reports the resolved capacities (items, page messages, pending errors) at startup. Resources configured for authorization-failure retry in `authorizationFailureHandling` are re-streamed through a deliberately unbounded retry pipeline after their update prerequisites complete, so the ceiling above does not apply to that second pass.
 
 ## API Connections
 
@@ -100,7 +118,9 @@ NOTE: This part of the configuration can only be defined in the _publisherSettin
 | /authorizationFailureHandling\[\*]/path                    | The partial path for the resource (e.g. _/ed-fi/students_) for which additional 403 Forbidden processing should be performed.                                                                                |
 | /authorizationFailureHandling\[\*]/updatePrerequisitePaths | An array of partial paths for the resource(s) (e.g. _/ed-fi/studentSchoolAssociations_) that should be processed before attempting to retry the original request which resulted in an authorization failure. |
 
-The default configuration, which will probably suffice for all current Ed-Fi ODS API deployments, is as follows:
+The default configuration targets Data Standard 5.x and later, where the parent resource is `/ed-fi/contacts`. For sources on Data Standard 4.0 or earlier, replace that entry with `/ed-fi/parents` → `/ed-fi/studentParentAssociations`. An entry whose path or prerequisites do not exist in the source's dependency graph is skipped with a warning in the log (it does not fail the run).
+
+The default configuration is as follows:
 ```json
 {  
   "options":   
@@ -120,8 +140,8 @@ The default configuration, which will probably suffice for all current Ed-Fi ODS
       ]  
     },  
     {  
-      "path": "/ed-fi/parents",  
-      "updatePrerequisitePaths": ["/ed-fi/studentParentAssociations"]  
+      "path": "/ed-fi/contacts",  
+      "updatePrerequisitePaths": ["/ed-fi/studentContactAssociations"]  
     }
   ]
 }
