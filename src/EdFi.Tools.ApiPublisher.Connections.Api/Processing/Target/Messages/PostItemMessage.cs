@@ -11,6 +11,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
     {
         public string ResourceUrl { get; set; }
 
+        /// <summary>
+        /// The source item's "id", stamped the first time processing reads a valid id from
+        /// <see cref="Item"/> so that it survives after <see cref="Item"/> is released once the item has
+        /// been processed.
+        /// </summary>
+        public string Id { get; set; }
+
         public JObject Item { get; set; }
 
         /// <summary>

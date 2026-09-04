@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
@@ -411,11 +412,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     return null;
                 }
 
+                // The source "id" is used only to identify the item in log messages -- the delete itself is
+                // driven entirely by "keyValues", so a missing/invalid id does not prevent processing.
                 return new GetItemForDeletionMessage
                 {
                     ResourceUrl = message.ResourceUrl.TrimSuffix(EdFiApiConstants.DeletesPathSuffix),
                     KeyValues = obj[EdFiApiConstants.KeyValuesPropertyName],
-                    Id = obj["id"].Value<string>(),
+                    Id = obj["id"].SafeValue(),
                     CancellationToken = message.CancellationSource.Token,
                 };
             }

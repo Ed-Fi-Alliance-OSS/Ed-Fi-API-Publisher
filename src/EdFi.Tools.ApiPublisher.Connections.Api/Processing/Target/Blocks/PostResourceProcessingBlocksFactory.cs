@@ -146,7 +146,64 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 
-            string id = postItemMessage.Item["id"].Value<string>();
+            // Item is released (set to null) once a message has been processed so the JObject can be GC'd.
+            // Guard against a message re-entering processing after that point rather than letting the
+            // block fault on a null dereference (which would abandon the remaining items).
+            if (postItemMessage.Item is null)
+            {
+                _logger.Error(
+                    "{ResourceUrl} (source id: {Id}): Source item data is no longer available for processing and the item cannot be published.",
+                    postItemMessage.ResourceUrl, postItemMessage.Id ?? "unknown");
+
+                return new[]
+                {
+                    new ErrorItemMessage
+                    {
+                        Method = HttpMethod.Post.ToString(),
+                        ResourceUrl = postItemMessage.ResourceUrl,
+                        Id = postItemMessage.Id,
+                    }
+                };
+            }
+
+            var idToken = postItemMessage.Item["id"];
+            string id = idToken.SafeValue();
+
+            // A source item without a valid id cannot be published -- report it as a controlled error
+            // rather than letting the processing block fault (which would abandon the remaining items)
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                _logger.Error(
+                    "{ResourceUrl}: Source item has a missing or invalid 'id' property and will not be published.",
+                    postItemMessage.ResourceUrl);
+
+                // Unlike an ordinary POST failure, there is no target response to correlate the source
+                // payload against, so it is not retained in the error record (avoids logging potentially
+                // sensitive source data for a class of error that previously never reached this far).
+                // The same applies to the id itself: a scalar reaching this point can only be null, empty or
+                // whitespace, but an object or array could carry arbitrary nested source data, so only its
+                // token type is recorded -- never its contents.
+                var invalidIdError = new ErrorItemMessage
+                {
+                    Method = HttpMethod.Post.ToString(),
+                    ResourceUrl = postItemMessage.ResourceUrl,
+                    Id = idToken switch
+                    {
+                        null => null,
+                        JValue => idToken.ToString(Newtonsoft.Json.Formatting.None),
+                        _ => $"<invalid id: {idToken.Type}>",
+                    },
+                    Body = null,
+                };
+
+                postItemMessage.Item = null;
+
+                return new[] { invalidIdError };
+            }
+
+            // Preserve the id independently of Item so it remains available for identifying this message
+            // after Item has been released by the finally block below (see the Item-is-null guard above).
+            postItemMessage.Id = id;
 
             try
             {
@@ -648,7 +705,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug("{ResourceUrl}: Adding individual action message of type '{NameofPostItemMessage}' for item '{ItemId}'...",
-                        message.ResourceUrl, nameof(PostItemMessage), item["id"]?.Value<string>() ?? "unknown");
+                        message.ResourceUrl, nameof(PostItemMessage), item["id"].SafeValue() ?? "unknown");
                 }
 
                 yield return itemMessage;
