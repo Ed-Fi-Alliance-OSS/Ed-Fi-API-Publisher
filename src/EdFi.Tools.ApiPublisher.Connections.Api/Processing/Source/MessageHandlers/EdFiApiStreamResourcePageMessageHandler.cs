@@ -37,8 +37,12 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
         IPageRequestStrategy pageRequestStrategy,
         IRateLimiting<HttpResponseMessage> rateLimiter = null)
     {
-        _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
-        _pageRequestStrategy = pageRequestStrategy;
+        _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider
+            ?? throw new ArgumentNullException(nameof(sourceEdFiApiClientProvider));
+
+        _pageRequestStrategy = pageRequestStrategy
+            ?? throw new ArgumentNullException(nameof(pageRequestStrategy));
+
         _rateLimiter = rateLimiter;
     }
 
