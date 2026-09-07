@@ -15,6 +15,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Isolation;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Versioning;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
@@ -107,6 +108,11 @@ public class EdFiApiAsSourceModule : Module
                 .As<IStreamResourcePageMessageProducer>()
                 .SingleInstance();
         }
+
+        // Register the strategy that addresses successive page requests (offset/limit, see APIPUB-138)
+        builder.RegisterType<OffsetPageRequestStrategy>()
+            .As<IPageRequestStrategy>()
+            .SingleInstance();
 
         // Register handler to perform page-based requests against a Source API
         builder.RegisterType<EdFiApiStreamResourcePageMessageHandler>()
