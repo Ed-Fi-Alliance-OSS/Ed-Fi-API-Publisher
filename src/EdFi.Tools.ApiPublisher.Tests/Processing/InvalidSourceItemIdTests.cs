@@ -42,6 +42,25 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     {
         private const string ResourcePath = "/ed-fi/stateEducationAgencies";
 
+        private static PostResourceProcessingBlocksFactory CreatePostFactory(
+            IFakeHttpRequestHandler fakeTargetRequestHandler)
+        {
+            EdFiApiClient TargetApiClientFactory() =>
+                new EdFiApiClient(
+                    "TestTarget",
+                    TestHelpers.GetTargetApiConnectionDetails(),
+                    bearerTokenRefreshMinutes: 27,
+                    ignoreSslErrors: true,
+                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeTargetRequestHandler));
+
+            return new PostResourceProcessingBlocksFactory(
+                A.Fake<INodeJSService>(),
+                new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)),
+                TestHelpers.GetSourceApiConnectionDetails(),
+                A.Fake<ISourceCapabilities>(),
+                A.Fake<ISourceResourceItemProvider>());
+        }
+
         // Stands in for nested source data that must never reach the error log by way of the invalid id
         private const string SensitiveNestedValue = "123-45-6789";
 
@@ -160,16 +179,70 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         break;
                 }
 
-                // A controlled error message must be logged for the operator
+                // The error record must locate the document within the source (metadata only) -- without it the
+                // operator knows only which resource failed, and every subsequent run re-streams the same window
+                // and fails identically because the last change version is withheld
+                error.SourcePage.ShouldNotBeNullOrWhiteSpace();
+                error.SourcePage.ShouldContain("offset 0");
+                error.SourceItemIndex.ShouldBe(1, "the corrupted item is the second element of the page array");
+
+                // A controlled error message must be logged for the operator, carrying the same locator and
+                // naming the shape of the id that was actually found
                 var errorMessages = TestCorrelator.GetLogEventsFromCurrentContext()
                     .Where(logEvent => logEvent.Level == LogEventLevel.Error)
                     .Select(logEvent => logEvent.RenderMessage())
                     .ToList();
 
+                string expectedIdProblem = invalidIdVariant switch
+                {
+                    "missing" => "has no 'id' property",
+                    "null" => "has a null 'id'",
+                    "empty" => "has an empty 'id'",
+                    "object" => "has an 'id' of JSON type Object",
+                    "array" => "has an 'id' of JSON type Array",
+                    _ => throw new ArgumentOutOfRangeException(nameof(invalidIdVariant)),
+                };
+
                 errorMessages.ShouldContain(
-                    message => message.Contains(ResourcePath) && message.Contains("'id'"),
+                    message => message.Contains(ResourcePath)
+                        && message.Contains(expectedIdProblem)
+                        && message.Contains(error.SourcePage)
+                        && message.Contains("index 1"),
                     $"Error log entries: {string.Join(System.Environment.NewLine, errorMessages)}");
+
+                errorMessages.ShouldAllBe(message => !message.Contains(SensitiveNestedValue));
             }
+        }
+
+        [Test]
+        public void When_item_messages_are_created_from_a_page_each_carries_the_page_locator_and_its_position_in_the_page_array()
+        {
+            // The locator is stamped when the item message is created from the page (the only point at which
+            // the page context is in scope). The index is the element's position in the page's JSON array,
+            // counting non-object elements the splitter skips, so it matches what the operator sees in the
+            // source response.
+            TestHelpers.InitializeLogging();
+
+            var factory = CreatePostFactory(TestHelpers.GetFakeBaselineTargetApiRequestHandler());
+
+            var pageMessage = new StreamResourcePageMessage<PostItemMessage>
+            {
+                ResourceUrl = ResourcePath,
+                Offset = 1000,
+                Limit = 500,
+                ChangeWindow = new ChangeWindow { MinChangeVersion = 100, MaxChangeVersion = 200 },
+                CancellationSource = new CancellationTokenSource(),
+            };
+
+            using var jsonReader = new StringReader(@"[{""id"":""1""}, 42, {""noId"":true}]");
+
+            var itemMessages = factory.CreateProcessDataMessages(pageMessage, jsonReader, null).ToList();
+
+            itemMessages.Count.ShouldBe(2);
+
+            itemMessages.ShouldAllBe(m => m.SourcePage == "offset 1000, limit 500, change versions 100 to 200");
+            itemMessages[0].SourceItemIndex.ShouldBe(0);
+            itemMessages[1].SourceItemIndex.ShouldBe(2, "the skipped non-object element still occupies a position in the page array");
         }
 
         [Test]
@@ -279,20 +352,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
             fakeTargetRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}{ResourcePath}", HttpStatusCode.Forbidden);
 
-            EdFiApiClient TargetApiClientFactory() =>
-                new EdFiApiClient(
-                    "TestTarget",
-                    TestHelpers.GetTargetApiConnectionDetails(),
-                    bearerTokenRefreshMinutes: 27,
-                    ignoreSslErrors: true,
-                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeTargetRequestHandler));
-
-            var factory = new PostResourceProcessingBlocksFactory(
-                A.Fake<INodeJSService>(),
-                new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)),
-                TestHelpers.GetSourceApiConnectionDetails(),
-                A.Fake<ISourceCapabilities>(),
-                A.Fake<ISourceResourceItemProvider>());
+            var factory = CreatePostFactory(fakeTargetRequestHandler);
 
             var (ingestionBlock, outputBlock) = factory.CreateProcessingBlocks(
                 new CreateBlocksRequest(
@@ -338,20 +398,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
 
-            EdFiApiClient TargetApiClientFactory() =>
-                new EdFiApiClient(
-                    "TestTarget",
-                    TestHelpers.GetTargetApiConnectionDetails(),
-                    bearerTokenRefreshMinutes: 27,
-                    ignoreSslErrors: true,
-                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeTargetRequestHandler));
-
-            var factory = new PostResourceProcessingBlocksFactory(
-                A.Fake<INodeJSService>(),
-                new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)),
-                TestHelpers.GetSourceApiConnectionDetails(),
-                A.Fake<ISourceCapabilities>(),
-                A.Fake<ISourceResourceItemProvider>());
+            var factory = CreatePostFactory(fakeTargetRequestHandler);
 
             var (ingestionBlock, outputBlock) = factory.CreateProcessingBlocks(
                 new CreateBlocksRequest(
@@ -365,7 +412,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 // The id is stashed on the message when it was first created from the source page, so it
                 // survives even after Item is released -- giving the operator a document to investigate.
                 ingestionBlock.Post(
-                    new PostItemMessage { ResourceUrl = "/ed-fi/students", Item = null, Id = "0123456789abcdef0123456789abcdef" });
+                    new PostItemMessage
+                    {
+                        ResourceUrl = "/ed-fi/students",
+                        Item = null,
+                        Id = "0123456789abcdef0123456789abcdef",
+                        SourcePage = "offset 1000, limit 500",
+                        SourceItemIndex = 7,
+                    });
                 ingestionBlock.Complete();
 
                 var errors = new List<ErrorItemMessage>();
@@ -382,6 +436,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 error.Method.ShouldBe(HttpMethod.Post.ToString());
                 error.ResourceUrl.ShouldBe("/ed-fi/students");
                 error.Id.ShouldBe("0123456789abcdef0123456789abcdef");
+                error.SourcePage.ShouldBe("offset 1000, limit 500");
+                error.SourceItemIndex.ShouldBe(7);
 
                 var errorMessages = TestCorrelator.GetLogEventsFromCurrentContext()
                     .Where(logEvent => logEvent.Level == LogEventLevel.Error)
