@@ -53,5 +53,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             message.DescribeSourcePage().ShouldBe("unknown page");
         }
+
+        [Test]
+        public void DescribeSourcePage_should_include_cursor_paging_context_when_present()
+        {
+            var message = new StreamResourcePageMessage<PostItemMessage>
+            {
+                PageToken = "MTIzLDQ1Ng",
+                PageSize = 500,
+                PartitionIndex = 2,
+                ChangeWindow = new ChangeWindow { MinChangeVersion = 100, MaxChangeVersion = 200 },
+            };
+
+            message.DescribeSourcePage().ShouldBe("partition 2, page token MTIzLDQ1Ng, page size 500, change versions 100 to 200");
+        }
     }
 }

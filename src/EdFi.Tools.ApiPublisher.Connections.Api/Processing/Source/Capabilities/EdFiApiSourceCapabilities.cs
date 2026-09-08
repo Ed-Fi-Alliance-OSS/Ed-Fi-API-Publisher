@@ -5,19 +5,15 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
-using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Newtonsoft.Json.Linq;
 using Serilog;
-using Version = EdFi.Tools.ApiPublisher.Core.Helpers.Version;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
 
 public class EdFiApiSourceCapabilities : ISourceCapabilities
 {
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
-    private readonly ISourceEdFiApiVersionMetadataProvider _sourceEdFiApiVersionMetadataProvider;
 
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceCapabilities));
 
@@ -25,15 +21,10 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
     private readonly object _cursorPagingLock = new();
     private Task<bool> _supportsCursorPaging;
 
-    public EdFiApiSourceCapabilities(
-        ISourceEdFiApiClientProvider sourceEdFiApiClientProvider,
-        ISourceEdFiApiVersionMetadataProvider sourceEdFiApiVersionMetadataProvider)
+    public EdFiApiSourceCapabilities(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider
             ?? throw new ArgumentNullException(nameof(sourceEdFiApiClientProvider));
-
-        _sourceEdFiApiVersionMetadataProvider = sourceEdFiApiVersionMetadataProvider
-            ?? throw new ArgumentNullException(nameof(sourceEdFiApiVersionMetadataProvider));
     }
 
     public async Task<bool> SupportsKeyChangesAsync(string probeResourceKey)
@@ -91,27 +82,10 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
 
     private async Task<bool> ProbeCursorPagingSupportAsync(string probeResourceKey)
     {
-        // Version gate first: pre-7.3 sources ignore unknown query string parameters, so only a version check plus
-        // a /partitions probe is trustworthy -- never a trial pageToken request (see APIPUB-136)
-        Version sourceApiVersion;
-
-        try
-        {
-            var versionMetadata = await _sourceEdFiApiVersionMetadataProvider.GetVersionMetadata().ConfigureAwait(false);
-            sourceApiVersion = new Version(versionMetadata.Value<string>("version"));
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "Source API version could not be determined. Cursor paging will not be used (offset/limit paging applies).");
-            return false;
-        }
-
-        if (!sourceApiVersion.IsAtLeast(7, 3))
-        {
-            _logger.Information("Source API version {SourceApiVersion} predates cursor paging support (7.3). Offset/limit paging will be used.", sourceApiVersion);
-            return false;
-        }
-
+        // Detection is a single GET /{resource}/partitions?number=1 probe requiring a 200 response with a
+        // pageTokens array. A source without the feature (pre-7.3, or 7.3 code not present) returns 404
+        // because the path collides with the {id:guid} route, and pre-7.3 sources silently ignore unknown
+        // query string parameters, so a trial pageToken request is never used for detection (see APIPUB-136).
         var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
         string probeUrl = $"{edFiApiClient.DataManagementApiSegment}{probeResourceKey}{EdFiApiConstants.PartitionsPathSuffix}";
 

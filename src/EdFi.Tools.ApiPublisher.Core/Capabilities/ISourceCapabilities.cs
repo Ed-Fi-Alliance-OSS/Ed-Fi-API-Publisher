@@ -26,9 +26,10 @@ public interface ISourceCapabilities
     Task<bool> SupportsDeletesAsync(string probeResourceKey);
 
     /// <summary>
-    /// Indicates whether the data source supports partitioned cursor paging (ODS/API 7.3+: <c>GET /{resource}/partitions</c>
-    /// and the <c>pageToken</c>/<c>pageSize</c> query string parameters), using the supplied resource key to probe for
-    /// the capability. The answer is determined once per run and reused for every resource.
+    /// Indicates whether the data source supports partitioned cursor paging (an ODS/API 7.3+ feature, detected
+    /// by probing <c>GET /{resource}/partitions</c> and the <c>pageToken</c>/<c>pageSize</c> query string
+    /// parameters), using the supplied resource key to probe for the capability. The answer is determined once
+    /// per run and reused for every resource.
     /// </summary>
     /// <param name="probeResourceKey">The resource path (e.g. "/ed-fi/students") to probe with, if a probe is necessary.</param>
     Task<bool> SupportsCursorPagingAsync(string probeResourceKey);
