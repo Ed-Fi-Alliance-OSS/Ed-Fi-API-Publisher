@@ -17,6 +17,8 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -65,11 +67,17 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             upserts.PublishedItemCount.ShouldBe(1);
             summary.SourceReadErrorCount.ShouldBe(0);
 
-            // The rendered table is what an operator actually reads, so the counts have to survive formatting
+            // The rendered table is what an operator actually reads, so the counts have to survive
+            // formatting in the right order: the columns are positional, and transposing two of them would
+            // otherwise pass every assertion above
             string report = RunSummaryFormatter.Format(summary);
 
-            report.ShouldContain(StateEducationAgencies);
-            report.ShouldContain("upserts");
+            string upsertsLine = report
+                .Split(Environment.NewLine)
+                .Single(line => line.TrimStart().StartsWith("upserts"));
+
+            upsertsLine.ShouldMatch(@"upserts\s+" + Regex.Escape(StateEducationAgencies) + @"\s+3\s+3\s+2\s+0\s+1\s*$");
+            report.ShouldContain("Published is not counted on the target");
         }
 
         [Test]
@@ -192,6 +200,110 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             upserts.PublishedItemCount.ShouldBe(1);
         }
 
+        [Test]
+        public async Task Documents_abandoned_after_an_authorization_failure_are_skipped_not_published()
+        {
+            // The target connection is configured with treatForbiddenPostAsWarning, so a 403 abandons the
+            // rest of the resource by the operator's own choice. Those documents are neither published nor
+            // rejected, and counting them as published is exactly the silent loss this work is about.
+            var run = await RunWithPostResponsesAsync(HttpStatusCode.Forbidden, HttpStatusCode.OK, HttpStatusCode.OK);
+
+            var upserts = run.RunSummaryCollector.GetSummary().Resources
+                .Single(resource => resource.Stage == PublishingStage.Upserts && resource.AttemptedItemCount > 0);
+
+            upserts.AttemptedItemCount.ShouldBe(3);
+            upserts.SkippedItemCount.ShouldBe(3);
+            upserts.FailedItemCount.ShouldBe(0);
+            upserts.PublishedItemCount.ShouldBe(0);
+
+            run.RunSummaryCollector.GetSummary().SkipReasons
+                .ShouldContain(SkipReasons.ResourceIgnoredAfterAuthorizationFailure);
+
+            // Abandoning by configuration is not an error, so the run itself still succeeds
+            run.Caught.ShouldBeNull();
+        }
+
+        [Test]
+        public async Task A_source_that_cannot_be_read_fails_the_run_whatever_the_tolerance_allows()
+        {
+            // The documents behind an unread page were never attempted and their number is not known, so no
+            // threshold can honestly cover them
+            var run = await RunWithPostResponsesAsync(
+                new[] { HttpStatusCode.OK },
+                toleratedItemErrorCount: -1,
+                sourceReadFails: true);
+
+            var caught = run.Caught.ShouldBeOfType<PublishingFailedException>();
+
+            caught.Reason.ShouldBe(PublishingFailureReason.IncompleteProcessing);
+            PublisherExitCode.ForFailure(caught).ShouldBe(PublisherExitCode.ProcessingIncomplete);
+            run.RunSummaryCollector.GetSummary().SourceReadErrorCount.ShouldBeGreaterThan(0);
+        }
+
+        [Test]
+        public async Task The_authorization_retry_pass_does_not_count_its_documents_twice()
+        {
+            // A resource configured for authorization retry is streamed a second time under the same resource
+            // URL once its prerequisites complete, which used to double every count in its row. The shipped
+            // settings configure this for students, staffs and contacts, so it is the default reading of the
+            // three highest-volume resources of an ordinary publish.
+            const string StudentsResource = "/ed-fi/students";
+
+            var suppliedSourceResources = TestHelpers.GetGenericResourceFaker().Generate(2);
+
+            var fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
+                .AvailableChangeVersions(1100)
+                .ResourceCount(responseTotalCountHeader: 2)
+                .GetResourceData(
+                    $"{EdFiApiConstants.DataManagementApiSegment}{StudentsResource}",
+                    suppliedSourceResources.ToArray());
+
+            var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
+            fakeTargetRequestHandler.EveryDataManagementPostReturns200Ok();
+
+            var options = TestHelpers.GetOptions();
+            options.IncludeDescriptors = false;
+
+            TestHelpers.InitializeLogging();
+
+            var metadataCollector = new PublishingOperationMetadataCollector();
+            var runSummaryCollector = new RunSummaryCollector(metadataCollector);
+
+            var changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
+                options,
+                TestHelpers.GetSourceApiConnectionDetails(include: new[] { StudentsResource }),
+                fakeSourceRequestHandler,
+                TestHelpers.GetTargetApiConnectionDetails(),
+                fakeTargetRequestHandler,
+                errorPublisher: new SerilogErrorPublisher(),
+                runSummaryCollector: runSummaryCollector,
+                metadataCollector: metadataCollector);
+
+            try
+            {
+                await changeProcessor.ProcessChangesAsync(
+                    TestHelpers.CreateChangeProcessorConfiguration(options),
+                    CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                // The outcome of the run is not what this test is about
+            }
+
+            // The positive control: the pipeline really did publish each document twice, once per pass
+            A.CallTo(
+                    () => fakeTargetRequestHandler.Post(
+                        $"{MockRequests.TargetApiBaseUrl}{MockRequests.DataManagementPath}{StudentsResource}",
+                        A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened(4, Times.Exactly);
+
+            // ... and the summary still reports the two documents the resource actually has
+            runSummaryCollector.GetSummary().Resources
+                .Single(resource => resource.Stage == PublishingStage.Upserts
+                    && resource.ResourcePath == StudentsResource)
+                .AttemptedItemCount.ShouldBe(2);
+        }
+
         private static Task<RunResult> RunWithPostResponsesAsync(params HttpStatusCode[] postResponseCodes)
         {
             return RunWithPostResponsesAsync(postResponseCodes, toleratedItemErrorCount: 0);
@@ -201,7 +313,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             HttpStatusCode[] postResponseCodes,
             int toleratedItemErrorCount,
             bool enableRateLimit = false,
-            IRateLimiting<HttpResponseMessage> rateLimiter = null)
+            IRateLimiting<HttpResponseMessage> rateLimiter = null,
+            bool sourceReadFails = false)
         {
             var suppliedSourceResources = TestHelpers.GetGenericResourceFaker().Generate(3);
 
@@ -211,6 +324,20 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .GetResourceData(
                     $"{EdFiApiConstants.DataManagementApiSegment}{StateEducationAgencies}",
                     suppliedSourceResources.ToArray());
+
+            if (sourceReadFails)
+            {
+                // Every read of the resource fails permanently, so the source-side handlers publish their own
+                // error rather than any document being rejected by the target
+                A.CallTo(
+                        () => fakeSourceRequestHandler.Get(
+                            $"{MockRequests.SourceApiBaseUrl}{MockRequests.DataManagementPath}{StateEducationAgencies}",
+                            A<HttpRequestMessage>.Ignored))
+                    .ReturnsLazily(() => new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                    {
+                        Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+                    });
+            }
 
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler()
                 .PostResource($"{EdFiApiConstants.DataManagementApiSegment}{StateEducationAgencies}", postResponseCodes);
