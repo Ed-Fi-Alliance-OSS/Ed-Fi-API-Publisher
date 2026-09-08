@@ -3,6 +3,8 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using Serilog;
+
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 
 /// <summary>
@@ -29,6 +31,13 @@ public interface IPageRequestSequence
     /// (e.g. "offset 0").
     /// </summary>
     string DescribeStart();
+
+    /// <summary>
+    /// Returns the supplied logger enriched with the machine-readable paging values of the current request
+    /// (e.g. <c>Offset</c> and <c>Limit</c>), so structured sinks keep the values that <see cref="Describe" />
+    /// and <see cref="DescribeStart" /> summarize for people.
+    /// </summary>
+    ILogger EnrichLogger(ILogger logger);
 
     /// <summary>
     /// Reports a successfully read page and decides whether another request follows for this page message,

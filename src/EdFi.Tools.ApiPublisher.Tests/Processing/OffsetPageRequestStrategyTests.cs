@@ -8,8 +8,12 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using NUnit.Framework;
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.TestCorrelator;
 using Shouldly;
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 
@@ -153,6 +157,36 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 CreateOptions());
 
             sequence.TryAdvance(OkResponse(), topLevelItemCount: null).ShouldBeFalse();
+        }
+
+        [Test]
+        public void Enriched_logger_should_carry_the_numeric_offset_and_limit_of_the_current_request()
+        {
+            var logger = new LoggerConfiguration().WriteTo.TestCorrelator().CreateLogger();
+
+            var sequence = new OffsetPageRequestStrategy().Begin(
+                CreateMessage(offset: 1000, limit: 250, isFinalPage: true),
+                CreateOptions());
+
+            using (TestCorrelator.CreateContext())
+            {
+                sequence.EnrichLogger(logger).Information("first");
+
+                sequence.TryAdvance(OkResponse(), topLevelItemCount: 250).ShouldBeTrue();
+                sequence.EnrichLogger(logger).Information("second");
+
+                // Select by template: the strategy's own "Final page was full" Debug line also lands in this
+                // context when an earlier test has pointed the global logger at the TestCorrelator sink
+                var events = TestCorrelator.GetLogEventsFromCurrentContext().ToArray();
+                var first = events.Single(e => e.MessageTemplate.Text == "first");
+                var second = events.Single(e => e.MessageTemplate.Text == "second");
+
+                first.Properties["Offset"].ShouldBe(new ScalarValue(1000L));
+                first.Properties["Limit"].ShouldBe(new ScalarValue(250));
+
+                second.Properties["Offset"].ShouldBe(new ScalarValue(1250L));
+                second.Properties["Limit"].ShouldBe(new ScalarValue(250));
+            }
         }
 
         [Test]

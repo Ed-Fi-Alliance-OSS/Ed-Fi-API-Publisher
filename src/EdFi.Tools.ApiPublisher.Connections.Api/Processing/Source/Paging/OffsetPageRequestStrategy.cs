@@ -63,6 +63,8 @@ public class OffsetPageRequestStrategy : IPageRequestStrategy
 
         public string DescribeStart() => $"offset {_offset}";
 
+        public ILogger EnrichLogger(ILogger logger) => logger.ForContext("Offset", _offset).ForContext("Limit", _limit);
+
         public bool TryAdvance(HttpResponseMessage response, int? topLevelItemCount)
         {
             // Reverse paging descends through the change window by change version, so a full page never
