@@ -173,6 +173,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 await errorHandlingBlock.SendErrorAsync(
                         new ErrorItemMessage
                         {
+                            IsSourceReadError = true,
                             ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
                             Method = HttpMethod.Get.ToString(),
                             ResponseStatus = apiResponse.StatusCode,
@@ -193,6 +194,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
             await errorHandlingBlock.SendErrorAsync(
                     new ErrorItemMessage
                     {
+                        IsSourceReadError = true,
                         Method = HttpMethod.Get.ToString(),
                         ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
                         Exception = ex,
@@ -240,6 +242,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         await errorHandlingBlock.SendErrorAsync(
                 new ErrorItemMessage
                 {
+                    IsSourceReadError = true,
                     ResourceUrl =
                         $"{_sourceEdFiApiClientProvider.GetApiClient().DataManagementApiSegment}{resourceUrl}",
                     Method = HttpMethod.Get.ToString(),

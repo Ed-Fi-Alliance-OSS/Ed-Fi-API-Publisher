@@ -263,14 +263,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
         private void ReportRunSummary()
         {
-            string summary = RunSummaryFormatter.Format(_runSummaryCollector.GetSummary());
-
-            if (string.IsNullOrEmpty(summary))
+            try
             {
-                return;
-            }
+                string summary = RunSummaryFormatter.Format(_runSummaryCollector.GetSummary());
 
-            _logger.Information("{RunSummary:l}", $"{Environment.NewLine}{summary}");
+                if (string.IsNullOrEmpty(summary))
+                {
+                    return;
+                }
+
+                _logger.Information("{RunSummary:l}", $"{Environment.NewLine}{summary}");
+            }
+            catch (Exception ex)
+            {
+                // Reported from a finally, so a throw here would replace the exception the run's outcome and
+                // exit code are derived from. The summary is never worth that.
+                _logger.Warning(ex, "The run summary could not be reported.");
+            }
         }
 
         private async Task UpdateChangeVersionAsync(
@@ -1069,15 +1078,29 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 return;
             }
 
+            // A source that could not be read is never tolerable, whatever the threshold says: the documents
+            // behind a failed page or item count were never attempted and their number is not known, so a run
+            // that swallowed one would be reporting success over an unknown loss -- the very defect this work
+            // is about (see APIPUB-120).
+            long sourceReadErrorCount = _runSummaryCollector.GetSummary().SourceReadErrorCount;
+
+            if (sourceReadErrorCount > 0)
+            {
+                throw new PublishingFailedException(
+                    $"Processing completed, but {sourceReadErrorCount} source read error(s) mean an unknown number of documents was never attempted (of {publishedErrorCount} error(s) in total).",
+                    PublishingFailureReason.IncompleteProcessing,
+                    publishedErrorCount);
+            }
+
             // Best-effort publishing is opt-in, and the threshold is explicit rather than implied: without
             // it, a single rejected document and a run that lost 150,000 of them are indistinguishable to
-            // an unattended caller (see APIPUB-120).
+            // an unattended caller.
             if (options.ToleratedItemErrorCount == -1 || publishedErrorCount <= options.ToleratedItemErrorCount)
             {
                 _logger.Warning(
-                    "{PublishedErrorCount} document(s) were not published, which is within the configured tolerance of {ToleratedItemErrorCount:l} (toleratedItemErrorCount), so the run is reported as successful. The last change version processed is still not updated, so these documents are re-published on the next run.",
+                    "{PublishedErrorCount} document(s) were rejected by the target, which is within the configured tolerance ({ToleratedItemErrorCount}, where -1 tolerates any number), so the run is reported as successful. The last change version processed was not advanced, so the next run republishes this change window, including the documents that failed.",
                     publishedErrorCount,
-                    options.ToleratedItemErrorCount == -1 ? "any number" : options.ToleratedItemErrorCount.ToString());
+                    options.ToleratedItemErrorCount);
 
                 return;
             }
@@ -1315,7 +1338,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
     public record ProcessingContext(
         ChangeWindow ChangeWindow,
         IDictionary<string, string[]> DependencyKeysByResourceKey,
-        ITargetBlock<ErrorItemMessage> PublishErrorsIngestionBlock,
+        ITargetBlock<ErrorItemMessage> StageErrorsBlock,
         SemaphoreSlim Semaphore,
         Options Options,
         AuthorizationFailureHandling[] AuthorizationFailureHandling,
@@ -1326,7 +1349,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         public override string ToString()
         {
             return
-                $"{{ ChangeWindow = {ChangeWindow}, DependencyKeysByResourceKey = {DependencyKeysByResourceKey}, PublishErrorsIngestionBlock = {PublishErrorsIngestionBlock}, Semaphore = {Semaphore}, ResourceUrlPathSuffix = {ResourceUrlPathSuffix}, Options = {Options}, AuthorizationFailureHandling = {AuthorizationFailureHandling}, ResourcesWithUpdatableKeys = {ResourcesWithUpdatableKeys} }}";
+                $"{{ ChangeWindow = {ChangeWindow}, DependencyKeysByResourceKey = {DependencyKeysByResourceKey}, StageErrorsBlock = {StageErrorsBlock}, Semaphore = {Semaphore}, ResourceUrlPathSuffix = {ResourceUrlPathSuffix}, Options = {Options}, AuthorizationFailureHandling = {AuthorizationFailureHandling}, ResourcesWithUpdatableKeys = {ResourcesWithUpdatableKeys} }}";
         }
     }
 }

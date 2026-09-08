@@ -24,6 +24,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // individual item can be safely skipped without publishing an error.
         public bool HasAuthorizationRetryPipeline { get; set; }
 
+        // Indicates that this stream IS the authorization retry pass for the resource, rather than the pass
+        // that reads it for the first time. Both passes carry the same resource URL, so the run summary would
+        // otherwise count every document of the resource twice (see APIPUB-120).
+        public bool IsAuthorizationRetryPass { get; set; }
+
         // -------------------------------------------------
         // Source Ed-Fi ODS API processing context (shared)
         // -------------------------------------------------

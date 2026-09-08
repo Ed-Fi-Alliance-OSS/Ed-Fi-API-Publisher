@@ -10,7 +10,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
 using System.Threading;
 
 namespace EdFi.Tools.ApiPublisher.Core.Metadata
@@ -23,8 +22,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
     {
         private readonly IPublishingOperationMetadataCollector _metadataCollector;
 
+        private static readonly IEqualityComparer<(PublishingStage Stage, string ResourcePath)> _resourceKeyComparer =
+            new ResourceKeyComparer();
+
         private readonly ConcurrentDictionary<(PublishingStage Stage, string ResourcePath), ResourceCounters> _countersByResource =
-            new();
+            new(_resourceKeyComparer);
 
         private readonly ConcurrentDictionary<string, byte> _skipReasons = new(StringComparer.OrdinalIgnoreCase);
 
@@ -51,9 +53,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
         {
             // A source read failure is a page or a count that could not be read, not a rejected document: the
             // documents behind it were never attempted and their number is not known, so it is reported on its
-            // own rather than as a failure of the resource. Only the source-side errors leave the item id
-            // unset, which is what tells them apart from a target GET issued to locate a single document.
-            if (error.Id is null && string.Equals(error.Method, HttpMethod.Get.Method, StringComparison.OrdinalIgnoreCase))
+            // own rather than as a failure of the resource. The producer says so explicitly, because inferring
+            // it from the method and a missing item id misread three of the paths that reach here: a SQLite
+            // page failure, a delete whose source item carried no id, and any future source-side error that
+            // starts populating the id.
+            if (error.IsSourceReadError)
             {
                 Interlocked.Increment(ref _sourceReadErrorCount);
 
@@ -84,7 +88,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
 
             var resourceKeys = _countersByResource.Keys
                 .Concat(expectedItemCountByResource.Keys)
-                .Distinct()
+                .Distinct(_resourceKeyComparer)
                 .OrderBy(key => key.Stage)
                 .ThenBy(key => key.ResourcePath, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -156,7 +160,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
 
         private IDictionary<(PublishingStage Stage, string ResourcePath), long> GetExpectedItemCountByResource()
         {
-            var expectedItemCountByResource = new Dictionary<(PublishingStage, string), long>();
+            var expectedItemCountByResource = new Dictionary<(PublishingStage, string), long>(_resourceKeyComparer);
 
             // A count of -1 records that the source could not report one, which is carried through as "unknown"
             foreach (var kvp in _metadataCollector.GetMetadata().ResourceItemCountByPath)
@@ -170,6 +174,27 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
         private ResourceCounters GetCounters(PublishingStage stage, string resourcePath)
         {
             return _countersByResource.GetOrAdd((stage, resourcePath), _ => new ResourceCounters());
+        }
+
+        /// <summary>
+        /// Compares resource keys the way the rest of the pipeline does: the stage exactly, and the resource
+        /// path without regard to case, so that attempted items, errors, skips and the source's item counts
+        /// all land on the same row.
+        /// </summary>
+        private sealed class ResourceKeyComparer : IEqualityComparer<(PublishingStage Stage, string ResourcePath)>
+        {
+            public bool Equals(
+                (PublishingStage Stage, string ResourcePath) x,
+                (PublishingStage Stage, string ResourcePath) y)
+            {
+                return x.Stage == y.Stage
+                    && string.Equals(x.ResourcePath, y.ResourcePath, StringComparison.OrdinalIgnoreCase);
+            }
+
+            public int GetHashCode((PublishingStage Stage, string ResourcePath) key)
+            {
+                return HashCode.Combine(key.Stage, StringComparer.OrdinalIgnoreCase.GetHashCode(key.ResourcePath));
+            }
         }
 
         /// <summary>

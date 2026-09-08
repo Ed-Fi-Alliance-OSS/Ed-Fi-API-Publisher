@@ -77,6 +77,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
 
                 var error = new ErrorItemMessage
                 {
+                    IsSourceReadError = true,
                     ResourceUrl = $"{message.ResourceUrl}",
                     Id = pageId.ToString(),
                     Exception = ex,
@@ -105,6 +106,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 // Publish the failure
                 var error = new ErrorItemMessage
                 {
+                    IsSourceReadError = true,
                     ResourceUrl = $"{message.ResourceUrl}",
                     Id = pageId.ToString(),
                     Exception = ex,

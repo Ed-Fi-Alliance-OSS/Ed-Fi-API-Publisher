@@ -158,6 +158,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
                         var error = new ErrorItemMessage
                         {
+                            IsSourceReadError = true,
                             Method = HttpMethod.Get.ToString(),
                             ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                             Id = null,
@@ -212,6 +213,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         // body-read deadline aborting the response stream falls through to the catches below instead)
                         var error = new ErrorItemMessage
                         {
+                            IsSourceReadError = true,
                             Method = HttpMethod.Get.ToString(),
                             ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                             Id = null,
@@ -256,6 +258,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     await errorHandlingBlock.SendErrorAsync(
                             new ErrorItemMessage
                             {
+                                IsSourceReadError = true,
                                 Method = HttpMethod.Get.ToString(),
                                 ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                                 Exception = ex,
@@ -281,6 +284,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
             var error = new ErrorItemMessage
             {
+                IsSourceReadError = true,
                 Method = HttpMethod.Get.ToString(),
                 ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                 Exception = timeoutException,
@@ -319,6 +323,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             // An error occurred while parsing the JSON
             var error = new ErrorItemMessage
             {
+                IsSourceReadError = true,
                 Method = HttpMethod.Get.ToString(),
                 ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                 Exception = ex,

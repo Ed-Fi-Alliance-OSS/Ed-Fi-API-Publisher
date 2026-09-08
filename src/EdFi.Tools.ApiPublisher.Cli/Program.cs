@@ -198,10 +198,16 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 // from a configuration mistake that published nothing at all (APIPUB-120).
                 int exitCode = PublisherExitCode.ForFailure(ex);
 
+                // The exception is passed to the logger, not just its rendered chain: exit code 2 means the
+                // run did not complete and nobody knows why yet, which is the one outcome where the operator
+                // needs the stack trace. The template is a constant so that a brace in an exception message
+                // cannot be read as a property token.
                 _logger.Error(
+                    ex,
                     exitCode == PublisherExitCode.InvalidConfiguration
-                        ? $"Configuration failed:{Environment.NewLine}{DescribeExceptionChain(ex)}"
-                        : $"Processing failed:{Environment.NewLine}{DescribeExceptionChain(ex)}");
+                        ? "Configuration failed:{FailureDetail:l}"
+                        : "Processing failed:{FailureDetail:l}",
+                    $"{Environment.NewLine}{DescribeExceptionChain(ex)}");
 
                 return exitCode;
             }

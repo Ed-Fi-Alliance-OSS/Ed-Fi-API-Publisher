@@ -49,7 +49,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                             // handlers return a materialized collection, so counting costs nothing.
                             var attemptedItems = items as ICollection<TProcessDataMessage> ?? items.ToArray();
 
-                            _runSummaryCollector.AddAttemptedItems(msg.ResourceUrl, attemptedItems.Count);
+                            // The authorization retry pass re-reads a resource the first pass already counted,
+                            // under the same resource URL, so counting it again would report every document of
+                            // that resource twice (see APIPUB-120). A document the first pass deferred with a
+                            // 403 is published by this pass, which is why it stays in the attempted total.
+                            if (!msg.IsAuthorizationRetryPass)
+                            {
+                                _runSummaryCollector.AddAttemptedItems(msg.ResourceUrl, attemptedItems.Count);
+                            }
 
                             return attemptedItems;
                         }

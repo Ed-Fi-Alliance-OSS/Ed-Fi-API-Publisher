@@ -5,6 +5,7 @@
 
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -18,6 +19,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
     public static class RunSummaryFormatter
     {
         private const string UnknownItemCount = "unknown";
+
+        private const int MaxResourceColumnWidth = 60;
+
+        private const string ColumnGutter = "  ";
+
+        private static readonly string[] _headers =
+        {
+            "Stage", "Resource", "Expected", "Attempted", "Failed", "Skipped", "Published*",
+        };
 
         public static string Format(RunSummary summary)
         {
@@ -35,47 +45,52 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
                 return string.Empty;
             }
 
+            var cells = new List<string[]> { _headers };
+
+            cells.AddRange(
+                rows.Select(
+                    row => new[]
+                    {
+                        GetStageDisplayName(row.Stage),
+                        Truncate(row.ResourcePath, MaxResourceColumnWidth),
+                        row.ExpectedItemCount.HasValue ? FormatCount(row.ExpectedItemCount.Value) : UnknownItemCount,
+                        FormatCount(row.AttemptedItemCount),
+                        FormatCount(row.FailedItemCount),
+                        FormatCount(row.SkippedItemCount),
+                        FormatCount(row.PublishedItemCount),
+                    }));
+
+            cells.Add(
+                new[]
+                {
+                    "Total",
+                    string.Empty,
+                    rows.All(row => row.ExpectedItemCount.HasValue)
+                        ? FormatCount(rows.Sum(row => row.ExpectedItemCount.Value))
+                        : UnknownItemCount,
+                    FormatCount(rows.Sum(row => row.AttemptedItemCount)),
+                    FormatCount(rows.Sum(row => row.FailedItemCount)),
+                    FormatCount(rows.Sum(row => row.SkippedItemCount)),
+                    FormatCount(rows.Sum(row => row.PublishedItemCount)),
+                });
+
+            // Every column is sized from its own widest value, so a long resource path or a document count in
+            // the millions cannot push the following columns out of alignment
+            int[] widths = Enumerable.Range(0, _headers.Length)
+                .Select(column => cells.Max(row => row[column].Length))
+                .ToArray();
+
             var message = new StringBuilder();
             message.AppendLine("Publishing run summary");
 
-            int resourceColumnWidth = rows.Length == 0
-                ? 8
-                : Math.Min(60, rows.Max(row => row.ResourcePath.Length));
-
-            message.AppendLine(FormatRow(
-                "Stage",
-                "Resource".PadRight(resourceColumnWidth),
-                "Expected",
-                "Attempted",
-                "Failed",
-                "Skipped",
-                "Published*"));
-
-            foreach (var row in rows)
+            foreach (var row in cells)
             {
-                message.AppendLine(FormatRow(
-                    GetStageDisplayName(row.Stage),
-                    row.ResourcePath.PadRight(resourceColumnWidth),
-                    row.ExpectedItemCount.HasValue ? FormatCount(row.ExpectedItemCount.Value) : UnknownItemCount,
-                    FormatCount(row.AttemptedItemCount),
-                    FormatCount(row.FailedItemCount),
-                    FormatCount(row.SkippedItemCount),
-                    FormatCount(row.PublishedItemCount)));
+                message.AppendLine(FormatRow(row, widths));
             }
 
-            message.AppendLine(FormatRow(
-                "Total",
-                new string(' ', resourceColumnWidth),
-                rows.All(row => row.ExpectedItemCount.HasValue)
-                    ? FormatCount(rows.Sum(row => row.ExpectedItemCount.Value))
-                    : UnknownItemCount,
-                FormatCount(rows.Sum(row => row.AttemptedItemCount)),
-                FormatCount(rows.Sum(row => row.FailedItemCount)),
-                FormatCount(rows.Sum(row => row.SkippedItemCount)),
-                FormatCount(rows.Sum(row => row.PublishedItemCount))));
-
             message.AppendLine();
-            message.AppendLine("  * Published is derived (attempted - failed - skipped), not counted on the target: the publishing pipeline reports errors, not successes. Attempted exceeds expected for a resource that is re-published by an authorization retry pass.");
+            message.AppendLine("  * Published is not counted on the target. It is derived as attempted - failed - skipped, because the publishing pipeline reports errors, not successes.");
+            message.AppendLine("  * A run that did not complete reports what it read, not what the target holds: documents abandoned when the run stopped are still counted as attempted.");
 
             if (summary.SourceReadErrorCount > 0)
             {
@@ -91,24 +106,32 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
             return message.ToString().TrimEnd();
         }
 
-        private static string FormatRow(
-            string stage,
-            string resource,
-            string expected,
-            string attempted,
-            string failed,
-            string skipped,
-            string published)
+        private static string FormatRow(string[] row, int[] widths)
         {
-            return string.Concat(
-                "  ",
-                stage.PadRight(12),
-                resource,
-                expected.PadLeft(12),
-                attempted.PadLeft(12),
-                failed.PadLeft(10),
-                skipped.PadLeft(10),
-                published.PadLeft(12));
+            var line = new StringBuilder("  ");
+
+            for (int column = 0; column < row.Length; column++)
+            {
+                if (column > 0)
+                {
+                    line.Append(ColumnGutter);
+                }
+
+                // The stage and the resource read as labels; the counts are compared down the column
+                line.Append(
+                    column <= 1
+                        ? row[column].PadRight(widths[column])
+                        : row[column].PadLeft(widths[column]));
+            }
+
+            return line.ToString().TrimEnd();
+        }
+
+        private static string Truncate(string resourcePath, int maximumLength)
+        {
+            return resourcePath.Length <= maximumLength
+                ? resourcePath
+                : "..." + resourcePath.Substring(resourcePath.Length - (maximumLength - 3));
         }
 
         private static string FormatCount(long count) => count.ToString("N0", CultureInfo.InvariantCulture);
@@ -116,9 +139,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
         private static string GetStageDisplayName(PublishingStage stage)
             => stage switch
             {
-                PublishingStage.KeyChanges => "key changes",
+                PublishingStage.Upserts => "upserts",
                 PublishingStage.Deletes => "deletes",
-                _ => "upserts",
+                PublishingStage.KeyChanges => "key changes",
+                _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "Unknown publishing stage."),
             };
     }
 }

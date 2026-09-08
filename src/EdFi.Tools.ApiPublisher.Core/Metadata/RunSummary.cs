@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using System;
 using System.Collections.Generic;
 
 namespace EdFi.Tools.ApiPublisher.Core.Metadata
@@ -22,10 +23,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
     public record RunSummary(
         IReadOnlyList<ResourceRunSummary> Resources,
         long SourceReadErrorCount,
-        IReadOnlyList<string> SkipReasons)
-    {
-        public bool IsEmpty => Resources.Count == 0 && SourceReadErrorCount == 0;
-    }
+        IReadOnlyList<string> SkipReasons);
 
     /// <summary>
     /// What a publishing run did to one resource within one stage.
@@ -52,6 +50,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
         /// observed: the publishing pipeline reports errors, not successes, so a document that was attempted
         /// and neither rejected nor skipped is counted as published.
         /// </summary>
-        public long PublishedItemCount => AttemptedItemCount - FailedItemCount - SkippedItemCount;
+        public long PublishedItemCount => Math.Max(0, AttemptedItemCount - FailedItemCount - SkippedItemCount);
     }
 }

@@ -52,11 +52,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             return new ActionBlock<ErrorItemMessage>(
                 async error =>
                 {
-                    _runSummaryCollector.AddError(stage, error);
+                    try
+                    {
+                        _runSummaryCollector.AddError(stage, error);
 
-                    // Forwarded with the shared send helper so a full (bounded) ingestion block delays this
-                    // block, and through it the stage's producers, instead of dropping the error.
-                    await publishErrorsIngestionBlock.SendErrorAsync(error, CancellationToken.None).ConfigureAwait(false);
+                        // Forwarded with the shared send helper so a full (bounded) ingestion block delays this
+                        // block, and through it the stage's producers, instead of dropping the error. The send
+                        // is not cancellable on purpose: the helper's cancellation path falls back to a
+                        // synchronous post, which drops the error when the block is full.
+                        await publishErrorsIngestionBlock.SendErrorAsync(error, CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Never rethrow, for the same reason the publishing block never does: a faulted target
+                        // severs its incoming links, so the processing output blocks feeding this one could
+                        // never drain and the run would hang instead of ending (see CreatePublishErrorsBlock).
+                        _logger.Error(ex, "Unable to record an error against the run summary.");
+                    }
                 },
                 new ExecutionDataflowBlockOptions
                 {

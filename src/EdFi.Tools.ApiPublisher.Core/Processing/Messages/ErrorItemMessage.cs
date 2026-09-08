@@ -46,6 +46,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         /// </summary>
         public JRaw? Body { get; set; }
 
+        /// <summary>
+        /// Indicates that this error is a failure to read from the source (a page or an item count that could
+        /// not be retrieved) rather than a document the target rejected. The documents behind such an error
+        /// were never attempted and their number is not known, which is why the run summary reports them
+        /// apart from the per-resource counts (see APIPUB-120). Set by the producer that knows: inferring it
+        /// from the method and the item id was wrong for three of the paths that reach here.
+        /// </summary>
+        public bool IsSourceReadError { get; set; }
+
         public HttpStatusCode? ResponseStatus { get; set; }
 
         public string ResponseContent { get; set; }
