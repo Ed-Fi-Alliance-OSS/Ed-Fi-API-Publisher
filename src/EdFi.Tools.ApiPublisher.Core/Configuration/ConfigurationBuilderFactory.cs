@@ -80,6 +80,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--rateLimitTimeSeconds"] = "Options:RateLimitTimeSeconds",
                     ["--rateLimitMaxRetries"] = "Options:RateLimitMaxRetries",
                     ["--useReversePaging"] = "Options:UseReversePaging",
+                    ["--disableCursorPaging"] = "Options:DisableCursorPaging",
+                    ["--cursorPagingPartitionCount"] = "Options:CursorPagingPartitionCount",
                     ["--lastChangeVersionProcessedNamespace"] = "Options:LastChangeVersionProcessedNamespace",
                     ["--processDeletesAndKeyChangesOnFullPublish"] = "Options:ProcessDeletesAndKeyChangesOnFullPublish",
 

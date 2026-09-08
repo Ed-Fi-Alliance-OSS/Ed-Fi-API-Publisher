@@ -13,6 +13,8 @@ public class SqliteSourceCapabilities : ISourceCapabilities
 
     public Task<bool> SupportsDeletesAsync(string probeResourceKey) => Task.FromResult(true);
 
+    public Task<bool> SupportsCursorPagingAsync(string probeResourceKey) => Task.FromResult(false);
+
     public bool SupportsGetItemById
     {
         get => false;

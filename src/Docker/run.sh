@@ -10,6 +10,9 @@ set +x
 # Default to automatic processing block bounded capacity when not provided (see APIPUB-112)
 export PROCESSING_BLOCK_BOUNDED_CAPACITY="${PROCESSING_BLOCK_BOUNDED_CAPACITY:-0}"
 
+# Default to cursor paging enabled when not provided (see APIPUB-139)
+export DISABLE_CURSOR_PAGING="${DISABLE_CURSOR_PAGING:-false}"
+
 envsubst < /app/apiPublisherSettings.template.json > /app/apiPublisherSettings.json
 envsubst < /app/logging.template.json > /app/logging.json
 envsubst < /app/configurationStoreSettings.template.json > /app/configurationStoreSettings.json

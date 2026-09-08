@@ -303,7 +303,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
             var sourceCurrentChangeVersionProvider = new EdFiApiSourceCurrentChangeVersionProvider(sourceEdFiApiClientProvider);
             var sourceIsolationApplicator = new EdFiApiSourceIsolationApplicator(sourceEdFiApiClientProvider);
-            var dataSourceCapabilities = new EdFiApiSourceCapabilities(sourceEdFiApiClientProvider);
+            var dataSourceCapabilities = new EdFiApiSourceCapabilities(sourceEdFiApiClientProvider, sourceEdFiVersionMetadataProvider);
             var publishErrorsBlocksFactory = new PublishErrorsBlocksFactory(errorPublisher);
 
             var streamingResourceProcessor = new StreamingResourceProcessor(
