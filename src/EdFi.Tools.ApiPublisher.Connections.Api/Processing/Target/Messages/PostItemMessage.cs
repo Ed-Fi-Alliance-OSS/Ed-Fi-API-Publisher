@@ -11,7 +11,26 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
     {
         public string ResourceUrl { get; set; }
 
+        /// <summary>
+        /// The source item's "id", stamped the first time processing reads a valid id from
+        /// <see cref="Item"/> so that it survives after <see cref="Item"/> is released once the item has
+        /// been processed.
+        /// </summary>
+        public string Id { get; set; }
+
         public JObject Item { get; set; }
+
+        /// <summary>
+        /// Describes the source page this item was read from (paging metadata only), captured when the message is
+        /// created from the page. One string instance is shared by every item of a page.
+        /// </summary>
+        public string SourcePage { get; set; }
+
+        /// <summary>
+        /// The zero-based position of this item within its source page's JSON array (counting every element, including
+        /// non-object elements that produce no message), captured when the message is created from the page.
+        /// </summary>
+        public int? SourceItemIndex { get; set; }
 
         /// <summary>
         /// Indicates an authorization-retry ("#Retry") pipeline exists that will re-publish the entire resource
