@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
@@ -471,12 +472,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     return null;
                 }
 
+                // The source "id" is used only to identify the item in log messages -- the target item is
+                // located via "oldKeyValues" and updated using its own returned id, so a missing/invalid
+                // source id does not prevent processing.
                 return new GetItemForKeyChangeMessage
                 {
                     ResourceUrl = message.ResourceUrl.TrimSuffix(EdFiApiConstants.KeyChangesPathSuffix),
                     ExistingKeyValues = obj[EdFiApiConstants.OldKeyValuesPropertyName],
                     NewKeyValues = obj[EdFiApiConstants.NewKeyValuesPropertyName],
-                    SourceId = obj["id"].Value<string>(),
+                    SourceId = obj["id"].SafeValue(),
                     CancellationToken = message.CancellationSource.Token,
                 };
             }
