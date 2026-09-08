@@ -49,5 +49,37 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // Arguments: the page message, a single-read forward-only reader over the page JSON, and an optional
         // callback reporting the top-level array element count (see IProcessingBlocksFactory<T>.CreateProcessDataMessages)
         public Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> CreateProcessDataMessages { get; set; }
+
+        /// <summary>
+        /// Describes where this page sits in the source (offset/limit, partition bounds and change window) so that
+        /// an item-level error can be traced back to the source request that produced it. Contains paging metadata
+        /// only -- never document content -- so it is safe to log and to include in published error records.
+        /// </summary>
+        public string DescribeSourcePage()
+        {
+            var parts = new List<string>(4);
+
+            if (Offset.HasValue)
+            {
+                parts.Add($"offset {Offset.Value}");
+            }
+
+            if (Limit.HasValue)
+            {
+                parts.Add($"limit {Limit.Value}");
+            }
+
+            if (PartitionFrom is not null || PartitionUntil is not null)
+            {
+                parts.Add($"partition from {PartitionFrom ?? "(start)"} until {PartitionUntil ?? "(end)"}");
+            }
+
+            if (ChangeWindow is not null)
+            {
+                parts.Add($"change versions {ChangeWindow.MinChangeVersion} to {ChangeWindow.MaxChangeVersion}");
+            }
+
+            return parts.Count == 0 ? "unknown page" : string.Join(", ", parts);
+        }
     }
 }

@@ -146,7 +146,78 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 
-            string id = postItemMessage.Item["id"].Value<string>();
+            // Item is released (set to null) once a message has been processed so the JObject can be GC'd.
+            // Guard against a message re-entering processing after that point rather than letting the
+            // block fault on a null dereference (which would abandon the remaining items).
+            if (postItemMessage.Item is null)
+            {
+                _logger.Error(
+                    "{ResourceUrl} (source id: {Id}): Source item at {SourcePage}, index {SourceItemIndex} is no longer available for processing and the item cannot be published.",
+                    postItemMessage.ResourceUrl, postItemMessage.Id ?? "unknown", postItemMessage.SourcePage ?? "unknown page", postItemMessage.SourceItemIndex);
+
+                return new[]
+                {
+                    new ErrorItemMessage
+                    {
+                        Method = HttpMethod.Post.ToString(),
+                        ResourceUrl = postItemMessage.ResourceUrl,
+                        Id = postItemMessage.Id,
+                        SourcePage = postItemMessage.SourcePage,
+                        SourceItemIndex = postItemMessage.SourceItemIndex,
+                    }
+                };
+            }
+
+            var idToken = postItemMessage.Item["id"];
+            string id = idToken.SafeValue();
+
+            // A source item without a valid id cannot be published -- report it as a controlled error
+            // rather than letting the processing block fault (which would abandon the remaining items)
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                // Name the shape actually found (the token type is safe to log; its contents are not) and
+                // locate the document within the source so the operator can find it without a Debug-level re-run.
+                string idProblem = idToken switch
+                {
+                    null => "has no 'id' property",
+                    JValue { Type: JTokenType.Null } => "has a null 'id'",
+                    JValue => "has an empty 'id'",
+                    _ => $"has an 'id' of JSON type {idToken.Type} (a string was expected)",
+                };
+
+                _logger.Error(
+                    "{ResourceUrl}: Source item at {SourcePage}, index {SourceItemIndex} {IdProblem} and will not be published.",
+                    postItemMessage.ResourceUrl, postItemMessage.SourcePage ?? "unknown page", postItemMessage.SourceItemIndex, idProblem);
+
+                // Unlike an ordinary POST failure, there is no target response to correlate the source
+                // payload against, so it is not retained in the error record (avoids logging potentially
+                // sensitive source data for a class of error that previously never reached this far).
+                // The same applies to the id itself: a scalar reaching this point can only be null, empty or
+                // whitespace, but an object or array could carry arbitrary nested source data, so only its
+                // token type is recorded -- never its contents.
+                var invalidIdError = new ErrorItemMessage
+                {
+                    Method = HttpMethod.Post.ToString(),
+                    ResourceUrl = postItemMessage.ResourceUrl,
+                    Id = idToken switch
+                    {
+                        null => null,
+                        JValue => idToken.ToString(Newtonsoft.Json.Formatting.None),
+                        _ => $"<invalid id: {idToken.Type}>",
+                    },
+                    Body = null,
+                    SourcePage = postItemMessage.SourcePage,
+                    SourceItemIndex = postItemMessage.SourceItemIndex,
+                };
+
+                postItemMessage.Item = null;
+
+                return new[] { invalidIdError };
+            }
+
+            // Preserve the id independently of Item so it remains available for identifying this message
+            // after Item has been released by the finally block below (see the Item-is-null guard above).
+            postItemMessage.Id = id;
 
             try
             {
@@ -625,16 +696,23 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             TextReader jsonReader,
             Action<int> reportTopLevelItemCount)
         {
+            // Describe the page once; every item message of the page shares the same string instance
+            string sourcePage = message.DescribeSourcePage();
+            int sourceItemIndex = -1;
+
             // Iterate through the page of items, materializing one element at a time (see APIPUB-134)
             foreach (var token in JsonHelpers.EnumerateTopLevelArrayItems(jsonReader, reportTopLevelItemCount))
             {
+                // Every element occupies a position in the page array, whether or not it produces a message
+                sourceItemIndex++;
+
                 // Non-object elements are counted by the splitter but produce no message
                 if (token is not JObject item)
                 {
                     continue;
                 }
 
-                var itemMessage = CreateItemActionMessage(message, item);
+                var itemMessage = CreateItemActionMessage(message, item, sourcePage, sourceItemIndex);
 
                 // Stop processing individual items if cancellation has been requested
                 if (message.CancellationSource.IsCancellationRequested)
@@ -648,13 +726,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 if (_logger.IsEnabled(LogEventLevel.Debug))
                 {
                     _logger.Debug("{ResourceUrl}: Adding individual action message of type '{NameofPostItemMessage}' for item '{ItemId}'...",
-                        message.ResourceUrl, nameof(PostItemMessage), item["id"]?.Value<string>() ?? "unknown");
+                        message.ResourceUrl, nameof(PostItemMessage), item["id"].SafeValue() ?? "unknown");
                 }
 
                 yield return itemMessage;
             }
 
-            PostItemMessage CreateItemActionMessage(StreamResourcePageMessage<PostItemMessage> msg, JObject j)
+            PostItemMessage CreateItemActionMessage(StreamResourcePageMessage<PostItemMessage> msg, JObject j, string page, int index)
             {
                 return new PostItemMessage
                 {
@@ -662,6 +740,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     ResourceUrl = msg.ResourceUrl,
                     HasAuthorizationRetryPipeline = msg.HasAuthorizationRetryPipeline,
                     CancellationToken = msg.CancellationSource.Token,
+                    SourcePage = page,
+                    SourceItemIndex = index,
                 };
             }
         }
