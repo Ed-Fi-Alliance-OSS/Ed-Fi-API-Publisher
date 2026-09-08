@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -58,7 +59,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)),
                 TestHelpers.GetSourceApiConnectionDetails(),
                 A.Fake<ISourceCapabilities>(),
-                A.Fake<ISourceResourceItemProvider>());
+                A.Fake<ISourceResourceItemProvider>(),
+                A.Fake<IRunSummaryCollector>());
         }
 
         // Stands in for nested source data that must never reach the error log by way of the invalid id
@@ -332,11 +334,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 fakeTargetRequestHandler,
                 errorPublisher: errorPublisher);
 
-            // The run must fail (which the CLI's generic catch turns into a non-zero exit code)
-            var caught = await Should.ThrowAsync<Exception>(
+            // The run must fail, and name the outcome the CLI maps to its exit code (APIPUB-120)
+            var caught = await Should.ThrowAsync<PublishingFailedException>(
                 () => changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, CancellationToken.None));
 
-            caught.Message.ShouldContain("did not complete successfully");
+            caught.Reason.ShouldBe(PublishingFailureReason.ItemErrors);
+            caught.ItemErrorCount.ShouldBe(1);
             publishedErrorCount.ShouldBe(1);
         }
 

@@ -86,7 +86,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 {
                     _logger.Error($"Configuration failed: {ex.Message}");
 
-                    return -1;
+                    return PublisherExitCode.InvalidConfiguration;
                 }
 
                 var serviceProvider = new AutofacServiceProvider(configurationContainer);
@@ -174,7 +174,8 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 _logger.Information($"Processing started.");
                 await changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, cancellationToken).ConfigureAwait(false);
                 _logger.Information($"Processing complete.");
-                return 0;
+
+                return PublisherExitCode.Success;
             }
             //catch (RateLimitRejectedException ex)
             //{
@@ -183,17 +184,26 @@ namespace EdFi.Tools.ApiPublisher.Cli
             //}
             catch (Exception ex)
             {
-                if (EdFiApiAuthenticationException.IsRepresentedBy(ex))
+                if (Flatten(ex).Any(EdFiApiAuthenticationException.IsRepresentedBy))
                 {
                     // The single most important line for an unattended run: name authentication as the cause rather
                     // than leaving it inside a generic failure message.
-                    _logger.Fatal(ex, $"Processing failed because the publisher could not authenticate against the API. No further data was published. {string.Join(" ", GetExceptionMessages(ex))}");
+                    _logger.Fatal(ex, $"Processing failed because the publisher could not authenticate against the API. No further data was published.{Environment.NewLine}{DescribeExceptionChain(ex)}");
 
-                    return -1;
+                    return PublisherExitCode.AuthenticationFailure;
                 }
 
-                _logger.Error($"Processing failed: {string.Join(" ", GetExceptionMessages(ex))}");
-                return -1;
+                // A run that finished but rejected documents is reported apart from one that broke, so that
+                // an unattended caller can tell "some documents need attention" from "re-run this", and both
+                // from a configuration mistake that published nothing at all (APIPUB-120).
+                int exitCode = PublisherExitCode.ForFailure(ex);
+
+                _logger.Error(
+                    exitCode == PublisherExitCode.InvalidConfiguration
+                        ? $"Configuration failed:{Environment.NewLine}{DescribeExceptionChain(ex)}"
+                        : $"Processing failed:{Environment.NewLine}{DescribeExceptionChain(ex)}");
+
+                return exitCode;
             }
             finally
             {
@@ -234,6 +244,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
             if (options.ErrorPublishingBatchSize < 1)
             {
                 validationErrors.Add($"{nameof(options.ErrorPublishingBatchSize)} must be greater than 0.");
+            }
+
+            if (options.ToleratedItemErrorCount < -1)
+            {
+                validationErrors.Add($"{nameof(options.ToleratedItemErrorCount)} value of '{options.ToleratedItemErrorCount}' is invalid. It must be -1 (tolerate any number of failed documents), 0 (the default: fail the run if any document fails), or a positive number.");
             }
 
             if (options.RetryStartingDelayMilliseconds < 1)
@@ -278,20 +293,50 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
             if (validationErrors.Any())
             {
-                throw new Exception($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");
+                throw new InvalidConfigurationException($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");
             }
         }
 
-        private static IEnumerable<string> GetExceptionMessages(Exception ex)
+        /// <summary>
+        /// Enumerates an exception and everything nested inside it, including the individual inner exceptions
+        /// of an <see cref="AggregateException" /> (a faulted resource can carry several).
+        /// </summary>
+        private static IEnumerable<Exception> Flatten(Exception ex)
         {
-            var currentException = ex;
-
-            while (currentException != null)
+            if (ex is null)
             {
-                yield return currentException.Message;
-
-                currentException = currentException.InnerException;
+                yield break;
             }
+
+            yield return ex;
+
+            if (ex is AggregateException aggregateException)
+            {
+                foreach (var innerException in aggregateException.InnerExceptions.SelectMany(Flatten))
+                {
+                    yield return innerException;
+                }
+
+                yield break;
+            }
+
+            foreach (var innerException in Flatten(ex.InnerException))
+            {
+                yield return innerException;
+            }
+        }
+
+        /// <summary>
+        /// Renders the exception chain as one message per line. Joining the chain with spaces produced a single
+        /// run-on line that hid where one failure ended and the next began (see APIPUB-120).
+        /// </summary>
+        private static string DescribeExceptionChain(Exception ex)
+        {
+            return string.Join(
+                Environment.NewLine,
+                Flatten(ex)
+                    .Where(exception => exception is not AggregateException)
+                    .Select(exception => $"  {exception.GetType().Name}: {exception.Message}"));
         }
 
         private static void EnsureConnectionFullyDefinedOrNamed(INamedConnectionDetails connectionDetails, string type)
@@ -306,7 +351,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
             // Ensure that names are provided for the connection if it's not already fully defined
             if (!connectionDetails.IsFullyDefined() && string.IsNullOrEmpty(connectionDetails.Name))
             {
-                throw new ArgumentException($"{type} connection is not fully defined and no connection name was provided.");
+                throw new InvalidConfigurationException($"{type} connection is not fully defined and no connection name was provided.");
             }
         }
 

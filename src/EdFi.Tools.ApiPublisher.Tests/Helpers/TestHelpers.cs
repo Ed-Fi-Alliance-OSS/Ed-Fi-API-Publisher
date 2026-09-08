@@ -22,6 +22,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Initiators;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Finalization;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
@@ -32,6 +33,7 @@ using Microsoft.Extensions.Configuration;
 using Serilog;
 using System;
 using System.Net;
+using System.Net.Http;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 {
@@ -266,7 +268,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             INodeJSService nodeJsService = null,
             bool withReversePaging = false,
             IErrorPublisher errorPublisher = null,
-            TimeProvider timeProvider = null)
+            TimeProvider timeProvider = null,
+            IRunSummaryCollector runSummaryCollector = null,
+            IPublishingOperationMetadataCollector metadataCollector = null,
+            IChangeVersionProcessedWriter changeVersionProcessedWriter = null,
+            IRateLimiting<HttpResponseMessage> postResourceRateLimiter = null)
         {
             EdFiApiClient SourceApiClientFactory() =>
                 new EdFiApiClient(
@@ -291,10 +297,31 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
             var resourceDependencyMetadataProvider = new EdFiApiGraphMLDependencyMetadataProvider(targetEdFiApiClientProvider);
             var resourceDependencyProvider = new ResourceDependencyProvider(resourceDependencyMetadataProvider);
-            var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
+            changeVersionProcessedWriter ??= A.Fake<IChangeVersionProcessedWriter>();
             errorPublisher ??= A.Fake<IErrorPublisher>();
 
+            // Real collectors by default: the run summary is assembled from counts taken across the whole
+            // pipeline, so a fake would report an empty summary for every run. A test that asserts on the
+            // summary supplies both, since the run summary reads the item counts the metadata collector holds.
+            metadataCollector ??= new PublishingOperationMetadataCollector();
+            runSummaryCollector ??= new RunSummaryCollector(metadataCollector);
+
             nodeJsService ??= A.Fake<INodeJSService>();
+
+            // Every component that reads Options.EnableRateLimit builds its policy with
+            // Policy.WrapAsync(rateLimiter?.GetRateLimitingPolicy(), ...), which throws a
+            // NullReferenceException when no limiter was supplied. A permissive limiter keeps the components
+            // that are not under test out of the way, so a test can rate limit the POSTs alone.
+            var supportingRateLimiter = options.EnableRateLimit
+                ? new PollyRateLimiter<HttpResponseMessage>(
+                    new Options
+                    {
+                        EnableRateLimit = true,
+                        RateLimitNumberExecutions = 1000,
+                        RateLimitTimeSeconds = 1,
+                        RateLimitMaxRetries = 0,
+                    })
+                : null;
 
             var sourceEdFiVersionMetadataProvider = new SourceEdFiApiVersionMetadataProvider(sourceEdFiApiClientProvider);
             var targetEdFiVersionMetadataProvider = new TargetEdFiApiVersionMetadataProvider(targetEdFiApiClientProvider);
@@ -304,18 +331,26 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             var sourceCurrentChangeVersionProvider = new EdFiApiSourceCurrentChangeVersionProvider(sourceEdFiApiClientProvider);
             var sourceIsolationApplicator = new EdFiApiSourceIsolationApplicator(sourceEdFiApiClientProvider);
             var dataSourceCapabilities = new EdFiApiSourceCapabilities(sourceEdFiApiClientProvider);
-            var publishErrorsBlocksFactory = new PublishErrorsBlocksFactory(errorPublisher);
+            var publishErrorsBlocksFactory = new PublishErrorsBlocksFactory(errorPublisher, runSummaryCollector);
 
             var streamingResourceProcessor = new StreamingResourceProcessor(
                 new StreamResourceBlockFactory(
                     (withReversePaging) ?
                         new EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer(
-                            new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider)) :
+                            new ResourceItemCountCollector(
+                                new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider, supportingRateLimiter),
+                                metadataCollector)) :
                         new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(
-                            new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider))
+                            new ResourceItemCountCollector(
+                                new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider, supportingRateLimiter),
+                                metadataCollector))
                     ),
                 new StreamResourcePagesBlockFactory(
-                    new EdFiApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider, new OffsetPageRequestStrategy())),
+                    new EdFiApiStreamResourcePageMessageHandler(
+                        sourceEdFiApiClientProvider,
+                        new OffsetPageRequestStrategy(),
+                        supportingRateLimiter),
+                    runSummaryCollector),
                 sourceApiConnectionDetails);
 
             var stageInitiators = A.Fake<IIndex<PublishingStage, IPublishingStageInitiator>>();
@@ -324,7 +359,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 .Returns(
                     new KeyChangePublishingStageInitiator(
                         streamingResourceProcessor,
-                        new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider)));
+                        new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider, supportingRateLimiter)));
 
             A.CallTo(() => stageInitiators[PublishingStage.Upserts])
                 .Returns(
@@ -335,13 +370,15 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                             targetEdFiApiClientProvider,
                             sourceApiConnectionDetails,
                             dataSourceCapabilities,
-                            new ApiSourceResourceItemProvider(sourceEdFiApiClientProvider, options))));
+                            new ApiSourceResourceItemProvider(sourceEdFiApiClientProvider, options, supportingRateLimiter),
+                            runSummaryCollector,
+                            postResourceRateLimiter)));
 
             A.CallTo(() => stageInitiators[PublishingStage.Deletes])
                 .Returns(
                     new DeletePublishingStageInitiator(
                         streamingResourceProcessor,
-                        new DeleteResourceProcessingBlocksFactory(targetEdFiApiClientProvider)));
+                        new DeleteResourceProcessingBlocksFactory(targetEdFiApiClientProvider, supportingRateLimiter)));
 
             return new ChangeProcessor(
                 resourceDependencyProvider,
@@ -354,6 +391,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 sourceIsolationApplicator,
                 dataSourceCapabilities,
                 publishErrorsBlocksFactory,
+                runSummaryCollector,
                 stageInitiators,
                 Array.Empty<IFinalizationActivity>());
         }

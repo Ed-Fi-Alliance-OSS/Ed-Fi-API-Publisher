@@ -17,6 +17,7 @@ using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -39,6 +40,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly ISourceConnectionDetails _sourceConnectionDetails;
         private readonly ISourceCapabilities _sourceCapabilities;
         private readonly ISourceResourceItemProvider _sourceResourceItemProvider;
+        private readonly IRunSummaryCollector _runSummaryCollector;
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
         // Dependency resources for which a deferred (Forbidden) dependency post has already been reported at Warning level
@@ -50,9 +52,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             ISourceConnectionDetails sourceConnectionDetails,
             ISourceCapabilities sourceCapabilities,
             ISourceResourceItemProvider sourceResourceItemProvider,
+            IRunSummaryCollector runSummaryCollector,
             IRateLimiting<HttpResponseMessage> rateLimiter = null
         )
         {
+            _runSummaryCollector = runSummaryCollector;
             _nodeJsService = nodeJsService;
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
             _sourceConnectionDetails = sourceConnectionDetails;
@@ -143,6 +147,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         {
             if (ignoredResourceByUrl.ContainsKey(postItemMessage.ResourceUrl))
             {
+                // Abandoned by an operator's own choice (treatForbiddenPostAsWarning), so it is not an error,
+                // but it is counted so that the run summary cannot report it as published (APIPUB-120).
+                _runSummaryCollector.AddSkippedItems(
+                    PublishingStage.Upserts,
+                    postItemMessage.ResourceUrl,
+                    1,
+                    SkipReasons.ResourceIgnoredAfterAuthorizationFailure);
+
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 
@@ -468,6 +480,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                         ignoredResourceByUrl.TryAdd(postItemMessage.ResourceUrl, true);
 
+                        _runSummaryCollector.AddSkippedItems(
+                            PublishingStage.Upserts,
+                            postItemMessage.ResourceUrl,
+                            1,
+                            SkipReasons.ResourceIgnoredAfterAuthorizationFailure);
+
                         return Enumerable.Empty<ErrorItemMessage>();
                     }
 
@@ -515,7 +533,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             catch (RateLimitRejectedException ex)
             {
                 _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", postItemMessage.ResourceUrl);
-                return Enumerable.Empty<ErrorItemMessage>();
+
+                // Reported as an error rather than dropped: the rate limiter has already exhausted its own
+                // retries, so the document was not published and the run must not report success (APIPUB-120).
+                return new[]
+                {
+                    new ErrorItemMessage
+                    {
+                        Method = HttpMethod.Post.ToString(),
+                        ResourceUrl = postItemMessage.ResourceUrl,
+                        Id = id,
+                        Body = null,
+                        Exception = ex,
+                    }
+                };
             }
             catch (OperationCanceledException ex) when (postItemMessage.CancellationToken.IsCancellationRequested)
             {

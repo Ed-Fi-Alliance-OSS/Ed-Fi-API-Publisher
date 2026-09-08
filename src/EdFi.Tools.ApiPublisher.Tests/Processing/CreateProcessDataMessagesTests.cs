@@ -9,6 +9,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
@@ -62,7 +63,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)),
                 A.Fake<ISourceConnectionDetails>(),
                 A.Fake<ISourceCapabilities>(),
-                A.Fake<ISourceResourceItemProvider>());
+                A.Fake<ISourceResourceItemProvider>(),
+                A.Fake<IRunSummaryCollector>());
         }
 
         [Test]

@@ -250,6 +250,18 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 {
                     pageLogger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.",
                         message.ResourceUrl);
+
+                    // The page, and with it the rest of the resource, is abandoned. Published as an error so
+                    // that the run cannot report success after reading only part of the source (APIPUB-120).
+                    await errorHandlingBlock.SendErrorAsync(
+                            new ErrorItemMessage
+                            {
+                                Method = HttpMethod.Get.ToString(),
+                                ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
+                                Exception = ex,
+                            },
+                            message.CancellationSource.Token)
+                        .ConfigureAwait(false);
                 }
                 break;
             }

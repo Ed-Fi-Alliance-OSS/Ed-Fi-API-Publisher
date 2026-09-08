@@ -19,6 +19,7 @@ using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Finalization;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Isolation;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
@@ -50,6 +51,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly ISourceIsolationApplicator _sourceIsolationApplicator;
         private readonly ISourceCapabilities _sourceCapabilities;
         private readonly PublishErrorsBlocksFactory _publishErrorsBlocksFactory;
+        private readonly IRunSummaryCollector _runSummaryCollector;
         private readonly IIndex<PublishingStage, IPublishingStageInitiator> _publishingStageInitiatorByStage;
         private readonly IFinalizationActivity[] _finalizationActivities;
         private string _lcvpTargetName;
@@ -65,6 +67,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             ISourceIsolationApplicator sourceIsolationApplicator,
             ISourceCapabilities sourceCapabilities,
             PublishErrorsBlocksFactory publishErrorsBlocksFactory,
+            IRunSummaryCollector runSummaryCollector,
             IIndex<PublishingStage, IPublishingStageInitiator> publishingStageInitiatorByStage,
             IFinalizationActivity[] finalizationActivities)
         {
@@ -78,6 +81,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _sourceIsolationApplicator = sourceIsolationApplicator;
             _sourceCapabilities = sourceCapabilities;
             _publishErrorsBlocksFactory = publishErrorsBlocksFactory;
+            _runSummaryCollector = runSummaryCollector;
             _publishingStageInitiatorByStage = publishingStageInitiatorByStage;
             _finalizationActivities = finalizationActivities;
         }
@@ -107,11 +111,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 else
                 {
                     _logger.Information(
-                        "Processing block bounding is active (processingBlockBoundedCapacity setting: {ConfiguredCapacity}): up to {ItemCapacity} items per resource-processing block, {PageCapacity} page messages per page-streaming block, and roughly {ErrorCapacity} pending errors (ingestion queue plus queued publishing batches) will be buffered. When buffers are full, source page fetching pauses until the target catches up -- slower or paused page fetching under a slow target is the bound working, not a hang.",
+                        "Processing block bounding is active (processingBlockBoundedCapacity setting: {ConfiguredCapacity}): up to {ItemCapacity} items per resource-processing block, {PageCapacity} page messages per page-streaming block, and roughly {ErrorCapacity} pending errors (the active stage's error tally, the ingestion queue, plus queued publishing batches) will be buffered. When buffers are full, source page fetching pauses until the target catches up -- slower or paused page fetching under a slow target is the bound working, not a hang.",
                         options.ProcessingBlockBoundedCapacity,
                         options.ResolvedProcessingBlockBoundedCapacity,
                         options.ResolvedStreamResourcePagesBlockBoundedCapacity,
-                        options.ResolvedErrorPublishingBoundedCapacity
+                        (2 * options.ResolvedErrorPublishingBoundedCapacity)
                             + (Options.MaxQueuedErrorBatches * Math.Max(1, options.ErrorPublishingBatchSize)));
                 }
 
@@ -164,7 +168,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) = _publishErrorsBlocksFactory.CreateBlocks(options);
 
                 // Process all the key changes first
-                var keyChangesTaskStatuses = await ProcessKeyChangesToCompletionAsync(
+                var keyChangeOutcomes = await ProcessKeyChangesToCompletionAsync(
                     changeWindow,
                     dependencyKeysByResourceKey,
                     configuration.ResourcesWithUpdatableKeys,
@@ -175,7 +179,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     .ConfigureAwait(false);
 
                 // Process all the "Upserts"
-                var postTaskStatuses = ProcessUpsertsToCompletion(
+                var postOutcomes = ProcessUpsertsToCompletion(
                     dependencyKeysByResourceKey,
                     options,
                     authorizationFailureHandling,
@@ -185,7 +189,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     cancellationToken);
 
                 // Process all the deletions
-                var deleteTaskStatuses = await ProcessDeletesToCompletionAsync(
+                var deleteOutcomes = await ProcessDeletesToCompletionAsync(
                     changeWindow,
                     dependencyKeysByResourceKey,
                     options,
@@ -207,12 +211,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // run still fails with a non-zero exit rather than reporting success with unpublished errors.
                 if (_publishErrorsBlocksFactory.FirstPublishingException is not null)
                 {
-                    throw new AggregateException(
+                    throw new PublishingFailedException(
                         "Error publishing failed, so the published error information is incomplete.",
-                        _publishErrorsBlocksFactory.FirstPublishingException);
+                        PublishingFailureReason.IncompleteProcessing,
+                        innerException: _publishErrorsBlocksFactory.FirstPublishingException);
                 }
 
-                EnsureProcessingWasSuccessful(keyChangesTaskStatuses, postTaskStatuses, deleteTaskStatuses);
+                EnsureProcessingWasSuccessful(keyChangeOutcomes, postOutcomes, deleteOutcomes, options);
 
                 // Perform processing finalization activities
                 var finalizationTasks = _finalizationActivities.Select(f => f.Execute()).ToArray();
@@ -227,8 +232,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     throw;
                 }
 
-                await UpdateChangeVersionAsync(configuration, changeWindow)
-                    .ConfigureAwait(false);
+                // A document that failed is inside the change window, so the window is what gives it another
+                // chance: the last change version processed is advanced only by a run that lost nothing, even
+                // when the loss was tolerated by configuration (see APIPUB-120).
+                if (_errorPublisher.GetPublishedErrorCount() == 0)
+                {
+                    await UpdateChangeVersionAsync(configuration, changeWindow)
+                        .ConfigureAwait(false);
+                }
             }
             catch (RateLimitRejectedException ex)
             {
@@ -242,8 +253,24 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
             finally
             {
+                // Reported from the finally so that a run which failed still accounts for what it published:
+                // the outcome of a partial run is exactly when an operator needs the counts (APIPUB-120).
+                ReportRunSummary();
+
                 _logger.Information($"Processing finished in {processStopwatch.Elapsed.TotalSeconds:N0} seconds.");
             }
+        }
+
+        private void ReportRunSummary()
+        {
+            string summary = RunSummaryFormatter.Format(_runSummaryCollector.GetSummary());
+
+            if (string.IsNullOrEmpty(summary))
+            {
+                return;
+            }
+
+            _logger.Information("{RunSummary:l}", $"{Environment.NewLine}{summary}");
         }
 
         private async Task UpdateChangeVersionAsync(
@@ -683,7 +710,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 .GetValueOrDefault(_lcvpTargetName);
         }
 
-        private TaskStatus[] ProcessUpsertsToCompletion(
+        private ResourceStreamingOutcome[] ProcessUpsertsToCompletion(
             IDictionary<string, string[]> postDependenciesByResourcePath,
             Options options,
             AuthorizationFailureHandling[] authorizationFailureHandling,
@@ -698,10 +725,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
             var initiator = _publishingStageInitiatorByStage[PublishingStage.Upserts];
 
+            // Errors are routed through the stage's own tally block so that each one is counted against the
+            // stage it happened in before reaching the shared error publishing path (see APIPUB-120).
+            var stageErrorsBlock = _publishErrorsBlocksFactory.CreateStageErrorTallyBlock(
+                PublishingStage.Upserts,
+                errorPublishingBlock,
+                options);
+
             var processingContext = new ProcessingContext(
                 changeWindow,
                 postDependenciesByResourcePath,
-                errorPublishingBlock,
+                stageErrorsBlock,
                 processingSemaphore,
                 options,
                 authorizationFailureHandling,
@@ -713,16 +747,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             var streamingPagesOfPostsByResourcePath = initiator.Start(processingContext, cancellationToken);
 
             // Wait for all upsert publishing to finish
-            var postTaskStatuses = WaitForResourceStreamingToComplete(
+            var postOutcomes = WaitForResourceStreamingToComplete(
                 "upserts",
                 streamingPagesOfPostsByResourcePath,
                 processingSemaphore,
                 options);
 
-            return postTaskStatuses;
+            // Every producer of this stage has finished, so the stage's errors can be drained and counted
+            stageErrorsBlock.Complete();
+            stageErrorsBlock.Completion.Wait();
+
+            return postOutcomes;
         }
 
-        private async Task<TaskStatus[]> ProcessDeletesToCompletionAsync(
+        private async Task<ResourceStreamingOutcome[]> ProcessDeletesToCompletionAsync(
             ChangeWindow changeWindow,
             IDictionary<string, string[]> postDependenciesByResourcePath,
             Options options,
@@ -734,16 +772,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             if (changeWindow == null)
             {
                 _logger.Information($"No change window was defined, so no delete processing will be performed.");
-                return Array.Empty<TaskStatus>();
+                return Array.Empty<ResourceStreamingOutcome>();
             }
 
             if (changeWindow.MinChangeVersion <= 1 && !options.ProcessDeletesAndKeyChangesOnFullPublish)
             {
                 _logger.Information($"Change window starting value indicates all values are being published, and so there is no need to perform delete processing.");
-                return Array.Empty<TaskStatus>();
+                return Array.Empty<ResourceStreamingOutcome>();
             }
 
-            TaskStatus[] deleteTaskStatuses = Array.Empty<TaskStatus>();
+            ResourceStreamingOutcome[] deleteOutcomes = Array.Empty<ResourceStreamingOutcome>();
 
             // Invert the dependencies for use in deletion, excluding descriptors (if present) and the special #Retry nodes
             var deleteDependenciesByResourcePath = InvertDependencies(postDependenciesByResourcePath,
@@ -763,10 +801,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         options.MaxDegreeOfParallelismForResourceProcessing,
                         options.MaxDegreeOfParallelismForResourceProcessing);
 
+                    var stageErrorsBlock = _publishErrorsBlocksFactory.CreateStageErrorTallyBlock(
+                        PublishingStage.Deletes,
+                        errorPublishingBlock,
+                        options);
+
                     var processingContext = new ProcessingContext(
                         changeWindow,
                         deleteDependenciesByResourcePath,
-                        errorPublishingBlock,
+                        stageErrorsBlock,
                         processingSemaphore,
                         options,
                         authorizationFailureHandling,
@@ -779,11 +822,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     var streamingPagesOfDeletesByResourcePath = initiator.Start(processingContext, cancellationToken);
 
                     // Wait for everything to finish
-                    deleteTaskStatuses = WaitForResourceStreamingToComplete(
+                    deleteOutcomes = WaitForResourceStreamingToComplete(
                         "deletes",
                         streamingPagesOfDeletesByResourcePath,
                         processingSemaphore,
                         options);
+
+                    stageErrorsBlock.Complete();
+                    await stageErrorsBlock.Completion.ConfigureAwait(false);
                 }
                 else
                 {
@@ -791,10 +837,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
             }
 
-            return deleteTaskStatuses;
+            return deleteOutcomes;
         }
 
-        private async Task<TaskStatus[]> ProcessKeyChangesToCompletionAsync(
+        private async Task<ResourceStreamingOutcome[]> ProcessKeyChangesToCompletionAsync(
             ChangeWindow changeWindow,
             IDictionary<string, string[]> dependencyKeysByResourceKey,
             string[] resourcesWithUpdatableKeys,
@@ -807,16 +853,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             if (changeWindow == null)
             {
                 _logger.Information($"No change window was defined, so no key change processing will be performed.");
-                return Array.Empty<TaskStatus>();
+                return Array.Empty<ResourceStreamingOutcome>();
             }
 
             if (changeWindow.MinChangeVersion <= 1 && !options.ProcessDeletesAndKeyChangesOnFullPublish)
             {
                 _logger.Information($"Change window starting value indicates all values are being published, and so there is no need to perform key change processing.");
-                return Array.Empty<TaskStatus>();
+                return Array.Empty<ResourceStreamingOutcome>();
             }
 
-            TaskStatus[] keyChangeTaskStatuses = Array.Empty<TaskStatus>();
+            ResourceStreamingOutcome[] keyChangeOutcomes = Array.Empty<ResourceStreamingOutcome>();
 
             if (resourcesWithUpdatableKeys.Any())
             {
@@ -829,7 +875,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     _logger.Information($"None of the API resources configured to allow key changes were found in the resources to be processed (based on the resource dependency metadata).");
 
-                    return Array.Empty<TaskStatus>();
+                    return Array.Empty<ResourceStreamingOutcome>();
                 }
 
                 var supportsKeyChanges = await _sourceCapabilities.SupportsKeyChangesAsync(probeResourceKey);
@@ -842,10 +888,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         options.MaxDegreeOfParallelismForResourceProcessing,
                         options.MaxDegreeOfParallelismForResourceProcessing);
 
+                    var stageErrorsBlock = _publishErrorsBlocksFactory.CreateStageErrorTallyBlock(
+                        PublishingStage.KeyChanges,
+                        errorPublishingBlock,
+                        options);
+
                     var processingContext = new ProcessingContext(
                         changeWindow,
                         keyChangeDependenciesByResourcePath,
-                        errorPublishingBlock,
+                        stageErrorsBlock,
                         processingSemaphore,
                         options,
                         authorizationFailureHandling,
@@ -859,11 +910,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     var streamingPagesOfKeyChangesByResourcePath = initiator.Start(processingContext, cancellationToken);
 
                     // Wait for everything to finish
-                    keyChangeTaskStatuses = WaitForResourceStreamingToComplete(
+                    keyChangeOutcomes = WaitForResourceStreamingToComplete(
                         "key changes",
                         streamingPagesOfKeyChangesByResourcePath,
                         processingSemaphore,
                         options);
+
+                    stageErrorsBlock.Complete();
+                    await stageErrorsBlock.Completion.ConfigureAwait(false);
                 }
                 else
                 {
@@ -871,7 +925,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 }
             }
 
-            return keyChangeTaskStatuses;
+            return keyChangeOutcomes;
         }
 
         /// <summary>
@@ -967,47 +1021,95 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         }
 
         private void EnsureProcessingWasSuccessful(
-            TaskStatus[] keyChangeTaskStatuses,
-            TaskStatus[] postTaskStatuses,
-            TaskStatus[] deleteTaskStatuses)
+            ResourceStreamingOutcome[] keyChangeOutcomes,
+            ResourceStreamingOutcome[] postOutcomes,
+            ResourceStreamingOutcome[] deleteOutcomes,
+            Options options)
         {
-            bool success = true;
-
             long publishedErrorCount = _errorPublisher.GetPublishedErrorCount();
 
             if (publishedErrorCount > 0)
             {
-                success = false;
                 _logger.Error($"{publishedErrorCount} unrecoverable errors occurred during resource item processing -- last change version will not be updated for this connection.");
             }
 
-            var nonCompletedKeyChangeTaskCount = keyChangeTaskStatuses.Count(s => s != TaskStatus.RanToCompletion);
+            var incompleteKeyChanges = GetIncomplete(keyChangeOutcomes, "key change");
+            var incompletePosts = GetIncomplete(postOutcomes, "upsert");
+            var incompleteDeletes = GetIncomplete(deleteOutcomes, "delete");
 
-            if (nonCompletedKeyChangeTaskCount > 0)
+            var incompleteOutcomes = incompleteKeyChanges
+                .Concat(incompletePosts)
+                .Concat(incompleteDeletes)
+                .ToArray();
+
+            // A run that broke is reported separately from one that finished with rejected documents: the
+            // first says nothing about what was published, while the second accounts for every document.
+            if (incompleteOutcomes.Length > 0)
             {
-                success = false;
-                _logger.Error($"{nonCompletedKeyChangeTaskCount} resource key change tasks did not run to completion successfully -- last change version processed will not be updated for this connection.");
+                var faultExceptions = incompleteOutcomes
+                    .Where(outcome => outcome.Exception is not null)
+                    .Select(outcome => (Exception)outcome.Exception)
+                    .ToArray();
+
+                throw new PublishingFailedException(
+                    $"Processing did not complete successfully: {incompleteOutcomes.Length} resource(s) did not run to completion ({DescribeIncompleteResources(incompleteOutcomes)}).",
+                    PublishingFailureReason.IncompleteProcessing,
+                    publishedErrorCount,
+                    incompleteOutcomes.Length,
+                    faultExceptions.Length switch
+                    {
+                        0 => null,
+                        1 => faultExceptions[0],
+                        _ => new AggregateException(faultExceptions),
+                    });
             }
 
-            var nonCompletedPostTaskCount = postTaskStatuses.Count(s => s != TaskStatus.RanToCompletion);
-
-            if (nonCompletedPostTaskCount > 0)
+            if (publishedErrorCount == 0)
             {
-                success = false;
-                _logger.Error($"{nonCompletedPostTaskCount} resource upsert tasks did not run to completion successfully -- last change version processed will not be updated for this connection.");
+                return;
             }
 
-            var nonCompletedDeleteTaskCount = deleteTaskStatuses.Count(s => s != TaskStatus.RanToCompletion);
-
-            if (nonCompletedDeleteTaskCount > 0)
+            // Best-effort publishing is opt-in, and the threshold is explicit rather than implied: without
+            // it, a single rejected document and a run that lost 150,000 of them are indistinguishable to
+            // an unattended caller (see APIPUB-120).
+            if (options.ToleratedItemErrorCount == -1 || publishedErrorCount <= options.ToleratedItemErrorCount)
             {
-                success = false;
-                _logger.Error($"{nonCompletedDeleteTaskCount} resource delete tasks did not run to completion successfully -- last change version processed will not be updated for this connection.");
+                _logger.Warning(
+                    "{PublishedErrorCount} document(s) were not published, which is within the configured tolerance of {ToleratedItemErrorCount:l} (toleratedItemErrorCount), so the run is reported as successful. The last change version processed is still not updated, so these documents are re-published on the next run.",
+                    publishedErrorCount,
+                    options.ToleratedItemErrorCount == -1 ? "any number" : options.ToleratedItemErrorCount.ToString());
+
+                return;
             }
 
-            if (!success)
+            throw new PublishingFailedException(
+                $"Processing completed, but {publishedErrorCount} document(s) were not published.",
+                PublishingFailureReason.ItemErrors,
+                publishedErrorCount);
+
+            static string DescribeIncompleteResources(ResourceStreamingOutcome[] outcomes)
             {
-                throw new Exception("Processing did not complete successfully.");
+                const int MaxNamedResources = 10;
+
+                string named = string.Join(
+                    ", ",
+                    outcomes.Take(MaxNamedResources).Select(outcome => $"{outcome.ResourcePath} [{outcome.Status}]"));
+
+                return outcomes.Length <= MaxNamedResources
+                    ? named
+                    : $"{named}, and {outcomes.Length - MaxNamedResources} more";
+            }
+
+            ResourceStreamingOutcome[] GetIncomplete(ResourceStreamingOutcome[] outcomes, string activityDescription)
+            {
+                var incomplete = outcomes.Where(outcome => !outcome.RanToCompletion).ToArray();
+
+                if (incomplete.Length > 0)
+                {
+                    _logger.Error($"{incomplete.Length} resource {activityDescription} tasks did not run to completion successfully -- last change version processed will not be updated for this connection.");
+                }
+
+                return incomplete;
             }
         }
 
@@ -1048,13 +1150,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         }
 
 
-        private TaskStatus[] WaitForResourceStreamingToComplete(
+        private ResourceStreamingOutcome[] WaitForResourceStreamingToComplete(
             string activityDescription,
             IDictionary<string, StreamingPagesItem> streamingPagesByResourcePath,
             SemaphoreSlim processingSemaphore,
             Options options)
         {
-            var completedStreamingPagesByResourcePath = new Dictionary<string, TaskStatus>(StringComparer.OrdinalIgnoreCase);
+            var completedStreamingPagesByResourcePath = new Dictionary<string, ResourceStreamingOutcome>(StringComparer.OrdinalIgnoreCase);
 
             _logger.Information($"Waiting for {streamingPagesByResourcePath.Count} {activityDescription} streaming sources to complete...");
 
@@ -1176,9 +1278,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         _logger.Fatal($"Streaming task failure for {resourcePath}: {blockCompletion.Exception}");
                     }
 
+                    // The exception is retained alongside the status because it is the only record of why
+                    // the resource failed, and a failed run has to be able to name its cause (APIPUB-120).
                     completedStreamingPagesByResourcePath.Add(
-                        resourcePaths[completedIndex],
-                        streamingPagesByResourcePath[resourcePaths[completedIndex]].CompletionBlock.Completion.Status);
+                        resourcePath,
+                        new ResourceStreamingOutcome(resourcePath, blockCompletion.Status, blockCompletion.Exception));
 
                     streamingPagesItem.CompletionBlock = null;
 
