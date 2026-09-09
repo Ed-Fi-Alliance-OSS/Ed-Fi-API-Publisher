@@ -129,8 +129,11 @@ public class EdFiApiAsSourceModule : Module
             .As<IStreamResourcePageMessageProducer>()
             .SingleInstance();
 
-        // Register the strategy that addresses successive page requests (offset/limit, see APIPUB-138)
-        builder.RegisterType<OffsetPageRequestStrategy>()
+        // Page-request strategies (see APIPUB-138/APIPUB-139): the dispatcher picks offset/limit or cursor per message
+        builder.RegisterType<OffsetPageRequestStrategy>().AsSelf().SingleInstance();
+        builder.RegisterType<CursorPageRequestStrategy>().AsSelf().SingleInstance();
+
+        builder.RegisterType<PageRequestStrategyDispatcher>()
             .As<IPageRequestStrategy>()
             .SingleInstance();
 

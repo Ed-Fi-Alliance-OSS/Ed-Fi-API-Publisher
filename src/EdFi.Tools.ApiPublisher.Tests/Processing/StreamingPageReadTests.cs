@@ -12,6 +12,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using Jering.Javascript.NodeJS;
@@ -189,8 +190,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 50, isFinalPage: false);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
-                .ToArray();
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             itemMessages.Length.ShouldBe(3);
             errorBlock.Count.ShouldBe(0);
@@ -223,8 +223,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 50, isFinalPage: false);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
-                .ToArray();
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             itemMessages.Length.ShouldBe(3);
             itemMessages.Select(m => m.Item["id"]!.Value<string>()).ShouldBe(new[] { "1", "2", "3" });
@@ -272,8 +271,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 2, isFinalPage: true);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
-                .ToArray();
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             pageRequestCount.ShouldBe(2);
             itemMessages.Length.ShouldBe(3);
@@ -306,8 +304,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 50, isFinalPage: true);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
-                .ToArray();
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             pageRequestCount.ShouldBe(1);
             itemMessages.Length.ShouldBe(3);
@@ -341,7 +338,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreateDeletesPageMessage(limit: 2, isFinalPage: true);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock);
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             // "No count reported" must mean "no continuation" -- even though the page was full
             pageRequestCount.ShouldBe(1);
@@ -370,7 +367,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 50, isFinalPage: false);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock);
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             itemMessages.ShouldBeEmpty();
 
@@ -398,7 +395,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 50, isFinalPage: false);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock);
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             itemMessages.ShouldBeEmpty();
 
@@ -436,8 +433,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 50, isFinalPage: false);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
-                .ToArray();
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             attempts.ShouldBe(2);
             itemMessages.Length.ShouldBe(1);
@@ -482,7 +478,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var handlerTask = handler.HandleStreamResourcePageAsync(message, options, errorBlock);
+            var handlerTask = handler.HandleStreamResourcePageAsync(message, options, errorBlock).ToArrayAsync().AsTask();
             (await Task.WhenAny(handlerTask, Task.Delay(TimeSpan.FromSeconds(30)))).ShouldBe(handlerTask);
 
             // Graceful cancellation: no items, no further attempts, and no error published
@@ -562,7 +558,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
             // The parse blocks synchronously, so run the handler off the test thread
-            var handlerTask = Task.Run(() => handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock));
+            var handlerTask = Task.Run(() => handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync().AsTask());
 
             (await readStalled.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
 
@@ -591,7 +587,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 50, isFinalPage: false);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var handlerTask = Task.Run(() => handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock));
+            var handlerTask = Task.Run(() => handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync().AsTask());
 
             (await readStalled.WaitAsync(TimeSpan.FromSeconds(30))).ShouldBeTrue();
 
@@ -625,8 +621,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var message = CreatePageMessage(limit: 50, isFinalPage: false);
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = (await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock))
-                .ToArray();
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             itemMessages.Length.ShouldBe(3);
             errorBlock.Count.ShouldBe(0);
@@ -658,7 +653,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
             // GetOptions configures MaxRetryAttempts = 2, so exhaustion means 3 attempts in total
-            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock);
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             itemMessages.ShouldBeEmpty();
             contents.Count.ShouldBe(3);
@@ -699,11 +694,183 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock);
+            var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
             itemMessages.ShouldBeEmpty();
             attempts.ShouldBe(0);
             errorBlock.Count.ShouldBe(0);
+        }
+
+        private static (EdFiApiStreamResourcePageMessageHandler handler, IFakeHttpRequestHandler fakeRequestHandler) CreateCursorHandler(
+            TimeSpan? httpClientTimeout = null)
+        {
+            var (_, fakeRequestHandler) = CreateHandler();
+            var client = new EdFiApiClient("TestSource", TestHelpers.GetSourceApiConnectionDetails(), 27, true,
+                httpClientHandler: new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            if (httpClientTimeout.HasValue)
+            {
+                client.HttpClient.Timeout = httpClientTimeout.Value;
+            }
+
+            var sourceClientProvider = A.Fake<ISourceEdFiApiClientProvider>();
+            A.CallTo(() => sourceClientProvider.GetApiClient()).Returns(client);
+
+            return (new EdFiApiStreamResourcePageMessageHandler(sourceClientProvider, new CursorPageRequestStrategy()), fakeRequestHandler);
+        }
+
+        private static StreamResourcePageMessage<PostItemMessage> CreateCursorPageMessage(string pageToken, int pageSize, CancellationTokenSource cancellationSource = null) =>
+            new()
+            {
+                ResourceUrl = "/ed-fi/students",
+                PageToken = pageToken,
+                PageSize = pageSize,
+                PartitionIndex = 1,
+                CancellationSource = cancellationSource ?? new CancellationTokenSource(),
+                CreateProcessDataMessages = CreatePostFactory().CreateProcessDataMessages,
+            };
+
+        private static HttpResponseMessage CursorPage(string json, string nextPageToken = null)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new InstrumentedJsonContent(json) };
+
+            if (nextPageToken is not null)
+            {
+                response.Headers.Add(CursorPageRequestStrategy.NextPageTokenHeader, nextPageToken);
+            }
+
+            return response;
+        }
+
+        [Test]
+        public async Task Cursor_walk_should_follow_Next_Page_Token_through_short_pages_until_an_empty_page()
+        {
+            TestHelpers.InitializeLogging();
+            var (handler, fake) = CreateCursorHandler();
+            var requests = new List<HttpRequestMessage>();
+
+            SetupPageGet(fake, "/data/v3/ed-fi/students", request =>
+            {
+                requests.Add(request);
+
+                return request.RequestUri.ParseQueryString()["pageToken"] switch
+                {
+                    "t1" => CursorPage(@"[{""id"":""1""},{""id"":""2""}]", nextPageToken: "t2"),
+
+                    // A short page that still carries a token: the walk must continue
+                    "t2" => CursorPage(@"[{""id"":""3""}]", nextPageToken: "t3"),
+                    "t3" => CursorPage("[]"),
+                    _ => throw new InvalidOperationException("unexpected token"),
+                };
+            });
+
+            var items = await handler.HandleStreamResourcePageAsync(CreateCursorPageMessage("t1", pageSize: 2), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>()).ToArrayAsync();
+
+            items.Select(m => m.Item["id"]!.Value<string>()).ShouldBe(new[] { "1", "2", "3" });
+            requests.Select(r => r.RequestUri.ParseQueryString()["pageToken"]).ShouldBe(new[] { "t1", "t2", "t3" });
+            requests.All(r => r.RequestUri.ParseQueryString()["pageSize"] == "2").ShouldBeTrue();
+            requests.All(r => !r.HasParameter("offset") && !r.HasParameter("limit") && !r.HasParameter("totalCount")).ShouldBeTrue();
+        }
+
+        [Test]
+        public async Task Cursor_retry_should_reuse_the_same_page_token()
+        {
+            TestHelpers.InitializeLogging();
+            var (handler, fake) = CreateCursorHandler();
+            var tokens = new List<string>();
+
+            SetupPageGet(fake, "/data/v3/ed-fi/students", request =>
+            {
+                string token = request.RequestUri.ParseQueryString()["pageToken"];
+                tokens.Add(token);
+
+                if (token == "t1" && tokens.Count == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("busy") };
+                }
+
+                return token == "t1" ? CursorPage(@"[{""id"":""1""}]", nextPageToken: "t2") : CursorPage("[]");
+            });
+
+            var items = await handler.HandleStreamResourcePageAsync(CreateCursorPageMessage("t1", 50), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>()).ToArrayAsync();
+
+            items.Length.ShouldBe(1);
+            tokens.ShouldBe(new[] { "t1", "t1", "t2" });
+        }
+
+        [Test]
+        public async Task Cursor_walk_should_stop_after_the_current_page_when_cancelled()
+        {
+            TestHelpers.InitializeLogging();
+            var (handler, fake) = CreateCursorHandler();
+            var cancellationSource = new CancellationTokenSource();
+            int requests = 0;
+
+            SetupPageGet(fake, "/data/v3/ed-fi/students", () =>
+            {
+                requests++;
+
+                // Cancelled while the first page is being served
+                cancellationSource.Cancel();
+
+                return CursorPage(@"[{""id"":""1""},{""id"":""2""}]", nextPageToken: "t2");
+            });
+
+            var errors = new BufferBlock<ErrorItemMessage>();
+            var items = await handler.HandleStreamResourcePageAsync(CreateCursorPageMessage("t1", 2, cancellationSource), TestHelpers.GetOptions(), errors).ToArrayAsync();
+
+            requests.ShouldBe(1);
+            errors.Count.ShouldBe(0);
+
+            // 0 or 2: the parse of the first page may itself observe the cancellation via the response-stream abort
+            items.Length.ShouldBeLessThanOrEqualTo(2);
+        }
+
+        /// <summary>
+        /// The body-read deadline must not stay armed across the gap between pages. Under backpressure that gap is
+        /// the consumer's drain time (unbounded), so a stale deadline would fire and make the timeout-aware catch
+        /// filter swallow the next page's real failure -- an authentication failure included, which has to fault
+        /// the pipeline rather than be published as a fabricated TimeoutException (APIPUB-139 fix round 1).
+        /// </summary>
+        [Test]
+        public async Task Deadline_from_a_completed_page_should_not_reclassify_the_next_pages_authentication_failure()
+        {
+            TestHelpers.InitializeLogging();
+
+            const int TimeoutMilliseconds = 200;
+
+            var (handler, fake) = CreateCursorHandler(httpClientTimeout: TimeSpan.FromMilliseconds(TimeoutMilliseconds));
+
+            SetupPageGet(fake, "/data/v3/ed-fi/students", request =>
+            {
+                if (request.RequestUri.ParseQueryString()["pageToken"] == "t1")
+                {
+                    return CursorPage(@"[{""id"":""1""}]", nextPageToken: "t2");
+                }
+
+                throw new EdFiApiAuthenticationException("the bearer token could not be refreshed");
+            });
+
+            var errors = new BufferBlock<ErrorItemMessage>();
+
+            await using var enumerator = handler
+                .HandleStreamResourcePageAsync(CreateCursorPageMessage("t1", 50), TestHelpers.GetOptions(), errors)
+                .GetAsyncEnumerator();
+
+            (await enumerator.MoveNextAsync()).ShouldBeTrue();
+            enumerator.Current.Item["id"]!.Value<string>().ShouldBe("1");
+
+            // Stall longer than the HTTP client timeout, as a slow target would while the page drains
+            await Task.Delay(TimeoutMilliseconds * 5);
+
+            var exception = await Should.ThrowAsync<Exception>(async () => await enumerator.MoveNextAsync());
+
+            // The authentication failure reaches its own handler (the rethrow that faults the block)...
+            EdFiApiAuthenticationException.IsRepresentedBy(exception).ShouldBeTrue();
+
+            // ...instead of being published as a fabricated body-read timeout
+            errors.TryReceiveAll(out var published).ShouldBeFalse();
+            published.ShouldBeNull();
         }
     }
 }

@@ -9,6 +9,8 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Polly.RateLimit;
 using Serilog;
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
@@ -24,42 +26,94 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             _streamResourcePageMessageHandler = streamResourcePageMessageHandler;
         }
 
-        public TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> CreateBlock<TProcessDataMessage>(
+        /// <summary>
+        /// Creates the block that turns page messages into item messages. Items pass through a bounded buffer
+        /// before reaching the processing block: each page handler awaits SendAsync per item, so when the buffer
+        /// is full (the target is slower than the source) the handler stops pulling its item sequence and thus
+        /// stops fetching pages -- backpressure that holds even when one page message expands into a whole
+        /// partition of pages (cursor paging, see APIPUB-139). A TransformManyBlock cannot provide this, even
+        /// with the IAsyncEnumerable overload: Dataflow bounding gates input acceptance only, so an in-progress
+        /// expansion is never paused (pinned by StreamResourcePagesBlockBackpressureTests).
+        /// </summary>
+        public IPropagatorBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> CreateBlock<TProcessDataMessage>(
             Options options,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
-            var streamResourcePagesBlock =
-                new TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage>(
-                    async msg =>
-                    {
-                        try
-                        {
-                            return await _streamResourcePageMessageHandler.HandleStreamResourcePageAsync(msg, options, errorHandlingBlock).ConfigureAwait(false);
-                        }
-                        catch (RateLimitRejectedException ex)
-                        {
-                            _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
-                            throw;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Error($"{msg.ResourceUrl}: An unhandled exception occurred in the StreamResourcePages block: {ex}");
-                            throw;
-                        }
-                    },
-                    new ExecutionDataflowBlockOptions
-                    {
-                        MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForStreamResourcePages,
+            var pageItemsBuffer = new BufferBlock<TProcessDataMessage>(
+                new DataflowBlockOptions
+                {
+                    // Item-denominated (see APIPUB-112); -1 disables the bound
+                    BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity,
+                });
 
-                        // Without a bound, this block's output buffer absorbs every page of source items the
-                        // moment it is fetched, growing without limit whenever the target is slower than the
-                        // source (see APIPUB-112). The bound is denominated in page messages: it gates how many
-                        // pages may be accepted (and therefore fetched), since each accepted page expands into
-                        // a full page of items regardless of how full the block's output buffer already is.
-                        BoundedCapacity = options.ResolvedStreamResourcePagesBlockBoundedCapacity,
-                    });
+            var pagesBlock = new ActionBlock<StreamResourcePageMessage<TProcessDataMessage>>(
+                msg => PumpPageItemsAsync(msg, options, errorHandlingBlock, pageItemsBuffer),
+                new ExecutionDataflowBlockOptions
+                {
+                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForStreamResourcePages,
 
-            return streamResourcePagesBlock;
+                    // Page messages are lightweight; this bound only caps how many wait to be handled (queued
+                    // plus in progress), it is the item buffer above that bounds memory
+                    BoundedCapacity = options.ResolvedStreamResourcePagesBlockBoundedCapacity,
+                });
+
+            // Completion (or a fault) of page handling flows to the item buffer, and from there downstream.
+            // The fault is unwrapped from the task's AggregateException so the buffer -- and every block that
+            // takes its completion from it -- reports the original exception rather than a nested aggregate.
+            pagesBlock.Completion.ContinueWith(
+                t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        ((IDataflowBlock)pageItemsBuffer).Fault(t.Exception.GetBaseException());
+                    }
+                    else
+                    {
+                        pageItemsBuffer.Complete();
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+            return DataflowBlock.Encapsulate(pagesBlock, pageItemsBuffer);
+        }
+
+        private async Task PumpPageItemsAsync<TProcessDataMessage>(
+            StreamResourcePageMessage<TProcessDataMessage> msg,
+            Options options,
+            ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+            ITargetBlock<TProcessDataMessage> pageItemsBuffer)
+        {
+            try
+            {
+                await foreach (var pageItem in _streamResourcePageMessageHandler
+                    .HandleStreamResourcePageAsync(msg, options, errorHandlingBlock)
+                    .ConfigureAwait(false))
+                {
+                    // Waits while the buffer is full; the resource's token releases a parked handler on cancellation
+                    if (!await pageItemsBuffer.SendAsync(pageItem, msg.CancellationSource.Token).ConfigureAwait(false))
+                    {
+                        _logger.Warning("{ResourceUrl}: The page items buffer declined an item (completed or faulted); abandoning the remainder of the page.", msg.ResourceUrl);
+
+                        return;
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (msg.CancellationSource.IsCancellationRequested)
+            {
+                _logger.Debug("{ResourceUrl}: Cancellation requested while delivering page items.", msg.ResourceUrl);
+            }
+            catch (RateLimitRejectedException ex)
+            {
+                _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", msg.ResourceUrl);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"{msg.ResourceUrl}: An unhandled exception occurred in the StreamResourcePages block: {ex}");
+                throw;
+            }
         }
     }
 }

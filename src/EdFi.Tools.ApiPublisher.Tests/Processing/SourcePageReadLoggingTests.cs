@@ -110,7 +110,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             using (TestCorrelator.CreateContext())
             {
-                await handler.HandleStreamResourcePageAsync(CreatePageMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>());
+                await handler.HandleStreamResourcePageAsync(CreatePageMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>()).ToArrayAsync();
 
                 var events = TestCorrelator.GetLogEventsFromCurrentContext().ToArray();
 
@@ -145,7 +145,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             {
                 var errorBlock = new BufferBlock<ErrorItemMessage>();
 
-                await handler.HandleStreamResourcePageAsync(CreatePageMessage(), TestHelpers.GetOptions(), errorBlock);
+                await handler.HandleStreamResourcePageAsync(CreatePageMessage(), TestHelpers.GetOptions(), errorBlock).ToArrayAsync();
 
                 errorBlock.Count.ShouldBe(1);
 
@@ -167,7 +167,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             using (TestCorrelator.CreateContext())
             {
-                var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>());
+                var itemMessages = await handler.HandleStreamResourcePageAsync(message, TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>()).ToArrayAsync();
 
                 itemMessages.ShouldBeEmpty();
 

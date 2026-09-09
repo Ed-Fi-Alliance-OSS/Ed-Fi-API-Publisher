@@ -24,6 +24,7 @@ using EdFi.Tools.ApiPublisher.Core.Dependencies;
 using EdFi.Tools.ApiPublisher.Core.Finalization;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
+using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using FakeItEasy;
@@ -306,16 +307,22 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             var dataSourceCapabilities = new EdFiApiSourceCapabilities(sourceEdFiApiClientProvider);
             var publishErrorsBlocksFactory = new PublishErrorsBlocksFactory(errorPublisher);
 
+            var sourceTotalCountProvider = new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider);
+
+            IStreamResourcePageMessageProducer offsetPagingProducer = withReversePaging
+                ? new EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer(sourceTotalCountProvider)
+                : new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(sourceTotalCountProvider);
+
             var streamingResourceProcessor = new StreamingResourceProcessor(
                 new StreamResourceBlockFactory(
-                    (withReversePaging) ?
-                        new EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer(
-                            new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider)) :
-                        new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(
-                            new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider))
-                    ),
+                    new PagingStrategyDispatchingStreamResourcePageMessageProducer(
+                        new SourcePagingStrategyResolver(dataSourceCapabilities),
+                        offsetPagingProducer,
+                        new EdFiApiCursorPagingStreamResourcePageMessageProducer(sourceEdFiApiClientProvider, sourceTotalCountProvider))),
                 new StreamResourcePagesBlockFactory(
-                    new EdFiApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider, new OffsetPageRequestStrategy())),
+                    new EdFiApiStreamResourcePageMessageHandler(
+                        sourceEdFiApiClientProvider,
+                        new PageRequestStrategyDispatcher(new OffsetPageRequestStrategy(), new CursorPageRequestStrategy()))),
                 sourceApiConnectionDetails);
 
             var stageInitiators = A.Fake<IIndex<PublishingStage, IPublishingStageInitiator>>();
