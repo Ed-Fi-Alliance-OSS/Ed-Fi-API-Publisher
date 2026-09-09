@@ -5,6 +5,7 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
@@ -28,12 +29,20 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 {
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiStreamResourcePageMessageHandler));
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
+    private readonly IPageRequestStrategy _pageRequestStrategy;
     private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
     public EdFiApiStreamResourcePageMessageHandler(
-        ISourceEdFiApiClientProvider sourceEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter = null)
+        ISourceEdFiApiClientProvider sourceEdFiApiClientProvider,
+        IPageRequestStrategy pageRequestStrategy,
+        IRateLimiting<HttpResponseMessage> rateLimiter = null)
     {
-        _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider;
+        _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider
+            ?? throw new ArgumentNullException(nameof(sourceEdFiApiClientProvider));
+
+        _pageRequestStrategy = pageRequestStrategy
+            ?? throw new ArgumentNullException(nameof(pageRequestStrategy));
+
         _rateLimiter = rateLimiter;
     }
 
@@ -42,8 +51,14 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
         Options options,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock)
     {
-        long offset = message.Offset ?? throw new NullReferenceException("Offset is expected on resource page messages for the Ed-Fi ODS API.");
-        int limit = message.Limit ?? throw new NullReferenceException("Limit is expected on resource page messages for the Ed-Fi ODS API.");
+        // The paging strategy addresses the successive requests for this page message and validates the
+        // paging context it needs on the message (see APIPUB-138)
+        var pageRequest = _pageRequestStrategy.Begin(message, options);
+
+        // Strategy-specific paging values (e.g. Offset and Limit) travel as structured properties on every
+        // log event for the page, while the rendered messages use the strategy's descriptions (":l" keeps
+        // Serilog from quoting those strings, so the text reads exactly as the numbers did before the seam)
+        ILogger pageLogger = pageRequest.EnrichLogger(_logger);
 
         var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
 
@@ -61,19 +76,23 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             {
                 if (message.CancellationSource.IsCancellationRequested)
                 {
-                    _logger.Debug(
-                        "{MessageResourceUrl}: Cancellation requested while processing page of source items starting at offset {Offset}.",
-                        message.ResourceUrl, offset);
+                    pageLogger.Debug(
+                        "{MessageResourceUrl}: Cancellation requested while processing page of source items starting at {PageStart:l}.",
+                        message.ResourceUrl, pageRequest.DescribeStart());
 
                     return Enumerable.Empty<TProcessDataMessage>();
                 }
 
-                if (_logger.IsEnabled(LogEventLevel.Debug))
+                if (pageLogger.IsEnabled(LogEventLevel.Debug))
                 {
-                    _logger.Debug(
-                        "{MessageResourceUrl}: Retrieving page items {Offset} to {OffsetLimitMinus1}.",
-                        message.ResourceUrl, offset, offset + limit - 1);
+                    pageLogger.Debug(
+                        "{MessageResourceUrl}: Retrieving page items {PageItems:l}.",
+                        message.ResourceUrl, pageRequest.Describe());
                 }
+
+                // The strategy's current request does not change across retry attempts of the same page
+                string requestUri =
+                    $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}{pageRequest.BuildQueryString()}{changeWindowQueryStringParameters}";
 
                 var delay = Backoff.ExponentialBackoff(
                     TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
@@ -89,8 +108,8 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         delay,
                         (result, ts, retryAttempt, ctx) =>
                         {
-                            _logger.Warning("{ResourceUrl}: Retrying GET page items {Offset} to {OffsetPlusLimitMinus1} from source failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
-                                message.ResourceUrl, offset, offset + limit - 1, result.Result.StatusCode, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds);
+                            pageLogger.Warning("{ResourceUrl}: Retrying GET page items {PageItems:l} from source failed with status '{StatusCode}'. Retrying... (retry #{RetryAttempt} of {MaxRetryAttempts} with {TotalSeconds:N1}s delay)",
+                                message.ResourceUrl, pageRequest.Describe(), result.Result.StatusCode, retryAttempt, options.MaxRetryAttempts, ts.TotalSeconds);
 
                             // With ResponseHeadersRead (see APIPUB-134), an abandoned response pins a
                             // connection until finalized -- release the transient failure being retried
@@ -106,15 +125,11 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                             {
                                 attempts++;
 
-                                if (attempts > 1 && _logger.IsEnabled(LogEventLevel.Debug))
+                                if (attempts > 1 && pageLogger.IsEnabled(LogEventLevel.Debug))
                                 {
-                                    _logger.Debug("{ResourceUrl}: GET page items {Offset} to {OffsetPlusLimitMinus1} from source attempt #{Attempts}.",
-                                        message.ResourceUrl, offset, offset + limit - 1, attempts);
+                                    pageLogger.Debug("{ResourceUrl}: GET page items {PageItems:l} from source attempt #{Attempts}.",
+                                        message.ResourceUrl, pageRequest.Describe(), attempts);
                                 }
-
-                                // Possible seam for getting a page of data (here, using Ed-Fi ODS API w/ offset/limit paging strategy)
-                                string requestUri =
-                                    $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}";
 
                                 return RequestHelpers.SendGetRequestAsync(edFiApiClient, message.ResourceUrl, requestUri, ct);
                             },
@@ -132,7 +147,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     if (apiResponse.Content == null)
                     {
                         throw new NullReferenceException(
-                            $"Content of response for '{edFiApiClient.HttpClient.BaseAddress}{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}?offset={offset}&limit={limit}{changeWindowQueryStringParameters}' was null.");
+                            $"Content of response for '{edFiApiClient.HttpClient.BaseAddress}{requestUri}' was null.");
                     }
 
                     // Failure
@@ -154,17 +169,17 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         // Publish the failure
                         await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
-                        _logger.Error("{ResourceUrl}: GET page items failed with response status '{StatusCode}'.",
-                            message.ResourceUrl, apiResponse.StatusCode);
+                        pageLogger.Error("{ResourceUrl}: GET page items {PageItems:l} failed with response status '{StatusCode}'.",
+                            message.ResourceUrl, pageRequest.Describe(), apiResponse.StatusCode);
 
                         break;
                     }
 
                     // Success
-                    if (_logger.IsEnabled(LogEventLevel.Information) && attempts > 1)
+                    if (pageLogger.IsEnabled(LogEventLevel.Information) && attempts > 1)
                     {
-                        _logger.Information("{ResourceUrl}: GET page items {Offset} to {OffsetPlusLimitMinus1} attempt #{Attempts} returned {StatusCode}.",
-                            message.ResourceUrl, offset, offset + limit - 1, attempts, apiResponse.StatusCode);
+                        pageLogger.Information("{ResourceUrl}: GET page items {PageItems:l} attempt #{Attempts} returned {StatusCode}.",
+                            message.ResourceUrl, pageRequest.Describe(), attempts, apiResponse.StatusCode);
                     }
 
                     // Transform the page content to item actions, streaming the response body in a single
@@ -211,43 +226,29 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         // Publish the failure
                         await errorHandlingBlock.SendErrorAsync(error, message.CancellationSource.Token).ConfigureAwait(false);
 
-                        _logger.Error(ex,
-                            "{ResourceUrl}: JSON parsing of source page data failed at offset {Offset} (limit {Limit}).",
-                            message.ResourceUrl, offset, limit);
+                        pageLogger.Error(ex,
+                            "{ResourceUrl}: JSON parsing of source page data failed for page items {PageItems:l}.",
+                            message.ResourceUrl, pageRequest.Describe());
 
                         break;
                     }
 
                     transformedMessages.AddRange(pageMessages);
 
-                    if (!options.UseReversePaging)
+                    // The strategy decides whether another request follows for this page message (e.g. the
+                    // limit/offset final page check). The item count was captured during the single streaming
+                    // pass over the page -- a count is never reported when item creation stopped early alongside
+                    // cancellation.
+                    if (pageRequest.TryAdvance(apiResponse, topLevelItemCount))
                     {
-                        // Perform limit/offset final page check (for need for possible continuation)
-                        // (Item count was captured during the single streaming pass over the page -- a count
-                        // is never reported when item creation stopped early alongside cancellation, and no
-                        // count means no continuation)
-                        if (message.IsFinalPage && topLevelItemCount == limit)
-                        {
-                            if (_logger.IsEnabled(LogEventLevel.Debug))
-                            {
-                                _logger.Debug("{ResourceUrl}: Final page was full. Attempting to retrieve more data.",
-                                    message.ResourceUrl);
-                            }
+                        pageLogger = pageRequest.EnrichLogger(_logger);
 
-                            // Looks like there could be more data
-                            offset += limit;
-
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        break;
+                        continue;
                     }
                 }
                 catch (RateLimitRejectedException ex)
                 {
-                    _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.",
+                    pageLogger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.",
                         message.ResourceUrl);
                 }
                 break;
@@ -261,10 +262,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             // The body-read deadline expired: the source stopped sending mid-body. As before streaming, a response
             // that does not arrive within HttpClient.Timeout is a page failure -- published, not retried.
             var timeoutException = new TimeoutException(
-                $"Reading the response body for page items {offset} to {offset + limit - 1} did not complete within the HTTP client timeout of {edFiApiClient.HttpClient.Timeout.TotalSeconds:N0} seconds.",
+                $"Reading the response body for page items {pageRequest.Describe()} did not complete within the HTTP client timeout of {edFiApiClient.HttpClient.Timeout.TotalSeconds:N0} seconds.",
                 ex);
 
-            _logger.Error(ex, "{ResourceUrl}: {TimeoutMessage}", message.ResourceUrl, timeoutException.Message);
+            pageLogger.Error(ex, "{ResourceUrl}: {TimeoutMessage}", message.ResourceUrl, timeoutException.Message);
 
             var error = new ErrorItemMessage
             {
@@ -285,10 +286,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             // backoff, cancellation aborts an in-progress body parse by disposing the response stream,
             // which surfaces as an ObjectDisposedException/IOException from the reader (or an
             // ArgumentException from StreamReader when the token was already cancelled at registration).
-            _logger.Debug(
+            pageLogger.Debug(
                 ex,
-                "{MessageResourceUrl}: Cancellation requested while retrieving page of source items starting at offset {Offset}.",
-                message.ResourceUrl, offset);
+                "{MessageResourceUrl}: Cancellation requested while retrieving page of source items starting at {PageStart:l}.",
+                message.ResourceUrl, pageRequest.DescribeStart());
 
             return Array.Empty<TProcessDataMessage>();
         }
@@ -301,7 +302,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "{ResourceUrl}: {Ex}", message.ResourceUrl, ex);
+            pageLogger.Error(ex, "{ResourceUrl}: {Ex}", message.ResourceUrl, ex);
 
             // An error occurred while parsing the JSON
             var error = new ErrorItemMessage
