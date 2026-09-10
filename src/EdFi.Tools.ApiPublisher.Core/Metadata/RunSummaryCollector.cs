@@ -16,14 +16,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
 {
     /// <summary>
     /// Accumulates the per-resource counts behind the run summary. Written to from every processing block, so
-    /// all state is either concurrent or updated through <see cref="Interlocked" />.
+    /// all state is either concurrent or updated through <see cref="Interlocked" />. It holds counters only:
+    /// nothing here grows with the number of documents published.
     /// </summary>
     public class RunSummaryCollector : IRunSummaryCollector
     {
-        private readonly IPublishingOperationMetadataCollector _metadataCollector;
-
         private static readonly IEqualityComparer<(PublishingStage Stage, string ResourcePath)> _resourceKeyComparer =
             new ResourceKeyComparer();
+
+        private readonly IPublishingOperationMetadataCollector _metadataCollector;
 
         private readonly ConcurrentDictionary<(PublishingStage Stage, string ResourcePath), ResourceCounters> _countersByResource =
             new(_resourceKeyComparer);
@@ -49,6 +50,24 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
             Interlocked.Add(ref GetCounters(stage, resourcePath).Attempted, count);
         }
 
+        public void AddPublishedItems(
+            PublishingStage stage,
+            string resourceUrl,
+            long count,
+            bool isAuthorizationRetryPass = false)
+        {
+            if (count <= 0)
+            {
+                return;
+            }
+
+            var counters = GetCounters(stage, StripStageSuffix(resourceUrl));
+
+            Interlocked.Add(
+                ref isAuthorizationRetryPass ? ref counters.RetryPassPublished : ref counters.Published,
+                count);
+        }
+
         public void AddError(PublishingStage stage, ErrorItemMessage error)
         {
             // A source read failure is a page or a count that could not be read, not a rejected document: the
@@ -64,17 +83,29 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
                 return;
             }
 
-            Interlocked.Increment(ref GetCounters(stage, NormalizeResourcePath(error.ResourceUrl)).Failed);
+            var counters = GetCounters(stage, StripStageSuffix(error.ResourceUrl));
+
+            Interlocked.Increment(
+                ref error.IsAuthorizationRetryPass ? ref counters.RetryPassFailed : ref counters.Failed);
         }
 
-        public void AddSkippedItems(PublishingStage stage, string resourceUrl, long count, string reason)
+        public void AddSkippedItems(
+            PublishingStage stage,
+            string resourceUrl,
+            long count,
+            string reason,
+            bool isAuthorizationRetryPass = false)
         {
             if (count <= 0)
             {
                 return;
             }
 
-            Interlocked.Add(ref GetCounters(stage, NormalizeResourcePath(resourceUrl)).Skipped, count);
+            var counters = GetCounters(stage, StripStageSuffix(resourceUrl));
+
+            Interlocked.Add(
+                ref isAuthorizationRetryPass ? ref counters.RetryPassSkipped : ref counters.Skipped,
+                count);
 
             if (!string.IsNullOrWhiteSpace(reason))
             {
@@ -94,28 +125,55 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
                 .ToArray();
 
             var resources = resourceKeys
-                .Select(key =>
-                {
-                    _countersByResource.TryGetValue(key, out var counters);
-
-                    long? expectedItemCount = expectedItemCountByResource.TryGetValue(key, out long expected) && expected >= 0
-                        ? expected
-                        : null;
-
-                    return new ResourceRunSummary(
-                        key.Stage,
-                        key.ResourcePath,
-                        expectedItemCount,
-                        counters?.ReadAttempted() ?? 0,
-                        counters?.ReadFailed() ?? 0,
-                        counters?.ReadSkipped() ?? 0);
-                })
+                .Select(key => BuildResourceSummary(key, expectedItemCountByResource))
                 .ToArray();
 
             return new RunSummary(
                 resources,
                 Interlocked.Read(ref _sourceReadErrorCount),
                 _skipReasons.Keys.OrderBy(reason => reason, StringComparer.OrdinalIgnoreCase).ToArray());
+        }
+
+        private ResourceRunSummary BuildResourceSummary(
+            (PublishingStage Stage, string ResourcePath) key,
+            IDictionary<(PublishingStage, string), long> expectedItemCountByResource)
+        {
+            _countersByResource.TryGetValue(key, out var counters);
+
+            long? expectedItemCount = expectedItemCountByResource.TryGetValue(key, out long expected) && expected >= 0
+                ? expected
+                : null;
+
+            if (counters is null)
+            {
+                return new ResourceRunSummary(key.Stage, key.ResourcePath, expectedItemCount, 0, 0, 0, 0);
+            }
+
+            long retryPassPublished = counters.Read(ref counters.RetryPassPublished);
+            long retryPassFailed = counters.Read(ref counters.RetryPassFailed);
+            long retryPassSkipped = counters.Read(ref counters.RetryPassSkipped);
+
+            long firstPassFailed = counters.Read(ref counters.Failed);
+
+            // The authorization retry pass re-publishes every document of the resource, so when it ran, what
+            // it reports is what became of those documents; the first pass's failures are kept alongside to
+            // show what the retry recovered (see APIPUB-120).
+            bool retryPassRan = retryPassPublished > 0 || retryPassFailed > 0 || retryPassSkipped > 0;
+
+            return new ResourceRunSummary(
+                key.Stage,
+                key.ResourcePath,
+                expectedItemCount,
+                counters.Read(ref counters.Attempted),
+                retryPassRan ? retryPassFailed : firstPassFailed,
+                retryPassRan ? retryPassSkipped : counters.Read(ref counters.Skipped),
+                retryPassRan ? retryPassPublished : counters.Read(ref counters.Published),
+                retryPassRan
+                    ? new AuthorizationRetryPassSummary(
+                        firstPassFailed,
+                        retryPassPublished + retryPassFailed + retryPassSkipped,
+                        retryPassFailed)
+                    : null);
         }
 
         /// <summary>
@@ -139,7 +197,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
             return (PublishingStage.Upserts, resourcePath);
         }
 
-        private static string NormalizeResourcePath(string resourceUrl)
+        private static string StripStageSuffix(string resourceUrl)
         {
             return ParseSourceResourceUrl(resourceUrl).ResourcePath;
         }
@@ -160,7 +218,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
 
         private IDictionary<(PublishingStage Stage, string ResourcePath), long> GetExpectedItemCountByResource()
         {
-            var expectedItemCountByResource = new Dictionary<(PublishingStage, string), long>(_resourceKeyComparer);
+            var expectedItemCountByResource =
+                new Dictionary<(PublishingStage, string), long>(_resourceKeyComparer);
 
             // A count of -1 records that the source could not report one, which is carried through as "unknown"
             foreach (var kvp in _metadataCollector.GetMetadata().ResourceItemCountByPath)
@@ -198,8 +257,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
         }
 
         /// <summary>
-        /// The mutable counters for one resource within one stage. The fields are public because they are
-        /// updated in place through <see cref="Interlocked" />, which cannot be applied to a property.
+        /// The mutable counters for one resource within one stage, held once for the pass that reads the
+        /// resource and once for the authorization retry pass that republishes it. The fields are public
+        /// because they are updated in place through <see cref="Interlocked" />, which cannot be applied to
+        /// a property.
         /// </summary>
         private class ResourceCounters
         {
@@ -209,11 +270,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
 
             public long Skipped;
 
-            public long ReadAttempted() => Interlocked.Read(ref Attempted);
+            public long Published;
 
-            public long ReadFailed() => Interlocked.Read(ref Failed);
+            public long RetryPassFailed;
 
-            public long ReadSkipped() => Interlocked.Read(ref Skipped);
+            public long RetryPassSkipped;
+
+            public long RetryPassPublished;
+
+            public long Read(ref long counter) => Interlocked.Read(ref counter);
         }
     }
 }

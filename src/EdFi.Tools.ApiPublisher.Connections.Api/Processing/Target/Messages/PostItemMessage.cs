@@ -40,6 +40,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
         public bool HasAuthorizationRetryPipeline { get; set; }
 
         /// <summary>
+        /// Indicates that this document is being published by the authorization retry pass rather than by the
+        /// pass that read the resource for the first time. Both passes carry the same resource URL, so the run
+        /// summary needs to tell them apart to report what became of each document (see APIPUB-120).
+        /// </summary>
+        public bool IsAuthorizationRetryPass { get; set; }
+
+        /// <summary>
         /// Cancellation token from the resource's processing cancellation source, used to abandon in-flight
         /// requests when processing of the resource has been cancelled.
         /// </summary>

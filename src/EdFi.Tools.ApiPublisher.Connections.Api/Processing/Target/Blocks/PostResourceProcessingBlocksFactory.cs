@@ -153,7 +153,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     PublishingStage.Upserts,
                     postItemMessage.ResourceUrl,
                     1,
-                    SkipReasons.ResourceIgnoredAfterAuthorizationFailure);
+                    SkipReasons.ResourceIgnoredAfterAuthorizationFailure,
+                    postItemMessage.IsAuthorizationRetryPass);
 
                 return Enumerable.Empty<ErrorItemMessage>();
             }
@@ -176,6 +177,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         Id = postItemMessage.Id,
                         SourcePage = postItemMessage.SourcePage,
                         SourceItemIndex = postItemMessage.SourceItemIndex,
+                        IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                     }
                 };
             }
@@ -211,6 +213,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 {
                     Method = HttpMethod.Post.ToString(),
                     ResourceUrl = postItemMessage.ResourceUrl,
+                    IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                     Id = idToken switch
                     {
                         null => null,
@@ -402,6 +405,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 // current item): a Forbidden response on this post can only be deferred if the
                                 // dependency resource itself has a "#Retry" pass that will re-publish it.
                                 HasAuthorizationRetryPipeline = authorizationRetryPipelineResourcePaths.Contains(missingDependencyDetails.DependencyResourceUrl),
+
+                                // The dependency is published as part of the pass that needed it
+                                IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                                 CancellationToken = postItemMessage.CancellationToken,
                             };
 
@@ -484,7 +490,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             PublishingStage.Upserts,
                             postItemMessage.ResourceUrl,
                             1,
-                            SkipReasons.ResourceIgnoredAfterAuthorizationFailure);
+                            SkipReasons.ResourceIgnoredAfterAuthorizationFailure,
+                            postItemMessage.IsAuthorizationRetryPass);
 
                         return Enumerable.Empty<ErrorItemMessage>();
                     }
@@ -501,7 +508,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         Id = id,
                         Body = new JRaw(postItemMessage.Item.ToString(Newtonsoft.Json.Formatting.None)),
                         ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = responseContent
+                        ResponseContent = responseContent,
+                        IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                     };
 
                     return new[] { error };
@@ -526,7 +534,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     }
                 }
 
-                // Success - no errors to publish
+                // Counted where the target confirms it, so that the summary reports documents the target
+                // accepted rather than a subtraction that cannot see an abandoned document (APIPUB-120)
+                _runSummaryCollector.AddPublishedItems(
+                    PublishingStage.Upserts,
+                    postItemMessage.ResourceUrl,
+                    1,
+                    postItemMessage.IsAuthorizationRetryPass);
+
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 #pragma warning disable S2139
@@ -545,6 +560,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         Id = id,
                         Body = null,
                         Exception = ex,
+                        IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                     }
                 };
             }
@@ -770,6 +786,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     Item = j,
                     ResourceUrl = msg.ResourceUrl,
                     HasAuthorizationRetryPipeline = msg.HasAuthorizationRetryPipeline,
+                    IsAuthorizationRetryPass = msg.IsAuthorizationRetryPass,
                     CancellationToken = msg.CancellationSource.Token,
                     SourcePage = page,
                     SourceItemIndex = index,

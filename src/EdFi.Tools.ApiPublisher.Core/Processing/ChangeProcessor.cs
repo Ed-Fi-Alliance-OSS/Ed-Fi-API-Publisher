@@ -235,7 +235,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // A document that failed is inside the change window, so the window is what gives it another
                 // chance: the last change version processed is advanced only by a run that lost nothing, even
                 // when the loss was tolerated by configuration (see APIPUB-120).
-                if (_errorPublisher.GetPublishedErrorCount() == 0)
+                if (!RunLostDocuments())
                 {
                     await UpdateChangeVersionAsync(configuration, changeWindow)
                         .ConfigureAwait(false);
@@ -259,6 +259,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 _logger.Information($"Processing finished in {processStopwatch.Elapsed.TotalSeconds:N0} seconds.");
             }
+        }
+
+        /// <summary>
+        /// Whether any document the run read is missing from the target: rejected, or read and left without an
+        /// answer because the run stopped, or behind a page the source never returned. Documents abandoned by
+        /// the operator's own configuration (treatForbiddenPostAsWarning) are excluded, because abandoning
+        /// them was the configured intent.
+        /// </summary>
+        private bool RunLostDocuments()
+        {
+            var summary = _runSummaryCollector.GetSummary();
+
+            return summary.SourceReadErrorCount > 0
+                || summary.Resources.Any(
+                    resource => resource.FailedItemCount > 0 || resource.UnresolvedItemCount > 0);
         }
 
         private void ReportRunSummary()
@@ -1078,37 +1093,47 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 return;
             }
 
+            var summary = _runSummaryCollector.GetSummary();
+
             // A source that could not be read is never tolerable, whatever the threshold says: the documents
             // behind a failed page or item count were never attempted and their number is not known, so a run
             // that swallowed one would be reporting success over an unknown loss -- the very defect this work
             // is about (see APIPUB-120).
-            long sourceReadErrorCount = _runSummaryCollector.GetSummary().SourceReadErrorCount;
-
-            if (sourceReadErrorCount > 0)
+            if (summary.SourceReadErrorCount > 0)
             {
                 throw new PublishingFailedException(
-                    $"Processing completed, but {sourceReadErrorCount} source read error(s) mean an unknown number of documents was never attempted (of {publishedErrorCount} error(s) in total).",
+                    $"Processing completed, but {summary.SourceReadErrorCount} source read error(s) mean an unknown number of documents was never attempted (of {publishedErrorCount} error(s) in total).",
                     PublishingFailureReason.IncompleteProcessing,
                     publishedErrorCount);
+            }
+
+            // Counted in documents rather than in error records, because a resource republished by the
+            // authorization retry pass reports an error for each pass, and the operator's threshold is about
+            // documents the target does not have.
+            long rejectedDocumentCount = summary.Resources.Sum(resource => resource.FailedItemCount);
+
+            if (rejectedDocumentCount == 0)
+            {
+                return;
             }
 
             // Best-effort publishing is opt-in, and the threshold is explicit rather than implied: without
             // it, a single rejected document and a run that lost 150,000 of them are indistinguishable to
             // an unattended caller.
-            if (options.ToleratedItemErrorCount == -1 || publishedErrorCount <= options.ToleratedItemErrorCount)
+            if (options.ToleratedItemErrorCount == -1 || rejectedDocumentCount <= options.ToleratedItemErrorCount)
             {
                 _logger.Warning(
-                    "{PublishedErrorCount} document(s) were rejected by the target, which is within the configured tolerance ({ToleratedItemErrorCount}, where -1 tolerates any number), so the run is reported as successful. The last change version processed was not advanced, so the next run republishes this change window, including the documents that failed.",
-                    publishedErrorCount,
+                    "{RejectedDocumentCount} document(s) were rejected by the target, which is within the configured tolerance ({ToleratedItemErrorCount}, where -1 tolerates any number), so the run is reported as successful. The last change version processed was not advanced, so the next run republishes this change window, including the documents that failed.",
+                    rejectedDocumentCount,
                     options.ToleratedItemErrorCount);
 
                 return;
             }
 
             throw new PublishingFailedException(
-                $"Processing completed, but {publishedErrorCount} document(s) were not published.",
+                $"Processing completed, but {rejectedDocumentCount} document(s) were not published.",
                 PublishingFailureReason.ItemErrors,
-                publishedErrorCount);
+                rejectedDocumentCount);
 
             static string DescribeIncompleteResources(ResourceStreamingOutcome[] outcomes)
             {

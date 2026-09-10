@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
@@ -35,12 +36,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
     public class ChangeResourceKeyProcessingBlocksFactory : IProcessingBlocksFactory<GetItemForKeyChangeMessage>
     {
         private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
+        private readonly IRunSummaryCollector _runSummaryCollector;
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(ChangeResourceKeyProcessingBlocksFactory));
 
-        public ChangeResourceKeyProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter = null)
+        public ChangeResourceKeyProcessingBlocksFactory(
+            ITargetEdFiApiClientProvider targetEdFiApiClientProvider,
+            IRunSummaryCollector runSummaryCollector,
+            IRateLimiting<HttpResponseMessage> rateLimiter = null)
         {
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
+            _runSummaryCollector = runSummaryCollector;
             _rateLimiter = rateLimiter;
         }
 
@@ -387,7 +393,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             msg.ResourceUrl, sourceId, apiResponse.StatusCode);
                     }
 
-                    // Success - no errors to publish
+                    // Counted where the target confirms it (see APIPUB-120)
+                    _runSummaryCollector.AddPublishedItems(PublishingStage.KeyChanges, msg.ResourceUrl, 1);
+
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
 #pragma warning disable S2139

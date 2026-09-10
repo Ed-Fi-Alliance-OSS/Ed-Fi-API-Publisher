@@ -26,7 +26,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
 
         private static readonly string[] _headers =
         {
-            "Stage", "Resource", "Expected", "Attempted", "Failed", "Skipped", "Published*",
+            "Stage", "Resource", "Expected", "Attempted", "Failed", "Skipped", "Published",
         };
 
         public static string Format(RunSummary summary)
@@ -89,8 +89,22 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
             }
 
             message.AppendLine();
-            message.AppendLine("  * Published is not counted on the target. It is derived as attempted - failed - skipped, because the publishing pipeline reports errors, not successes.");
-            message.AppendLine("  * A run that did not complete reports what it read, not what the target holds: documents abandoned when the run stopped are still counted as attempted.");
+
+            long unresolvedItemCount = rows.Sum(row => row.UnresolvedItemCount);
+
+            if (unresolvedItemCount > 0)
+            {
+                message.AppendLine(
+                    $"  ! {FormatCount(unresolvedItemCount)} document(s) were read from the source and the run ended before the target answered for them, so they are counted as attempted and nothing else.");
+            }
+
+            foreach (var row in rows.Where(row => row.AuthorizationRetryPass is not null))
+            {
+                var retryPass = row.AuthorizationRetryPass;
+
+                message.AppendLine(
+                    $"  ! {row.ResourcePath}: the authorization retry pass republished {FormatCount(retryPass.ReattemptedItemCount)} document(s) after the first pass reported {FormatCount(retryPass.FirstPassFailedItemCount)} failure(s), and {FormatCount(retryPass.FailedItemCount)} still failed. The row reports that second pass, which decides what the target holds.");
+            }
 
             if (summary.SourceReadErrorCount > 0)
             {

@@ -55,6 +55,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         /// </summary>
         public bool IsSourceReadError { get; set; }
 
+        /// <summary>
+        /// Indicates that the failure happened during the authorization retry pass, which re-publishes an
+        /// entire resource after its update prerequisites complete. The run summary reports that pass apart
+        /// from the first one, because both carry the same resource URL (see APIPUB-120).
+        /// </summary>
+        public bool IsAuthorizationRetryPass { get; set; }
+
         public HttpStatusCode? ResponseStatus { get; set; }
 
         public string ResponseContent { get; set; }
