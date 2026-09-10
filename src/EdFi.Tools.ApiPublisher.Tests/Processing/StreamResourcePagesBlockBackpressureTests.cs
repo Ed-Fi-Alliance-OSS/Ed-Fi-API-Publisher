@@ -123,6 +123,38 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public async Task Cancelling_the_resource_should_release_a_handler_parked_on_the_full_item_buffer()
+        {
+            var handler = new CountingPageHandler();
+            var options = TestHelpers.GetOptions();
+            options.ProcessingBlockBoundedCapacity = 10;
+            options.MaxDegreeOfParallelismForStreamResourcePages = 1;
+
+            var block = new StreamResourcePagesBlockFactory(handler).CreateBlock<object>(options, new BufferBlock<ErrorItemMessage>());
+            var cancellation = new CancellationTokenSource();
+
+            block.Post(new StreamResourcePageMessage<object> { ResourceUrl = "/ed-fi/students", CancellationSource = cancellation }).ShouldBeTrue();
+
+            // No consumer: the handler parks in SendAsync once the buffer is full
+            int stalledAt = await GetStableValueAsync(() => handler.Produced);
+            stalledAt.ShouldBeInRange(10, 11);
+
+            // Cancelling the resource must release the parked send and abandon the rest of the page message
+            cancellation.Cancel();
+            block.Complete();
+
+            int consumed = 0;
+            var sink = new ActionBlock<object>(_ => Interlocked.Increment(ref consumed));
+            block.LinkTo(sink, new DataflowLinkOptions { PropagateCompletion = true });
+
+            await sink.Completion.WaitAsync(TimeSpan.FromSeconds(30));
+
+            // Only what was already buffered is delivered; the handler was not pulled to the end of its sequence
+            consumed.ShouldBeLessThanOrEqualTo(stalledAt);
+            handler.Produced.ShouldBeLessThanOrEqualTo(stalledAt + 1);
+        }
+
+        [Test]
         public async Task Pages_block_should_not_stall_when_bounding_is_disabled()
         {
             var handler = new CountingPageHandler();

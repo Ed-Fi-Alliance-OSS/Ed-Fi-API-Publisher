@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>10</LangVersion>
@@ -30,5 +30,10 @@
     <EmbeddedResource Include="Resources\v6.1-Version.json" />
     <EmbeddedResource Include="Resources\v6.1-Dependencies-GraphML.xml" />
     <EmbeddedResource Include="Resources\Dependencies-GraphML-v5.2.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Settings files the configuration builder requires, linked under the names the CLI ships them with -->
+    <None Include="Configuration\Fixtures\apiPublisherSettings.json" Link="apiPublisherSettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Configuration\Fixtures\configurationStoreSettings.json" Link="configurationStoreSettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -23,6 +23,9 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using Serilog.Sinks.TestCorrelator;
+using Serilog.Events;
+using System.Text;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -118,6 +121,49 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             success.ShouldBeFalse();
             messages.ShouldBeNull();
+        }
+
+        [Test]
+        public async Task Successful_non_200_partitions_response_should_report_failure_for_offset_fallback()
+        {
+            // Only HTTP 200 with a pageTokens array is the documented partitions response (APIPUB-139)
+            var (producer, _, _) = Create(() => new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = new StringContent(@"{""pageTokens"":[""t1""]}", Encoding.UTF8, "application/json")
+            });
+
+            var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+            success.ShouldBeFalse();
+            messages.ShouldBeNull();
+        }
+
+        [Test]
+        public async Task Failed_partitions_response_body_should_be_capped_in_the_log()
+        {
+            // An error body is logged to help diagnose the fallback, but it is not under our control: cap it so a
+            // large (or sensitive) response cannot flood the log
+            TestHelpers.InitializeLogging();
+            string body = new string('x', 5_000);
+
+            var (producer, _, _) = Create(() => new HttpResponseMessage(HttpStatusCode.BadGateway) { Content = new StringContent(body) });
+
+            using (TestCorrelator.CreateContext())
+            {
+                var (success, _) = await producer.TryProduceMessagesAsync<object>(
+                    CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+                success.ShouldBeFalse();
+
+                var logEvent = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("Partitions request returned status"));
+
+                string loggedContent = logEvent.Properties["Content"].ToString();
+                // The rendered property is the capped body in quotes plus a short truncation marker
+                loggedContent.Length.ShouldBeLessThanOrEqualTo(EdFiApiCursorPagingStreamResourcePageMessageProducer.MaxLoggedErrorBodyLength + 64);
+                loggedContent.ShouldContain("truncated");
+            }
         }
 
         [Test]

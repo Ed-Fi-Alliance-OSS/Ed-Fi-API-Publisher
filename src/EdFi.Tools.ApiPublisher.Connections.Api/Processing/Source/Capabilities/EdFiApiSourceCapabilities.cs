@@ -136,7 +136,8 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
                 return false;
             }
 
-            if (!probeResponse.IsSuccessStatusCode)
+            // Only HTTP 200 is the documented partitions response; any other status (a different 2xx included) is inconclusive
+            if (probeResponse.StatusCode != HttpStatusCode.OK)
             {
                 _logger.Warning("Request to Source API for the '{PartitionsPathSuffix}' child resource was unsuccessful (response status was '{StatusCode}'). Offset/limit paging will be used instead of cursor paging.",
                     EdFiApiConstants.PartitionsPathSuffix, probeResponse.StatusCode);

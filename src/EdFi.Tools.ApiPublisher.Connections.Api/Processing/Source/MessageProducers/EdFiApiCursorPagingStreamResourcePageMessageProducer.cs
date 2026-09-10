@@ -18,6 +18,7 @@ using Polly.Contrib.WaitAndRetry;
 using Polly.RateLimit;
 using Serilog;
 using Serilog.Events;
+using System.Net;
 using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
@@ -30,6 +31,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProdu
 /// </summary>
 public class EdFiApiCursorPagingStreamResourcePageMessageProducer
 {
+    /// <summary>Maximum number of characters of a failed /partitions response body written to the log.</summary>
+    public const int MaxLoggedErrorBodyLength = 1_000;
+
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
     private readonly ISourceTotalCountProvider _sourceTotalCountProvider;
     private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
@@ -227,10 +231,12 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
             ? string.Empty
             : await apiResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
-        if (!apiResponse.IsSuccessStatusCode)
+        // Only HTTP 200 is the documented partitions response (any other 2xx is not it either). The body is logged
+        // to help diagnose the fallback but is capped: it is not under our control and may be large or sensitive.
+        if (apiResponse.StatusCode != HttpStatusCode.OK)
         {
             _logger.Warning("{ResourceUrl}: Partitions request returned status '{StatusCode}'. Falling back to offset/limit paging for this resource. Response: {Content}",
-                resourceUrl, apiResponse.StatusCode, content);
+                resourceUrl, apiResponse.StatusCode, TruncateForLog(content));
 
             return null;
         }
@@ -244,4 +250,9 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
 
         return tokens.Select(t => t.Value<string>()).Where(t => !string.IsNullOrEmpty(t)).ToArray();
     }
+
+    private static string TruncateForLog(string content)
+        => content.Length <= MaxLoggedErrorBodyLength
+            ? content
+            : $"{content[..MaxLoggedErrorBodyLength]}... (truncated, {content.Length:N0} characters)";
 }
