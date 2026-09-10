@@ -105,8 +105,10 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                         );
                     }
 
+                    // Only the Total-Count header is wanted: limit=0 makes the API skip the item queries entirely
+                    // (accepted since ODS/API 5.1, ODS-4499, and the form the cursor paging guide recommends)
                     string requestUri =
-                        $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?offset=0&limit=1&totalCount=true{changeWindowQueryStringParameters}";
+                        $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}?limit=0&totalCount=true{changeWindowQueryStringParameters}";
 
                     return await RequestHelpers.SendGetRequestAsync(
                         edFiApiClient,

@@ -5,7 +5,9 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
+using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using NUnit.Framework;
@@ -88,6 +90,68 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             // The transient failure being retried must have been disposed by the retry callback
             transientContent.ContentDisposed.ShouldBeTrue();
+        }
+
+        [Test]
+        public async Task Count_request_should_ask_for_zero_items()
+        {
+            // The count is read from the Total-Count header, so no item should be requested alongside it. The
+            // ODS/API has accepted limit=0 for exactly this purpose since v5.1 (ODS-4499), and it is the form the
+            // cursor paging guide recommends; limit=1 made every count request also load and serialize one aggregate.
+            TestHelpers.InitializeLogging();
+
+            var fakeRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            HttpRequestMessage capturedRequest = null;
+
+            A.CallTo(
+                    () => fakeRequestHandler.Get(
+                        A<string>.Ignored,
+                        A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath == "/data/v3/ed-fi/students")))
+                .ReturnsLazily(
+                    (string _, HttpRequestMessage request) =>
+                    {
+                        capturedRequest = request;
+
+                        var response = new HttpResponseMessage(HttpStatusCode.OK)
+                        {
+                            Content = new StringContent("[]", Encoding.UTF8, "application/json")
+                        };
+
+                        response.Headers.TryAddWithoutValidation("Total-Count", "7");
+
+                        return response;
+                    });
+
+            EdFiApiClient SourceApiClientFactory() =>
+                new EdFiApiClient(
+                    "TestSource",
+                    TestHelpers.GetSourceApiConnectionDetails(),
+                    bearerTokenRefreshMinutes: 27,
+                    ignoreSslErrors: true,
+                    httpClientHandler: new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            var sourceClientProvider = A.Fake<ISourceEdFiApiClientProvider>();
+            A.CallTo(() => sourceClientProvider.GetApiClient()).Returns(SourceApiClientFactory());
+
+            var provider = new EdFiApiSourceTotalCountProvider(sourceClientProvider);
+
+            var (success, totalCount) = await provider.TryGetTotalCountAsync(
+                "/ed-fi/students",
+                TestHelpers.GetOptions(),
+                new ChangeWindow { MinChangeVersion = 10, MaxChangeVersion = 20 },
+                new BufferBlock<ErrorItemMessage>(),
+                CancellationToken.None);
+
+            success.ShouldBeTrue();
+            totalCount.ShouldBe(7);
+
+            capturedRequest.ShouldNotBeNull();
+            var query = capturedRequest.RequestUri.ParseQueryString();
+            query["totalCount"].ShouldBe("true");
+            query["limit"].ShouldBe("0");
+            query["pageToken"].ShouldBeNull();
+            query["minChangeVersion"].ShouldBe("10");
+            query["maxChangeVersion"].ShouldBe("20");
         }
 
         [Test]
