@@ -14,6 +14,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Isolation;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Versioning;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
@@ -313,7 +314,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                         new EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer(
                             new EdFiApiSourceTotalCountProvider(sourceEdFiApiClientProvider))
                     ),
-                new StreamResourcePagesBlockFactory(new EdFiApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider)),
+                new StreamResourcePagesBlockFactory(
+                    new EdFiApiStreamResourcePageMessageHandler(sourceEdFiApiClientProvider, new OffsetPageRequestStrategy())),
                 sourceApiConnectionDetails);
 
             var stageInitiators = A.Fake<IIndex<PublishingStage, IPublishingStageInitiator>>();

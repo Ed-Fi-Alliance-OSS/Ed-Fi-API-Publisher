@@ -6,6 +6,7 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageHandlers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
@@ -90,7 +91,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var sourceClientProvider = A.Fake<ISourceEdFiApiClientProvider>();
             A.CallTo(() => sourceClientProvider.GetApiClient()).Returns(SourceApiClientFactory());
 
-            return (new EdFiApiStreamResourcePageMessageHandler(sourceClientProvider), fakeRequestHandler);
+            return (new EdFiApiStreamResourcePageMessageHandler(sourceClientProvider, new OffsetPageRequestStrategy()), fakeRequestHandler);
         }
 
         private static void SetupPageGet(
