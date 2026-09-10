@@ -31,6 +31,7 @@ MAX_RETRY_ATTEMPTS=<Default. 10>
 MAX_DEGREE_OF_PARALLELISM_FOR_RESOURCE_PROCESSING=<Default. 10>
 MAX_DEGREE_OF_PARALLELISM_FOR_POST_RESOURCE_ITEM=<Default. 20>
 MAX_DEGREE_OF_PARALLELISM_FOR_STREAM_RESOURCE_PAGES=<Default. 5>
+MAX_CONCURRENT_SOURCE_REQUESTS=<Default. 0 (source API left uncapped); any positive number caps requests in flight against the source API>
 STREAMING_PAGES_WAIT_DURATION_SECONDS=<Default. 10>
 STREAMING_PAGE_SIZE=<Default. 75>
 PROCESSING_BLOCK_BOUNDED_CAPACITY=<Default. 0 (automatic); -1 disables bounding (memory-growth rollback lever)>
