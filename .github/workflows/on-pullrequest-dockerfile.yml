@@ -40,7 +40,7 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set Version Numbers
         if: ${{ matrix.dockerfile.type == 'published' }}
@@ -54,7 +54,7 @@ jobs:
             echo "latest version: $LATEST"
             echo "VERSION=$LATEST" >> $GITHUB_OUTPUT
 
-      - uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         name: Run Linter on ${{ matrix.dockerfile.name }} Dockerfile
         with:
           dockerfile: ${{ matrix.dockerfile.path }}
@@ -86,6 +86,6 @@ jobs:
       - name: Upload SARIF result
         id: upload-sarif
         if: ${{ github.event_name != 'pull_request_target' }}
-        uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 #codeql-bundle-v3.28.0
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           sarif_file: sarif-${{ matrix.dockerfile.name }}.output.json
