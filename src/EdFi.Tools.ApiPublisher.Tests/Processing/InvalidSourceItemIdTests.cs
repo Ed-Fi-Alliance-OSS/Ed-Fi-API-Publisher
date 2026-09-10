@@ -253,7 +253,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // The source "id" on a delete item is diagnostic only -- the actual GET-by-key and DELETE
             // operations are driven entirely by "keyValues". A missing/invalid id is not a functional
             // failure, so it must not throw, cancel the page, or drop the sibling items.
-            var factory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var factory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
 
             var message = new StreamResourcePageMessage<GetItemForDeletionMessage>
             {
@@ -459,7 +459,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // The source "id" on a key-change item is diagnostic only -- the target item to update is found
             // via "oldKeyValues" and identified by its own returned id. A missing/invalid source id is not a
             // functional failure, so it must not throw, cancel the page, or drop the sibling items.
-            var factory = new ChangeResourceKeyProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var factory = new ChangeResourceKeyProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
 
             var message = new StreamResourcePageMessage<GetItemForKeyChangeMessage>
             {

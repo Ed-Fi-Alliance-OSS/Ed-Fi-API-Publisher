@@ -131,7 +131,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
         private static StreamResourcePageMessage<GetItemForDeletionMessage> CreateDeletesPageMessage(int limit, bool isFinalPage)
         {
-            var deleteFactory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var deleteFactory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
 
             return new StreamResourcePageMessage<GetItemForDeletionMessage>
             {

@@ -359,7 +359,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 .Returns(
                     new KeyChangePublishingStageInitiator(
                         streamingResourceProcessor,
-                        new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider, supportingRateLimiter)));
+                        new ChangeResourceKeyProcessingBlocksFactory(targetEdFiApiClientProvider, runSummaryCollector, supportingRateLimiter)));
 
             A.CallTo(() => stageInitiators[PublishingStage.Upserts])
                 .Returns(
@@ -378,7 +378,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 .Returns(
                     new DeletePublishingStageInitiator(
                         streamingResourceProcessor,
-                        new DeleteResourceProcessingBlocksFactory(targetEdFiApiClientProvider, supportingRateLimiter)));
+                        new DeleteResourceProcessingBlocksFactory(targetEdFiApiClientProvider, runSummaryCollector, supportingRateLimiter)));
 
             return new ChangeProcessor(
                 resourceDependencyProvider,

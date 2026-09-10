@@ -29,6 +29,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Metadata
             var collector = CreateCollector();
 
             collector.AddAttemptedItems(Students, 3);
+            collector.AddPublishedItems(PublishingStage.Upserts, Students, 2);
             collector.AddError(
                 PublishingStage.Upserts,
                 new ErrorItemMessage
@@ -42,6 +43,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Metadata
 
             resource.FailedItemCount.ShouldBe(1);
             resource.PublishedItemCount.ShouldBe(2);
+            resource.UnresolvedItemCount.ShouldBe(0);
             collector.GetSummary().SourceReadErrorCount.ShouldBe(0);
         }
 
@@ -95,6 +97,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Metadata
             var collector = CreateCollector();
 
             collector.AddAttemptedItems($"{Students}{EdFiApiConstants.DeletesPathSuffix}", 2);
+            collector.AddPublishedItems(PublishingStage.Deletes, Students, 1);
             collector.AddError(
                 PublishingStage.Deletes,
                 new ErrorItemMessage
@@ -180,6 +183,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Metadata
             var collector = CreateCollector();
 
             collector.AddAttemptedItems(Students, 4);
+            collector.AddPublishedItems(PublishingStage.Upserts, Students, 1);
             collector.AddSkippedItems(
                 PublishingStage.Upserts,
                 Students,
@@ -192,6 +196,93 @@ namespace EdFi.Tools.ApiPublisher.Tests.Metadata
             resource.SkippedItemCount.ShouldBe(3);
             resource.PublishedItemCount.ShouldBe(1);
             summary.SkipReasons.ShouldContain(SkipReasons.ResourceIgnoredAfterAuthorizationFailure);
+        }
+
+        [Test]
+        public void A_document_rejected_by_both_passes_is_counted_once()
+        {
+            // The retry pass republishes every document of the resource, so a document the target rejects
+            // twice produces two error records for one document. Counting the records would report double
+            // and would consume the operator's tolerance twice as fast (see APIPUB-120).
+            var collector = CreateCollector();
+
+            collector.AddAttemptedItems(Students, 2);
+            collector.AddError(PublishingStage.Upserts, RejectedDocument());
+            collector.AddError(PublishingStage.Upserts, RejectedDocument());
+            collector.AddError(PublishingStage.Upserts, RejectedDocument(isAuthorizationRetryPass: true));
+            collector.AddError(PublishingStage.Upserts, RejectedDocument(isAuthorizationRetryPass: true));
+
+            var resource = collector.GetSummary().Resources.Single(r => r.AttemptedItemCount > 0);
+
+            resource.AttemptedItemCount.ShouldBe(2);
+            resource.FailedItemCount.ShouldBe(2);
+            resource.PublishedItemCount.ShouldBe(0);
+
+            resource.AuthorizationRetryPass.ShouldNotBeNull();
+            resource.AuthorizationRetryPass.FirstPassFailedItemCount.ShouldBe(2);
+            resource.AuthorizationRetryPass.FailedItemCount.ShouldBe(2);
+            resource.AuthorizationRetryPass.RecoveredItemCount.ShouldBe(0);
+        }
+
+        [Test]
+        public void A_document_the_retry_pass_recovers_is_reported_as_published()
+        {
+            // The first pass rejected both documents; the retry pass published them once their update
+            // prerequisites completed, which is the whole purpose of that pass
+            var collector = CreateCollector();
+
+            collector.AddAttemptedItems(Students, 2);
+            collector.AddError(PublishingStage.Upserts, RejectedDocument());
+            collector.AddError(PublishingStage.Upserts, RejectedDocument());
+            collector.AddPublishedItems(PublishingStage.Upserts, Students, 2, isAuthorizationRetryPass: true);
+
+            var resource = collector.GetSummary().Resources.Single(r => r.AttemptedItemCount > 0);
+
+            resource.FailedItemCount.ShouldBe(0);
+            resource.PublishedItemCount.ShouldBe(2);
+            resource.UnresolvedItemCount.ShouldBe(0);
+
+            resource.AuthorizationRetryPass.FirstPassFailedItemCount.ShouldBe(2);
+            resource.AuthorizationRetryPass.ReattemptedItemCount.ShouldBe(2);
+            resource.AuthorizationRetryPass.RecoveredItemCount.ShouldBe(2);
+        }
+
+        [Test]
+        public void A_resource_without_a_retry_pass_reports_no_retry_information()
+        {
+            var collector = CreateCollector();
+
+            collector.AddAttemptedItems(Students, 1);
+            collector.AddPublishedItems(PublishingStage.Upserts, Students, 1);
+
+            collector.GetSummary().Resources.Single().AuthorizationRetryPass.ShouldBeNull();
+        }
+
+        [Test]
+        public void A_document_whose_outcome_the_run_never_learned_is_neither_published_nor_failed()
+        {
+            // The run stopped with documents in flight: they were read, and nothing came back for them
+            var collector = CreateCollector();
+
+            collector.AddAttemptedItems(Students, 3);
+            collector.AddPublishedItems(PublishingStage.Upserts, Students, 1);
+
+            var resource = collector.GetSummary().Resources.Single();
+
+            resource.PublishedItemCount.ShouldBe(1);
+            resource.FailedItemCount.ShouldBe(0);
+            resource.UnresolvedItemCount.ShouldBe(2);
+        }
+
+        private static ErrorItemMessage RejectedDocument(bool isAuthorizationRetryPass = false)
+        {
+            return new ErrorItemMessage
+            {
+                Method = HttpMethod.Post.ToString(),
+                ResourceUrl = Students,
+                Id = "d0ed1d0b",
+                IsAuthorizationRetryPass = isAuthorizationRetryPass,
+            };
         }
 
         private static RunSummaryCollector CreateCollector()

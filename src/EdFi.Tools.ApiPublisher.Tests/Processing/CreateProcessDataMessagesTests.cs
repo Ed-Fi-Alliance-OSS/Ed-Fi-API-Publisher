@@ -108,7 +108,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             TestHelpers.InitializeLogging();
 
-            var factory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var factory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
             var pageMessage = CreatePageMessage<GetItemForDeletionMessage>("/ed-fi/students/deletes");
 
             int? reportedCount = null;
@@ -129,7 +129,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             TestHelpers.InitializeLogging();
 
-            var factory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var factory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
             var pageMessage = CreatePageMessage<GetItemForDeletionMessage>("/ed-fi/students/deletes");
 
             int? reportedCount = null;
@@ -151,7 +151,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             TestHelpers.InitializeLogging();
 
-            var factory = new ChangeResourceKeyProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var factory = new ChangeResourceKeyProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
             var pageMessage = CreatePageMessage<GetItemForKeyChangeMessage>("/ed-fi/students/keyChanges");
 
             int? reportedCount = null;
@@ -172,7 +172,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             TestHelpers.InitializeLogging();
 
-            var factory = new ChangeResourceKeyProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var factory = new ChangeResourceKeyProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
             var pageMessage = CreatePageMessage<GetItemForKeyChangeMessage>("/ed-fi/students/keyChanges");
 
             int? reportedCount = null;

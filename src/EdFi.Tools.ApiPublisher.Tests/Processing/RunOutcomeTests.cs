@@ -77,7 +77,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .Single(line => line.TrimStart().StartsWith("upserts"));
 
             upsertsLine.ShouldMatch(@"upserts\s+" + Regex.Escape(StateEducationAgencies) + @"\s+3\s+3\s+2\s+0\s+1\s*$");
-            report.ShouldContain("Published is not counted on the target");
+            report.ShouldContain("Publishing run summary");
         }
 
         [Test]
@@ -261,34 +261,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler();
             fakeTargetRequestHandler.EveryDataManagementPostReturns200Ok();
 
-            var options = TestHelpers.GetOptions();
-            options.IncludeDescriptors = false;
-
-            TestHelpers.InitializeLogging();
-
-            var metadataCollector = new PublishingOperationMetadataCollector();
-            var runSummaryCollector = new RunSummaryCollector(metadataCollector);
-
-            var changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
-                options,
-                TestHelpers.GetSourceApiConnectionDetails(include: new[] { StudentsResource }),
-                fakeSourceRequestHandler,
-                TestHelpers.GetTargetApiConnectionDetails(),
-                fakeTargetRequestHandler,
-                errorPublisher: new SerilogErrorPublisher(),
-                runSummaryCollector: runSummaryCollector,
-                metadataCollector: metadataCollector);
-
-            try
-            {
-                await changeProcessor.ProcessChangesAsync(
-                    TestHelpers.CreateChangeProcessorConfiguration(options),
-                    CancellationToken.None);
-            }
-            catch (Exception)
-            {
-                // The outcome of the run is not what this test is about
-            }
+            var run = await RunStudentsWithRetryPassAsync(fakeSourceRequestHandler, fakeTargetRequestHandler);
 
             // The positive control: the pipeline really did publish each document twice, once per pass
             A.CallTo(
@@ -298,10 +271,99 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .MustHaveHappened(4, Times.Exactly);
 
             // ... and the summary still reports the two documents the resource actually has
-            runSummaryCollector.GetSummary().Resources
-                .Single(resource => resource.Stage == PublishingStage.Upserts
-                    && resource.ResourcePath == StudentsResource)
-                .AttemptedItemCount.ShouldBe(2);
+            var resource = run.RunSummaryCollector.GetSummary().Resources
+                .Single(r => r.Stage == PublishingStage.Upserts && r.ResourcePath == StudentsResource);
+
+            resource.AttemptedItemCount.ShouldBe(2);
+            resource.PublishedItemCount.ShouldBe(2);
+            resource.FailedItemCount.ShouldBe(0);
+        }
+
+        [Test]
+        public async Task A_document_rejected_on_both_passes_is_reported_once_and_the_retry_pass_is_named()
+        {
+            // Two documents rejected by the target on the first pass and again by the authorization retry
+            // pass produce four error records. Counting records rather than documents reported four failures
+            // against two attempted documents, and consumed the operator's tolerance twice as fast.
+            const string StudentsResource = "/ed-fi/students";
+
+            var fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
+                .AvailableChangeVersions(1100)
+                .ResourceCount(responseTotalCountHeader: 2)
+                .GetResourceData(
+                    $"{EdFiApiConstants.DataManagementApiSegment}{StudentsResource}",
+                    TestHelpers.GetGenericResourceFaker().Generate(2).ToArray());
+
+            var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler()
+                .PostResource(
+                    $"{EdFiApiConstants.DataManagementApiSegment}{StudentsResource}",
+                    HttpStatusCode.BadRequest,
+                    HttpStatusCode.BadRequest,
+                    HttpStatusCode.BadRequest,
+                    HttpStatusCode.BadRequest);
+
+            var run = await RunStudentsWithRetryPassAsync(fakeSourceRequestHandler, fakeTargetRequestHandler);
+
+            var resource = run.RunSummaryCollector.GetSummary().Resources
+                .Single(r => r.Stage == PublishingStage.Upserts && r.ResourcePath == StudentsResource);
+
+            resource.AttemptedItemCount.ShouldBe(2);
+            resource.FailedItemCount.ShouldBe(2);
+            resource.PublishedItemCount.ShouldBe(0);
+
+            // The pass that decided the outcome is named, with what the first one had reported
+            resource.AuthorizationRetryPass.ShouldNotBeNull();
+            resource.AuthorizationRetryPass.FirstPassFailedItemCount.ShouldBe(2);
+            resource.AuthorizationRetryPass.ReattemptedItemCount.ShouldBe(2);
+            resource.AuthorizationRetryPass.FailedItemCount.ShouldBe(2);
+
+            RunSummaryFormatter.Format(run.RunSummaryCollector.GetSummary())
+                .ShouldContain("the authorization retry pass republished");
+        }
+
+        private static async Task<RunResult> RunStudentsWithRetryPassAsync(
+            IFakeHttpRequestHandler fakeSourceRequestHandler,
+            IFakeHttpRequestHandler fakeTargetRequestHandler)
+        {
+            // "/ed-fi/students" is configured for authorization retry by the shipped settings, so the resource
+            // is streamed a second time once "/ed-fi/studentSchoolAssociations" completes
+            const string StudentsResource = "/ed-fi/students";
+
+            var options = TestHelpers.GetOptions();
+            options.IncludeDescriptors = false;
+
+            TestHelpers.InitializeLogging();
+
+            var errorPublisher = new SerilogErrorPublisher();
+            var metadataCollector = new PublishingOperationMetadataCollector();
+            var runSummaryCollector = new RunSummaryCollector(metadataCollector);
+            var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
+
+            var changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
+                options,
+                TestHelpers.GetSourceApiConnectionDetails(include: new[] { StudentsResource }),
+                fakeSourceRequestHandler,
+                TestHelpers.GetTargetApiConnectionDetails(),
+                fakeTargetRequestHandler,
+                errorPublisher: errorPublisher,
+                runSummaryCollector: runSummaryCollector,
+                metadataCollector: metadataCollector,
+                changeVersionProcessedWriter: changeVersionProcessedWriter);
+
+            Exception caught = null;
+
+            try
+            {
+                await changeProcessor.ProcessChangesAsync(
+                    TestHelpers.CreateChangeProcessorConfiguration(options),
+                    CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+
+            return new RunResult(caught, errorPublisher, runSummaryCollector, changeVersionProcessedWriter);
         }
 
         private static Task<RunResult> RunWithPostResponsesAsync(params HttpStatusCode[] postResponseCodes)
