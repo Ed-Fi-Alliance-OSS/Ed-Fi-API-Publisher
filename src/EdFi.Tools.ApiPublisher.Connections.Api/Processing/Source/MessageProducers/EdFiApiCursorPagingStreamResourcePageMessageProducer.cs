@@ -25,7 +25,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProdu
 /// <summary>
 /// Produces one page message per partition of a resource using the ODS/API 7.3+ <c>/partitions</c> endpoint
 /// (see APIPUB-139). Each message carries a starting <c>pageToken</c>; the read handler walks the partition by
-/// following <c>Next-Page-Token</c>. The total count is still requested (offset syntax) for the progress log line.
+/// following <c>Next-Page-Token</c>. The total count is still requested (offset syntax, concurrently with the
+/// partitions request) for the progress log line.
 /// </summary>
 public class EdFiApiCursorPagingStreamResourcePageMessageProducer
 {
@@ -62,9 +63,17 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
     {
         int partitionCount = options.ResolvedCursorPagingPartitionCount;
 
+        // The total count is informational under cursor paging (totalCount is not supported with pageToken); it is
+        // still requested on offset syntax so the "Total count = N" line and its consumers behave as before. The count
+        // and the partitions request are independent, so the count goes out first and the partitions request follows
+        // while it is still in flight -- issued in series, the pre-page phase cost a full round trip more than offset
+        // paging on every resource.
+        var totalCountTask = GetTotalCountAsync(message, options, errorHandlingBlock, cancellationToken);
+
         _logger.Information("{ResourceUrl}: Retrieving up to {PartitionCount} partition tokens.", message.ResourceUrl, partitionCount);
 
-        string[] pageTokens;
+        string[] pageTokens = null;
+        bool partitionsRequestFailed = false;
 
         try
         {
@@ -76,29 +85,18 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
         {
             _logger.Warning(ex, "{ResourceUrl}: Partitions request failed. Falling back to offset/limit paging for this resource.", message.ResourceUrl);
 
+            partitionsRequestFailed = true;
+        }
+
+        // Always awaited (also on the fallback path) so the count request is never left as an orphaned task; a
+        // fatal failure it raises (authentication, cancellation) surfaces here exactly as it would have in series
+        var (totalCountSuccess, totalCount) = await totalCountTask.ConfigureAwait(false);
+
+        if (partitionsRequestFailed || pageTokens is null)
+        {
+            // Non-success or failed partitions request, already logged; the offset producer requests its own count
             return (false, null);
         }
-
-        if (pageTokens is null)
-        {
-            // Non-success response, already logged
-            return (false, null);
-        }
-
-        // The total count is informational under cursor paging (totalCount is not supported with pageToken); it is
-        // still requested on offset syntax so the "Total count = N" line and its consumers behave as before
-        if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
-        {
-            _logger.Information("{ResourceUrl}: Retrieving total count of items in change versions {MinChangeVersion} to {MaxChangeVersion}.",
-                message.ResourceUrl, message.ChangeWindow.MinChangeVersion, message.ChangeWindow.MaxChangeVersion);
-        }
-        else
-        {
-            _logger.Information("{ResourceUrl}: Retrieving total count of items.", message.ResourceUrl);
-        }
-
-        var (totalCountSuccess, totalCount) = await _sourceTotalCountProvider.TryGetTotalCountAsync(
-            message.ResourceUrl, options, message.ChangeWindow, errorHandlingBlock, cancellationToken).ConfigureAwait(false);
 
         if (!totalCountSuccess)
         {
@@ -142,6 +140,30 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
             .ToList();
 
         return (true, pageMessages);
+    }
+
+    /// <summary>
+    /// Requests the total count on offset syntax (the same request the offset producer makes), logging the same
+    /// "Retrieving total count" line. The provider reports non-fatal failures through its result and the error block.
+    /// </summary>
+    private Task<(bool Success, long TotalCount)> GetTotalCountAsync(
+        StreamResourceMessage message,
+        Options options,
+        ITargetBlock<ErrorItemMessage> errorHandlingBlock,
+        CancellationToken cancellationToken)
+    {
+        if (message.ChangeWindow?.MaxChangeVersion != default(long) && message.ChangeWindow?.MaxChangeVersion != null)
+        {
+            _logger.Information("{ResourceUrl}: Retrieving total count of items in change versions {MinChangeVersion} to {MaxChangeVersion}.",
+                message.ResourceUrl, message.ChangeWindow.MinChangeVersion, message.ChangeWindow.MaxChangeVersion);
+        }
+        else
+        {
+            _logger.Information("{ResourceUrl}: Retrieving total count of items.", message.ResourceUrl);
+        }
+
+        return _sourceTotalCountProvider.TryGetTotalCountAsync(
+            message.ResourceUrl, options, message.ChangeWindow, errorHandlingBlock, cancellationToken);
     }
 
     /// <summary>

@@ -14,7 +14,9 @@ using Serilog.Sinks.TestCorrelator;
 using Shouldly;
 using System;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
@@ -24,7 +26,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     /// returning a 200 response with a pageTokens array. The probe is version-independent -- a source may
     /// have backported the feature onto an older ODS/API version -- and any failure mode (404, other
     /// unsuccessful status, missing pageTokens array, or a thrown exception) resolves to offset paging.
-    /// The answer is determined once per run.
+    /// Only a definitive answer (supported, or a 404 proving the endpoint is absent) is memoized for the
+    /// run; an inconclusive probe is retried on the next resolution.
     /// </summary>
     [TestFixture]
     public class EdFiApiSourceCapabilitiesCursorPagingTests
@@ -116,7 +119,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             TestHelpers.InitializeLogging();
             var (capabilities, fake) = Create();
-            SetupPartitionsProbe(fake, FakeResponse.NotFound);
+            SetupPartitionsProbe(fake, () => new HttpResponseMessage(HttpStatusCode.InternalServerError));
 
             using (TestCorrelator.CreateContext())
             {
@@ -126,6 +129,76 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .Count(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("cursor paging"))
                     .ShouldBe(1);
             }
+        }
+
+        [Test]
+        public async Task Absent_partitions_endpoint_should_be_memoized_and_reported_at_information()
+        {
+            TestHelpers.InitializeLogging();
+            var (capabilities, fake) = Create();
+            SetupPartitionsProbe(fake, FakeResponse.NotFound);
+
+            using (TestCorrelator.CreateContext())
+            {
+                (await capabilities.SupportsCursorPagingAsync("/ed-fi/students")).ShouldBeFalse();
+                (await capabilities.SupportsCursorPagingAsync("/ed-fi/schools")).ShouldBeFalse();
+
+                PartitionsProbeMustHaveHappenedOnceExactly(fake);
+
+                var events = TestCorrelator.GetLogEventsFromCurrentContext().ToArray();
+
+                events.Count(e => e.Level == LogEventLevel.Information
+                        && e.MessageTemplate.Text.Contains("does not expose"))
+                    .ShouldBe(1);
+
+                events.ShouldNotContain(e => e.Level == LogEventLevel.Warning);
+            }
+        }
+
+        [Test]
+        public async Task Transient_probe_failure_should_not_be_memoized_and_should_be_re_probed()
+        {
+            var (capabilities, fake) = Create();
+            int probes = 0;
+
+            // Matches any resource's partitions path: the re-probe uses the next resource's key
+            A.CallTo(() => fake.Get(A<string>.Ignored, A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath.EndsWith("/partitions"))))
+                .ReturnsLazily(() =>
+                {
+                    probes++;
+
+                    return probes == 1
+                        ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                        : FakeResponse.OK(new { pageTokens = new[] { "abc" } });
+                });
+
+            (await capabilities.SupportsCursorPagingAsync("/ed-fi/students")).ShouldBeFalse();
+            (await capabilities.SupportsCursorPagingAsync("/ed-fi/schools")).ShouldBeTrue();
+
+            probes.ShouldBe(2);
+        }
+
+        [Test]
+        public async Task Concurrent_first_callers_should_share_a_single_probe()
+        {
+            var (capabilities, fake) = Create();
+            int probes = 0;
+
+            SetupPartitionsProbe(fake, () =>
+            {
+                Interlocked.Increment(ref probes);
+
+                return FakeResponse.OK(new { pageTokens = new[] { "abc" } });
+            });
+
+            bool[] results = await Task.WhenAll(
+                capabilities.SupportsCursorPagingAsync("/ed-fi/students"),
+                capabilities.SupportsCursorPagingAsync("/ed-fi/schools"),
+                capabilities.SupportsCursorPagingAsync("/ed-fi/staffs"));
+
+            results.ShouldAllBe(supported => supported);
+            probes.ShouldBe(1);
+            PartitionsProbeMustHaveHappenedOnceExactly(fake);
         }
 
         [Test]

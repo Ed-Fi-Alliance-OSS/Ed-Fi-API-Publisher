@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json.Linq;
 using Serilog;
+using System.Net;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
 
@@ -17,9 +18,10 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
 
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiSourceCapabilities));
 
-    // Cursor paging support is a property of the source, not of a resource: determined once per run (see APIPUB-139)
+    // Cursor paging support is a property of the source, not of a resource, so a definitive answer is
+    // determined once per run (see APIPUB-139). An inconclusive probe (transient failure) is not memoized.
     private readonly object _cursorPagingLock = new();
-    private Task<bool> _supportsCursorPaging;
+    private Task<bool?> _supportsCursorPaging;
 
     public EdFiApiSourceCapabilities(ISourceEdFiApiClientProvider sourceEdFiApiClientProvider)
     {
@@ -72,21 +74,52 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
         return false;
     }
 
-    public Task<bool> SupportsCursorPagingAsync(string probeResourceKey)
+    /// <summary>
+    /// Indicates whether the source supports partitioned cursor paging, probing the source API on the first
+    /// call. Only a definitive answer -- the source has the feature, or demonstrably does not -- is memoized;
+    /// an inconclusive probe (a transient status, an unrecognized response body, or a failed request) falls
+    /// back to offset/limit paging for the current resolution and is probed again on the next call.
+    /// </summary>
+    public async Task<bool> SupportsCursorPagingAsync(string probeResourceKey)
     {
+        // Resolved outside the lock: obtaining the API client is a lazy, potentially slow operation
+        var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
+
+        Task<bool?> probeTask;
+
         lock (_cursorPagingLock)
         {
-            return _supportsCursorPaging ??= ProbeCursorPagingSupportAsync(probeResourceKey);
+            probeTask = _supportsCursorPaging ??= ProbeCursorPagingSupportAsync(edFiApiClient, probeResourceKey);
         }
+
+        bool? result = await probeTask.ConfigureAwait(false);
+
+        if (result is null)
+        {
+            // Inconclusive: drop the memoized task so the next resolution probes the source again
+            lock (_cursorPagingLock)
+            {
+                if (ReferenceEquals(_supportsCursorPaging, probeTask))
+                {
+                    _supportsCursorPaging = null;
+                }
+            }
+        }
+
+        return result ?? false;
     }
 
-    private async Task<bool> ProbeCursorPagingSupportAsync(string probeResourceKey)
+    /// <summary>
+    /// Probes the source API for cursor paging support, returning <c>true</c> when it is supported,
+    /// <c>false</c> when the source demonstrably does not expose the endpoint, and <c>null</c> when the
+    /// probe was inconclusive and should be retried.
+    /// </summary>
+    private async Task<bool?> ProbeCursorPagingSupportAsync(EdFiApiClient edFiApiClient, string probeResourceKey)
     {
         // Detection is a single GET /{resource}/partitions?number=1 probe requiring a 200 response with a
         // pageTokens array. A source without the feature (pre-7.3, or 7.3 code not present) returns 404
         // because the path collides with the {id:guid} route, and pre-7.3 sources silently ignore unknown
         // query string parameters, so a trial pageToken request is never used for detection (see APIPUB-136).
-        var edFiApiClient = _sourceEdFiApiClientProvider.GetApiClient();
         string probeUrl = $"{edFiApiClient.DataManagementApiSegment}{probeResourceKey}{EdFiApiConstants.PartitionsPathSuffix}";
 
         _logger.Debug("Probing source API for cursor paging support at '{ProbeUrl}'.", probeUrl);
@@ -95,12 +128,20 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
         {
             using var probeResponse = await edFiApiClient.HttpClient.GetAsync($"{probeUrl}?number=1").ConfigureAwait(false);
 
+            if (probeResponse.StatusCode == HttpStatusCode.NotFound)
+            {
+                _logger.Information("Source API does not expose '{PartitionsPathSuffix}' (status {StatusCode}); offset/limit paging will be used.",
+                    EdFiApiConstants.PartitionsPathSuffix, (int)probeResponse.StatusCode);
+
+                return false;
+            }
+
             if (!probeResponse.IsSuccessStatusCode)
             {
                 _logger.Warning("Request to Source API for the '{PartitionsPathSuffix}' child resource was unsuccessful (response status was '{StatusCode}'). Offset/limit paging will be used instead of cursor paging.",
                     EdFiApiConstants.PartitionsPathSuffix, probeResponse.StatusCode);
 
-                return false;
+                return null;
             }
 
             string content = await probeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -110,7 +151,7 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
                 _logger.Warning("Response from Source API for the '{PartitionsPathSuffix}' child resource did not contain a 'pageTokens' array. Offset/limit paging will be used instead of cursor paging.",
                     EdFiApiConstants.PartitionsPathSuffix);
 
-                return false;
+                return null;
             }
 
             _logger.Debug("Probe response status was '{StatusCode}'. Source supports cursor paging.", probeResponse.StatusCode);
@@ -121,7 +162,7 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
         {
             _logger.Warning(ex, "Probe of Source API for cursor paging support at '{ProbeUrl}' failed. Offset/limit paging will be used instead of cursor paging.", probeUrl);
 
-            return false;
+            return null;
         }
     }
 

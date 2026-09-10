@@ -93,6 +93,16 @@ For more documentation on API Publisher's parameters, please see the [API Publis
 
 For more information in relation to key changes and deletes, please see [Considerations in relation to key changes and deletes](docs/API-Publisher-Configuration.md#considerations-in-relation-to-key-changes-and-deletes)
 
+### Paging against Ed-Fi ODS / API 7.3 and later
+
+When the source exposes `GET /{resource}/partitions` (ODS/API 7.3 and later), the publisher reads each main resource with partitioned cursor paging: one `GET /{resource}/partitions` request returns starting page tokens, and each partition is walked with `pageToken`/`pageSize` requests following the `Next-Page-Token` response header. Older sources, and the `/deletes` and `/keyChanges` child resources on every source, keep using `offset`/`limit` exactly as before. Detection is automatic (one `/partitions` probe per run) and needs no configuration.
+
+- `--disableCursorPaging=true` forces the legacy `offset`/`limit` path for every resource (useful for A/B comparisons or if a source misbehaves).
+- `--cursorPagingPartitionCount=N` sets how many partitions are requested per resource (1..200). By default it equals `--maxDegreeOfParallelismForStreamResourcePages` (capped at 200, the API maximum), so each page-fetch worker walks one partition.
+- The log shows the decision once per resource: `"/ed-fi/students": using Cursor paging` or `using Offset paging`. A `WARN` line explains any fallback (probe failed, `/partitions` request failed).
+
+See [API Publisher Configuration](docs/API-Publisher-Configuration.md) for details and the memory-ceiling implications.
+
 ## Known Limitations for Ed-Fi ODS / API 5.1 through 5.3
 
 Currently, Ed-Fi ODS / API 5.1 through 5.3 has the following known issues related to Change Queries and the Ed-Fi API Publisher.  These have been resolved in [Ed-Fi ODS / API 5.3-cqe patch](https://edfi.atlassian.net/wiki/spaces/EFTD/pages/24807016/Change+Query+Enhancements) and [Ed-Fi ODS / API 6.1](https://edfi.atlassian.net/wiki/spaces/ODSAPIS3V61/overview).

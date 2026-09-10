@@ -94,7 +94,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     // Waits while the buffer is full; the resource's token releases a parked handler on cancellation
                     if (!await pageItemsBuffer.SendAsync(pageItem, msg.CancellationSource.Token).ConfigureAwait(false))
                     {
-                        _logger.Warning("{ResourceUrl}: The page items buffer declined an item (completed or faulted); abandoning the remainder of the page.", msg.ResourceUrl);
+                        _logger.Warning("{ResourceUrl}: The page items buffer declined an item (completed or faulted); abandoning the remainder of the page message (a whole partition under cursor paging).", msg.ResourceUrl);
 
                         return;
                     }

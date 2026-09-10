@@ -137,6 +137,38 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public async Task Total_count_request_should_not_wait_for_the_partitions_response()
+        {
+            // The partitions and total count requests are independent. Issued in series they cost the cursor pre-page
+            // phase a full extra round trip per resource (1.2 s vs 0.65 s for offset paging against a local ODS/API 7.3),
+            // so the count must already be in flight while the partitions response is outstanding.
+            using var countRequested = new ManualResetEventSlim(false);
+            bool countObservedBeforePartitionsResponded = false;
+
+            var (producer, fake, _) = Create(() =>
+            {
+                countObservedBeforePartitionsResponded = countRequested.Wait(TimeSpan.FromSeconds(2));
+
+                return FakeResponse.OK(new { pageTokens = new[] { "t1", "t2" } });
+            });
+
+            A.CallTo(() => fake.Get(A<string>.Ignored, A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.ParseQueryString()["totalCount"] == "true")))
+                .ReturnsLazily(() =>
+                {
+                    countRequested.Set();
+
+                    return FakeResponse.OK("[]").AppendHeaders(("Total-Count", "10"));
+                });
+
+            var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+            success.ShouldBeTrue();
+            messages.Count().ShouldBe(2);
+            countObservedBeforePartitionsResponded.ShouldBeTrue("the total count request should be in flight while the partitions request is outstanding");
+        }
+
+        [Test]
         public async Task Failed_total_count_should_produce_zero_messages_like_the_offset_producer()
         {
             var (producer, fake, _) = Create(() => FakeResponse.OK(new { pageTokens = new[] { "t1" } }));

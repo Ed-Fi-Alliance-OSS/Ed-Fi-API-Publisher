@@ -28,8 +28,9 @@ public interface ISourceCapabilities
     /// <summary>
     /// Indicates whether the data source supports partitioned cursor paging (an ODS/API 7.3+ feature, detected
     /// by probing <c>GET /{resource}/partitions</c> and the <c>pageToken</c>/<c>pageSize</c> query string
-    /// parameters), using the supplied resource key to probe for the capability. The answer is determined once
-    /// per run and reused for every resource.
+    /// parameters), using the supplied resource key to probe for the capability. A definitive answer is
+    /// determined once per run and reused for every resource; an inconclusive probe (for example a transient
+    /// failure) resolves to <c>false</c> for the current caller only and is probed again on the next call.
     /// </summary>
     /// <param name="probeResourceKey">The resource path (e.g. "/ed-fi/students") to probe with, if a probe is necessary.</param>
     Task<bool> SupportsCursorPagingAsync(string probeResourceKey);

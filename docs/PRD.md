@@ -174,6 +174,8 @@ The publisher has no persistent HTTP service; it is invoked as a one-shot CLI pr
 - **FR-CHG-2:** The publisher SHALL support reverse paging mode (`--useReversePaging=true`) to reduce the risk of records being skipped on active source databases.
 - **FR-CHG-3:** The publisher SHALL allow explicit override of the last change version via `--lastChangeVersionProcessed` to enable custom windowed processing.
 - **FR-CHG-4:** The publisher SHALL support a namespace prefix for `lastChangeVersionsProcessed` tracking via `--lastChangeVersionProcessedNamespace`, enabling multiple logical publisher instances sharing a named connection.
+- **FR-CHG-5:** Against an ODS/API 7.3+ source the publisher SHALL read main resources with partitioned cursor paging (`GET /{resource}/partitions`, `pageToken`/`pageSize`, `Next-Page-Token`), detected automatically, with `--disableCursorPaging` forcing `offset`/`limit`; `/deletes` and `/keyChanges` SHALL always use `offset`/`limit`.
+- **FR-CHG-6:** The publisher SHALL request a configurable number of partitions per resource (`--cursorPagingPartitionCount`, 1..200, default = `--maxDegreeOfParallelismForStreamResourcePages`, capped at 200, the API maximum).
 
 ### FR-CONN: Connection Management
 
@@ -228,6 +230,7 @@ The publisher has no persistent HTTP service; it is invoked as a one-shot CLI pr
 
 - **NFR-PERF-1:** The publisher SHALL support configurable parallelism at three levels: resource processing (`--maxDegreeOfParallelismForResourceProcessing`, default 10), POST requests per resource (`--maxDegreeOfParallelismForPostResourceItem`, default 20), and paged GET requests per resource (`--maxDegreeOfParallelismForStreamResourcePages`, default 5).
 - **NFR-PERF-2:** The publisher SHALL support a configurable page size for streaming source data (`--streamingPageSize`, default 75).
+- **NFR-PERF-3:** Peak memory under cursor paging SHALL not exceed the offset/limit path at the same `StreamingPageSize`; partitions are streamed page by page through the bounded item buffer.
 
 ### NFR-OPS: Operations
 

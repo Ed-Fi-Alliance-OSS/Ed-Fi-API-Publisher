@@ -46,7 +46,8 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
         // Unlike the API target blocks, every message this block receives carries a WHOLE PAGE of items
         // (see CreateProcessDataMessages below), so the item-denominated capacity must be converted to
         // page messages -- applying it directly would admit that many whole pages (at shipped defaults,
-        // roughly 500 pages against a documented ceiling of ~5,500 items).
+        // roughly 500 pages against a documented ceiling of 6,000 items per resource -- see the
+        // "Backpressure and the memory ceiling" section of docs/API-Publisher-Configuration.md).
         int resolvedItemCapacity = createBlocksRequest.Options.ResolvedProcessingBlockBoundedCapacity;
 
         int boundedCapacity = resolvedItemCapacity == -1

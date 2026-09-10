@@ -5,6 +5,7 @@
 
 using EdFi.Common.Inflection;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Core.Processing;
 using Microsoft.Extensions.Primitives;
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
@@ -120,6 +121,13 @@ public static class RequestHelpers
 
         // Don't apply Profiles to descriptors requests
         if (uri.LocalPath.EndsWith("Descriptors"))
+        {
+            return false;
+        }
+
+        // Don't apply Profiles to partitions requests -- a page token list is not a resource representation
+        // (LocalPath already excludes any query string, so '/partitions?number=1' is matched here)
+        if (uri.LocalPath.EndsWith(EdFiApiConstants.PartitionsPathSuffix))
         {
             return false;
         }
