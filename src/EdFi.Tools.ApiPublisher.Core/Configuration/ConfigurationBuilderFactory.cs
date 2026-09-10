@@ -65,6 +65,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--maxDegreeOfParallelismForResourceProcessing"] = "Options:MaxDegreeOfParallelismForResourceProcessing",
                     ["--maxDegreeOfParallelismForPostResourceItem"] = "Options:MaxDegreeOfParallelismForPostResourceItem",
                     ["--maxDegreeOfParallelismForStreamResourcePages"] = "Options:MaxDegreeOfParallelismForStreamResourcePages",
+                    ["--maxConcurrentSourceRequests"] = "Options:MaxConcurrentSourceRequests",
                     ["--streamingPagesWaitDurationSeconds"] = "Options:StreamingPagesWaitDurationSeconds",
                     ["--streamingPageSize"] = "Options:StreamingPageSize",
                     ["--processingBlockBoundedCapacity"] = "Options:ProcessingBlockBoundedCapacity",

@@ -28,9 +28,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             int bearerTokenRefreshMinutes,
             bool ignoreSslErrors,
             HttpClientHandler httpClientHandler = null,
-            TimeProvider timeProvider = null
+            TimeProvider timeProvider = null,
+            ApiThrottlingPolicy throttlingPolicy = null
         )
         {
+            throttlingPolicy ??= ApiThrottlingPolicy.None;
+
             ConnectionDetails =
                 apiConnectionDetails ?? throw new ArgumentNullException(nameof(apiConnectionDetails));
             _name = name;
@@ -75,13 +78,24 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     timeProvider
                 );
 
+                // A cap on concurrent requests, where one is configured, sits below the token handling so that a
+                // request waiting for a slot is not sitting on a token it acquired earlier, and so that a replayed
+                // request takes a slot of its own like any other request the API has to serve.
+                HttpMessageHandler pipeline =
+                    throttlingPolicy.MaxConcurrentRequests > 0
+                        ? new ConcurrentRequestLimitingHandler(
+                            _httpClientHandler,
+                            throttlingPolicy.MaxConcurrentRequests,
+                            name
+                        )
+                        : _httpClientHandler;
+
                 // The handler applies the token to every request and recovers from one the API rejects. It reads the
                 // token from the manager, which is why nothing here has to be published before it is fully built.
                 // Neither client disposes the transport; that is done here, once, after both are gone.
-                _httpClient = new HttpClient(
-                    new BearerTokenHandler(_httpClientHandler, _bearerTokenManager, name),
-                    disposeHandler: false
-                )
+                pipeline = new BearerTokenHandler(pipeline, _bearerTokenManager, name);
+
+                _httpClient = new HttpClient(pipeline, disposeHandler: false)
                 {
                     BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
                 };

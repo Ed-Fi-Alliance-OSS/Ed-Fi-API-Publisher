@@ -6,6 +6,7 @@
     "maxDegreeOfParallelismForResourceProcessing": $MAX_DEGREE_OF_PARALLELISM_FOR_RESOURCE_PROCESSING,
     "maxDegreeOfParallelismForPostResourceItem": $MAX_DEGREE_OF_PARALLELISM_FOR_POST_RESOURCE_ITEM,
     "maxDegreeOfParallelismForStreamResourcePages": $MAX_DEGREE_OF_PARALLELISM_FOR_STREAM_RESOURCE_PAGES,
+    "maxConcurrentSourceRequests": $MAX_CONCURRENT_SOURCE_REQUESTS,
     "streamingPagesWaitDurationSeconds": $STREAMING_PAGES_WAIT_DURATION_SECONDS,
     "streamingPageSize": $STREAMING_PAGE_SIZE,
     "processingBlockBoundedCapacity": $PROCESSING_BLOCK_BOUNDED_CAPACITY,

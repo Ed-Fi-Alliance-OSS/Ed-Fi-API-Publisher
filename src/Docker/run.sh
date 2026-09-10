@@ -17,6 +17,9 @@ export DISABLE_CURSOR_PAGING="${DISABLE_CURSOR_PAGING:-false}"
 # JSON token, so an empty substitution would produce an invalid settings file (see APIPUB-139)
 export CURSOR_PAGING_PARTITION_COUNT="${CURSOR_PAGING_PARTITION_COUNT:-null}"
 
+# Default to leaving the source API uncapped when not provided (see APIPUB-140)
+export MAX_CONCURRENT_SOURCE_REQUESTS="${MAX_CONCURRENT_SOURCE_REQUESTS:-0}"
+
 envsubst < /app/apiPublisherSettings.template.json > /app/apiPublisherSettings.json
 envsubst < /app/logging.template.json > /app/logging.json
 envsubst < /app/configurationStoreSettings.template.json > /app/configurationStoreSettings.json

@@ -56,7 +56,11 @@ public class EdFiApiAsSourceModule : Module
                 "Source",
                 sourceApiConnectionDetails,
                 options.BearerTokenRefreshMinutes,
-                options.IgnoreSSLErrors));
+                options.IgnoreSSLErrors,
+                throttlingPolicy: new ApiThrottlingPolicy
+                {
+                    MaxConcurrentRequests = options.MaxConcurrentSourceRequests,
+                }));
 
         builder.RegisterInstance(new EdFiApiClientProvider(sourceEdFiApiClient))
             .As<ISourceEdFiApiClientProvider>()

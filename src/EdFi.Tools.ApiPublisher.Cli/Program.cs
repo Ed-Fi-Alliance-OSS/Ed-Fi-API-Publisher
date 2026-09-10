@@ -287,6 +287,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.ProcessingBlockBoundedCapacity)} value of '{options.ProcessingBlockBoundedCapacity}' is invalid. It must be -1 (unbounded), 0 (automatic), or a positive number.");
             }
 
+            if (options.MaxConcurrentSourceRequests < 0)
+            {
+                validationErrors.Add($"{nameof(options.MaxConcurrentSourceRequests)} cannot be a negative number.");
+            }
+
             if (!string.IsNullOrEmpty(options.RemediationsScriptFile) && !File.Exists(options.RemediationsScriptFile))
             {
                 validationErrors.Add($"{nameof(options.RemediationsScriptFile)} must be a local file path to an existing JavaScript module.");

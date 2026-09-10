@@ -98,6 +98,13 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public int MaxDegreeOfParallelismForStreamResourcePages { get; set; } = 5;
 
         /// <summary>
+        /// Caps the number of requests the publisher will have in flight against the source API at any one time,
+        /// across every resource and every pipeline block. Zero, the default, leaves the source API uncapped, so
+        /// the parallelism options alone govern how many requests it is asked to serve at once.
+        /// </summary>
+        public int MaxConcurrentSourceRequests { get; set; } = 0;
+
+        /// <summary>
         /// Caps the number of items that each resource-processing Dataflow block will buffer so that a slow
         /// target exerts backpressure on source page streaming, rather than buffering source items in memory
         /// without limit (see APIPUB-112). A value of 0 (the default) derives the capacity automatically from
