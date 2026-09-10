@@ -60,6 +60,8 @@ public class EdFiApiAsSourceModule : Module
                 throttlingPolicy: new ApiThrottlingPolicy
                 {
                     MaxConcurrentRequests = options.MaxConcurrentSourceRequests,
+                    MaxRetryAttempts = options.MaxRetryAttempts,
+                    RetryStartingDelay = TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
                 }));
 
         builder.RegisterInstance(new EdFiApiClientProvider(sourceEdFiApiClient))

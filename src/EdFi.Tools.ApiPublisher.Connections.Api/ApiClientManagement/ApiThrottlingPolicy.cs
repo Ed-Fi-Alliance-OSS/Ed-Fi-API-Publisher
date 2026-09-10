@@ -6,13 +6,14 @@
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
     /// <summary>
-    /// How a client paces itself against the API it reads from: how much it will ask of the API at once.
+    /// How a client paces itself against the API it reads from: how much it will ask of the API at once, and how it
+    /// backs off once the API answers that it is being asked for too much.
     /// </summary>
     public class ApiThrottlingPolicy
     {
         /// <summary>
-        /// Asks the API for as much as the caller produces, which is how a client behaves when it has not been
-        /// configured otherwise.
+        /// Asks the API for as much as the caller produces and does not retry a request the API rejects as too many
+        /// requests, which is how a client behaves when it has not been configured otherwise.
         /// </summary>
         public static readonly ApiThrottlingPolicy None = new();
 
@@ -21,5 +22,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// uncapped.
         /// </summary>
         public int MaxConcurrentRequests { get; init; }
+
+        /// <summary>
+        /// The number of times a read the API rejected with 429 Too Many Requests is retried before the rejection is
+        /// reported to the caller. Zero leaves the rejection to the caller on the first response.
+        /// </summary>
+        public int MaxRetryAttempts { get; init; }
+
+        /// <summary>
+        /// The first delay of the exponential back off applied between those retries. It is only what the client
+        /// falls back on: a 429 that says how long to wait is waited out for at least that long instead.
+        /// </summary>
+        public TimeSpan RetryStartingDelay { get; init; } = TimeSpan.FromMilliseconds(250);
     }
 }

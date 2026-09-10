@@ -95,6 +95,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // Neither client disposes the transport; that is done here, once, after both are gone.
                 pipeline = new BearerTokenHandler(pipeline, _bearerTokenManager, name);
 
+                // Waiting out a 429 goes on the outside, so that the wait is not spent holding a slot other reads
+                // could be using, and so that each replay is sent with a token that is current.
+                if (throttlingPolicy.MaxRetryAttempts > 0)
+                {
+                    pipeline = new RetryAfterHandler(pipeline, throttlingPolicy, name, timeProvider);
+                }
+
                 _httpClient = new HttpClient(pipeline, disposeHandler: false)
                 {
                     BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
