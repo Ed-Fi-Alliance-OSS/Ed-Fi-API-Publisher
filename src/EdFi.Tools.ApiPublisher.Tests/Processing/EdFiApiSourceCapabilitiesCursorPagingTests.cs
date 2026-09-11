@@ -5,6 +5,7 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Capabilities;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
@@ -158,6 +159,33 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .Count(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("cursor paging"))
                     .ShouldBe(1);
             }
+        }
+
+        [Test]
+        public async Task Oversize_probe_response_body_should_be_inconclusive()
+        {
+            // The probe reads under the same size cap as the partitions request; an oversize body is inconclusive
+            // (offset paging, one warning, not memoized), not proof of support
+            TestHelpers.InitializeLogging();
+            var (capabilities, fake) = Create();
+            string oversizeBody = @"{""pageTokens"":[""" + new string('a', PartitionsResponseBody.MaxBytes) + @"""]}";
+            SetupPartitionsProbe(fake, () => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(oversizeBody, Encoding.UTF8, "application/json")
+            });
+
+            using (TestCorrelator.CreateContext())
+            {
+                (await capabilities.SupportsCursorPagingAsync("/ed-fi/students")).ShouldBeFalse();
+                (await capabilities.SupportsCursorPagingAsync("/ed-fi/students")).ShouldBeFalse();
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Count(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("cursor paging"))
+                    .ShouldBe(2);
+            }
+
+            A.CallTo(() => fake.Get(A<string>.Ignored, A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath == ProbePath)))
+                .MustHaveHappenedTwiceExactly();
         }
 
         [Test]

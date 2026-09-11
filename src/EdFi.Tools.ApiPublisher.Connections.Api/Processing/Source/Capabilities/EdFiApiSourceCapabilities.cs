@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json.Linq;
@@ -145,7 +146,8 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
                 return null;
             }
 
-            string content = await probeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            // Read under the same size cap as the partitions request; an oversize body throws and is an inconclusive probe
+            string content = await PartitionsResponseBody.ReadAsync(probeResponse.Content, CancellationToken.None).ConfigureAwait(false);
 
             if (JObject.Parse(content)["pageTokens"] is not JArray)
             {

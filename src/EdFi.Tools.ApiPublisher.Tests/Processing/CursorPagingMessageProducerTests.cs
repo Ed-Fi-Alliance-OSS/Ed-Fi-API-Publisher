@@ -6,6 +6,7 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Counting;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
@@ -25,6 +26,7 @@ using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using Serilog.Sinks.TestCorrelator;
 using Serilog.Events;
+using System.IO;
 using System.Text;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
@@ -206,8 +208,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     return FakeResponse.OK("[]").AppendHeaders(("Total-Count", "10"));
                 });
 
+            var options = TestHelpers.GetOptions();
+            options.CursorPagingPartitionCount = 2;
+
             var (success, messages) = await producer.TryProduceMessagesAsync<object>(
-                CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+                CreateResourceMessage(), options, new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
 
             success.ShouldBeTrue();
             messages.Count().ShouldBe(2);
@@ -281,6 +286,65 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 TestCorrelator.GetLogEventsFromCurrentContext()
                     .ShouldContain(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("null or empty page token"));
             }
+        }
+
+        [Test]
+        public async Task Oversize_partitions_response_body_should_fall_back_to_offset_paging()
+        {
+            // The 1..200 validation caps what is requested; the body cap bounds what is buffered from a misbehaving source
+            TestHelpers.InitializeLogging();
+            string oversizeBody = @"{""pageTokens"":[""" + new string('a', PartitionsResponseBody.MaxBytes) + @"""]}";
+            var (producer, _, _) = Create(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(oversizeBody, Encoding.UTF8, "application/json") });
+
+            using (TestCorrelator.CreateContext())
+            {
+                var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                    CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+                success.ShouldBeFalse();
+                messages.ShouldBeNull();
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e => e.Level == LogEventLevel.Warning
+                        && e.MessageTemplate.Text.Contains("Partitions request failed")
+                        && e.Exception is InvalidDataException);
+            }
+        }
+
+        [Test]
+        public async Task More_page_tokens_than_requested_should_fall_back_to_offset_paging()
+        {
+            TestHelpers.InitializeLogging();
+            var (producer, _, _) = Create(() => FakeResponse.OK(new { pageTokens = new[] { "t1", "t2", "t3" } }));
+            var options = TestHelpers.GetOptions();
+            options.CursorPagingPartitionCount = 2;
+
+            using (TestCorrelator.CreateContext())
+            {
+                var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                    CreateResourceMessage(), options, new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+                success.ShouldBeFalse();
+                messages.ShouldBeNull();
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("page tokens for"));
+            }
+        }
+
+        [Test]
+        public async Task Fewer_page_tokens_than_requested_should_be_accepted()
+        {
+            // A small resource legitimately yields fewer partitions than requested
+            var (producer, _, _) = Create(() => FakeResponse.OK(new { pageTokens = new[] { "t1" } }));
+            var options = TestHelpers.GetOptions();
+            options.CursorPagingPartitionCount = 5;
+
+            var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                CreateResourceMessage(), options, new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+            success.ShouldBeTrue();
+            messages.Count().ShouldBe(1);
         }
 
         [Test]

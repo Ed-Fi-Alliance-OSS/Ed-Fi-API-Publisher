@@ -84,8 +84,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         public async Task Cursor_strategy_should_use_the_cursor_producer()
         {
             var (dispatcher, offsetProducer, _) = Create(SourcePagingStrategy.Cursor, () => FakeResponse.OK(new { pageTokens = new[] { "t1", "t2" } }));
+            var options = TestHelpers.GetOptions();
+            options.CursorPagingPartitionCount = 2;
 
-            var messages = (await dispatcher.ProduceMessagesAsync<object>(Message(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None)).ToArray();
+            var messages = (await dispatcher.ProduceMessagesAsync<object>(Message(), options, new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None)).ToArray();
 
             messages.Select(m => m.PageToken).ShouldBe(new[] { "t1", "t2" });
             A.CallTo(offsetProducer).MustNotHaveHappened();

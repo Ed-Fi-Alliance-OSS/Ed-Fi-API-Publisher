@@ -5,6 +5,7 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
+using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
@@ -229,10 +230,11 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
             new Context(),
             cancellationToken).ConfigureAwait(false);
 
-        // Partition bodies are small, a list of tokens, so buffering as a string is deliberate. Because requests use
-        // ResponseHeadersRead (see APIPUB-134), HttpClient.Timeout covers only the wait for the headers. The body read
-        // therefore gets its own deadline of the same length, mirroring the count provider, instead of waiting
-        // indefinitely. A stalled body is a failed partitions request and falls back to offset/limit paging like any other.
+        // Partition bodies are small, a list of tokens, so buffering as a string is deliberate, under the size cap the
+        // reader enforces (an oversize body is a failed partitions request). Because requests use ResponseHeadersRead
+        // (see APIPUB-134), HttpClient.Timeout covers only the wait for the headers. The body read therefore gets its
+        // own deadline of the same length, mirroring the count provider, instead of waiting indefinitely. A stalled body
+        // is a failed partitions request too, and both fall back to offset/limit paging like any other failure.
         string content;
 
         using (var bodyReadDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
@@ -241,9 +243,7 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
 
             try
             {
-                content = apiResponse.Content is null
-                    ? string.Empty
-                    : await apiResponse.Content.ReadAsStringAsync(bodyReadDeadline.Token).ConfigureAwait(false);
+                content = await PartitionsResponseBody.ReadAsync(apiResponse.Content, bodyReadDeadline.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
@@ -275,6 +275,17 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
         if (tokens.Any(t => t.Type != JTokenType.String || string.IsNullOrEmpty(t.Value<string>())))
         {
             _logger.Warning("{ResourceUrl}: Partitions response contained a null or empty page token. Falling back to offset/limit paging for this resource.", resourceUrl);
+
+            return null;
+        }
+
+        // The 1..200 validation caps what is requested, not what is accepted: a source returning more tokens than
+        // asked for would spawn that many partition walks, so it is treated as a failed partitions request. Fewer is
+        // fine -- a small resource legitimately yields fewer partitions than requested.
+        if (tokens.Count > partitionCount)
+        {
+            _logger.Warning("{ResourceUrl}: Partitions response returned {PartitionsReturned} page tokens for {PartitionsRequested} requested. Falling back to offset/limit paging for this resource.",
+                resourceUrl, tokens.Count, partitionCount);
 
             return null;
         }
