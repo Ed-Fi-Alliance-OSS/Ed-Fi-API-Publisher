@@ -27,6 +27,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
     public class Options
     {
         /// <summary>
+        /// Value of <see cref="TooManyRequestsRetryAttempts" /> meaning "use <see cref="MaxRetryAttempts" />".
+        /// </summary>
+        public const int FollowMaxRetryAttempts = -1;
+
+        /// <summary>
         /// Multiplier applied to <see cref="MaxDegreeOfParallelismForPostResourceItem" /> when deriving the
         /// automatic processing-block capacity: enough buffered items to keep every POST worker busy through
         /// several rounds of refills without reintroducing meaningful memory retention (see APIPUB-112).
@@ -103,6 +108,22 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         /// the parallelism options alone govern how many requests it is asked to serve at once.
         /// </summary>
         public int MaxConcurrentSourceRequests { get; set; } = 0;
+
+        /// <summary>
+        /// The number of times a source read the API rejected with 429 Too Many Requests is retried. A value of
+        /// -1 (the default) follows <see cref="MaxRetryAttempts" />; 0 reports the rejection on the first
+        /// response, which is how the publisher behaved before that handling existed; any positive number is used
+        /// as given. It is separate from <see cref="MaxRetryAttempts" /> so that the 429 handling can be turned
+        /// off on its own, without also disabling the retries that cover every other transient failure.
+        /// </summary>
+        public int TooManyRequestsRetryAttempts { get; set; } = FollowMaxRetryAttempts;
+
+        /// <summary>
+        /// Gets the number of 429 retries actually applied to source reads, resolving the "follow
+        /// <see cref="MaxRetryAttempts" />" default.
+        /// </summary>
+        public int ResolvedTooManyRequestsRetryAttempts =>
+            TooManyRequestsRetryAttempts < 0 ? MaxRetryAttempts : TooManyRequestsRetryAttempts;
 
         /// <summary>
         /// Caps the number of items that each resource-processing Dataflow block will buffer so that a slow

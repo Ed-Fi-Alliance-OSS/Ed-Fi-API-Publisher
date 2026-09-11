@@ -208,6 +208,36 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             Assert.That(attempts, Has.Count.EqualTo(1), "The read should not have been replayed.");
         }
 
+        /// <summary>
+        /// A wait that fits the budget only if the replay is assumed to be instant is not started either. The
+        /// replay needs time of its own, and a budget that expires part way through it reaches the caller as a
+        /// cancelled request with no status, which is the outcome the guard exists to avoid.
+        /// </summary>
+        [Test]
+        public async Task A_wait_that_leaves_the_replay_no_time_should_report_the_rejection_rather_than_be_started()
+        {
+            var clock = new FakeTimeProvider();
+            var attempts = new List<DateTimeOffset>();
+
+            var fakeRequestHandler = GivenASourceApi();
+
+            // Fits a 10 s budget on its own, but not once the replay is allowed for
+            GivenTheReadIsRejected(fakeRequestHandler, clock, attempts, () => TooManyRequests("8"), 1);
+
+            using var apiClient = CreateApiClient(
+                fakeRequestHandler,
+                clock,
+                requestBudget: TimeSpan.FromSeconds(10));
+
+            // No clock stepping: if the wait is started at all, this never completes and the test fails
+            using var response = await apiClient
+                .HttpClient.GetAsync(ResourceRelativeUrl)
+                .WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.TooManyRequests));
+            Assert.That(attempts, Has.Count.EqualTo(1), "The read should not have been replayed.");
+        }
+
         [Test]
         public async Task A_read_the_api_never_stops_rejecting_should_be_reported_to_the_caller_after_the_retries_run_out()
         {

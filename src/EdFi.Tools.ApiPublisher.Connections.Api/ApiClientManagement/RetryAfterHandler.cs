@@ -31,6 +31,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     /// </remarks>
     public class RetryAfterHandler : DelegatingHandler
     {
+        /// <summary>
+        /// The most of the request budget ever held back for a replay.
+        /// </summary>
+        private static readonly TimeSpan MaxReplayAllowance = TimeSpan.FromSeconds(10);
+
         private readonly int _maxRetryAttempts;
         private readonly TimeSpan _retryStartingDelay;
         private readonly TimeSpan _requestBudget;
@@ -84,7 +89,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
                 var remainingBudget = _requestBudget - _timeProvider.GetElapsedTime(startedAt);
 
-                if (delay >= remainingBudget)
+                // The replay has to fit in what is left after the wait, or the budget expires during the replay
+                // and the caller sees a cancelled request with no status, which is the outcome this guard exists
+                // to avoid. Reserving nothing was not enough: a wait ending a second before the budget does
+                // leaves a slow source no room to answer.
+                if (delay + ReplayAllowance(_requestBudget) >= remainingBudget)
                 {
                     LogWaitDoesNotFitTheBudget(request, delay, delaySource, remainingBudget);
 
@@ -123,7 +132,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
 
             _logger.Error(
-                "'{Method:l} {RequestUri}' was still being rejected as too many requests by the {Name:l} API after {MaxRetryAttempts} retries. The read is recorded as a failure and the run will finish with errors. Consider setting MaxConcurrentSourceRequests to reduce what the source is asked to serve at once, or raising MaxRetryAttempts.",
+                "'{Method:l} {RequestUri}' was still being rejected as too many requests by the {Name:l} API after {MaxRetryAttempts} retries. The read is recorded as a failure and the run will finish with errors. Consider lowering MaxConcurrentSourceRequests, or the MaxDegreeOfParallelism settings, so the source is asked for less at once, or raising TooManyRequestsRetryAttempts.",
                 request.Method.Method,
                 request.RequestUri,
                 _displayName,
@@ -143,7 +152,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         )
         {
             _logger.Error(
-                "'{Method:l} {RequestUri}' was rejected as too many requests by the {Name:l} API, which asked for a wait of {TotalSeconds:N1}s ({DelaySource:l}). Only {RemainingSeconds:N1}s of the {BudgetSeconds:N0}s request budget is left, so the read is abandoned and recorded as a failure rather than being cut short mid-wait. Consider setting MaxConcurrentSourceRequests so the source is asked for less at once.",
+                "'{Method:l} {RequestUri}' was rejected as too many requests by the {Name:l} API, which asked for a wait of {TotalSeconds:N1}s ({DelaySource:l}). Only {RemainingSeconds:N1}s of the {BudgetSeconds:N0}s request budget is left, so the read is abandoned and recorded as a failure rather than being cut short mid-wait. Consider lowering MaxConcurrentSourceRequests, or the MaxDegreeOfParallelism settings, so the source is asked for less at once.",
                 request.Method.Method,
                 request.RequestUri,
                 _displayName,
@@ -168,6 +177,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 ? (requestedDelay.Value, "Retry-After")
                 : (backoffDelay, "back off");
         }
+
+        /// <summary>
+        /// How much of the request budget is held back for the replay itself, so that a wait is only started when
+        /// the source still has time to answer afterwards. Ten seconds covers an ordinary page read from a busy
+        /// API, and the quarter-of-the-budget ceiling keeps the allowance sensible for a client configured with a
+        /// short budget rather than refusing every wait.
+        /// </summary>
+        private static TimeSpan ReplayAllowance(TimeSpan requestBudget) =>
+            TimeSpan.FromTicks(Math.Min(MaxReplayAllowance.Ticks, requestBudget.Ticks / 4));
 
         /// <summary>
         /// The exponential back off for this attempt, saturated at the request budget so that a large attempt

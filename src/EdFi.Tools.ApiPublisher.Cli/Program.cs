@@ -292,6 +292,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.MaxConcurrentSourceRequests)} value of '{options.MaxConcurrentSourceRequests}' is invalid. It must be 0 (source API left uncapped) or a positive number.");
             }
 
+            if (options.TooManyRequestsRetryAttempts < Options.FollowMaxRetryAttempts)
+            {
+                validationErrors.Add($"{nameof(options.TooManyRequestsRetryAttempts)} value of '{options.TooManyRequestsRetryAttempts}' is invalid. It must be -1 (follow {nameof(options.MaxRetryAttempts)}), 0 (do not retry a rejected read) or a positive number.");
+            }
+
             if (!string.IsNullOrEmpty(options.RemediationsScriptFile) && !File.Exists(options.RemediationsScriptFile))
             {
                 validationErrors.Add($"{nameof(options.RemediationsScriptFile)} must be a local file path to an existing JavaScript module.");

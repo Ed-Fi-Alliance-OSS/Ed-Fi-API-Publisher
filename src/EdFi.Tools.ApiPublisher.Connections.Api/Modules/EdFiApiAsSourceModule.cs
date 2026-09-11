@@ -68,7 +68,7 @@ public class EdFiApiAsSourceModule : Module
                 throttlingPolicy: new ApiThrottlingPolicy
                 {
                     MaxConcurrentRequests = options.MaxConcurrentSourceRequests,
-                    TooManyRequestsRetryAttempts = options.MaxRetryAttempts,
+                    TooManyRequestsRetryAttempts = options.ResolvedTooManyRequestsRetryAttempts,
                     TooManyRequestsRetryStartingDelay =
                         TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
                 }));
