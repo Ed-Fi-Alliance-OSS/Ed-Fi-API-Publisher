@@ -226,10 +226,29 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
             new Context(),
             cancellationToken).ConfigureAwait(false);
 
-        // Partition bodies are small (a list of tokens), so buffering as a string is deliberate
-        string content = apiResponse.Content is null
-            ? string.Empty
-            : await apiResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        // Partition bodies are small, a list of tokens, so buffering as a string is deliberate. Because requests use
+        // ResponseHeadersRead (see APIPUB-134), HttpClient.Timeout covers only the wait for the headers. The body read
+        // therefore gets its own deadline of the same length, mirroring the count provider, instead of waiting
+        // indefinitely. A stalled body is a failed partitions request and falls back to offset/limit paging like any other.
+        string content;
+
+        using (var bodyReadDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            bodyReadDeadline.CancelAfter(edFiApiClient.HttpClient.Timeout);
+
+            try
+            {
+                content = apiResponse.Content is null
+                    ? string.Empty
+                    : await apiResponse.Content.ReadAsStringAsync(bodyReadDeadline.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"Reading the partitions response body did not complete within the HTTP client timeout of {edFiApiClient.HttpClient.Timeout.TotalSeconds:N0} seconds.",
+                    ex);
+            }
+        }
 
         // Only HTTP 200 is the documented partitions response (any other 2xx is not it either). The body is logged
         // to help diagnose the fallback but is capped: it is not under our control and may be large or sensitive.

@@ -228,5 +228,69 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             success.ShouldBeTrue();
             messages.ShouldBeEmpty();
         }
+
+        [Test]
+        public async Task Stalled_partitions_response_body_should_time_out_and_fall_back_to_offset_paging()
+        {
+            // RequestHelpers reads with ResponseHeadersRead, so HttpClient.Timeout covers only the headers; the body
+            // read must carry its own deadline or a stalled source would hang the producer short of its fallback
+            TestHelpers.InitializeLogging();
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler().ResourceCount(responseTotalCountHeader: 10);
+
+            A.CallTo(() => fake.Get(A<string>.Ignored, A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath == PartitionsPath)))
+                .ReturnsLazily(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new StallingStream()) });
+
+            EdFiApiClient ClientFactory() =>
+                new EdFiApiClient("TestSource", TestHelpers.GetSourceApiConnectionDetails(), 27, true,
+                    httpClientHandler: new HttpClientHandlerFakeBridge(fake));
+
+            var clientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(ClientFactory));
+            clientProvider.GetApiClient().HttpClient.Timeout = TimeSpan.FromMilliseconds(500);
+
+            var producer = new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider));
+
+            using (TestCorrelator.CreateContext())
+            {
+                var produceTask = producer.TryProduceMessagesAsync<object>(
+                    CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+                (await Task.WhenAny(produceTask, Task.Delay(TimeSpan.FromSeconds(15)))).ShouldBe(produceTask, "the stalled body read should have been abandoned by the deadline");
+
+                var (success, messages) = await produceTask;
+
+                success.ShouldBeFalse();
+                messages.ShouldBeNull();
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("Partitions request failed"));
+            }
+        }
+
+        /// <summary>
+        /// A readable stream whose reads never complete until cancelled, standing in for a source that sends headers and then stalls.
+        /// </summary>
+        private sealed class StallingStream : System.IO.Stream
+        {
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                return 0;
+            }
+
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+                => ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override void Flush() { }
+            public override long Seek(long offset, System.IO.SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
     }
 }

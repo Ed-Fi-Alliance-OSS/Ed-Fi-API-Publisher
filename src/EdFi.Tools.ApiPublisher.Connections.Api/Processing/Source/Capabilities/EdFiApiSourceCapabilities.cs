@@ -159,8 +159,10 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
 
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!EdFiApiAuthenticationException.IsRepresentedBy(ex))
         {
+            // An authentication failure (raised by the bearer-token handler) is not an inconclusive probe: publishing
+            // cannot continue, so it propagates and faults the memoized probe rather than falling back per resource
             _logger.Warning(ex, "Probe of Source API for cursor paging support at '{ProbeUrl}' failed. Offset/limit paging will be used instead of cursor paging.", probeUrl);
 
             return null;

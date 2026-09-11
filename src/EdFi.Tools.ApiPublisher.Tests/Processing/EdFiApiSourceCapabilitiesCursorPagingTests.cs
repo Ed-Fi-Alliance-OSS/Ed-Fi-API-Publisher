@@ -161,6 +161,28 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public async Task Authentication_failure_during_probe_should_propagate_instead_of_falling_back()
+        {
+            // The probe runs through the bearer-token handler; an authentication failure means publishing cannot
+            // continue, so it must surface as-is rather than be reported as an inconclusive probe (offset fallback)
+            TestHelpers.InitializeLogging();
+            var (capabilities, fake) = Create();
+
+            A.CallTo(() => fake.Get(A<string>.Ignored, A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath == ProbePath)))
+                .Throws(new EdFiApiAuthenticationException("Unable to obtain a bearer token."));
+
+            using (TestCorrelator.CreateContext())
+            {
+                var exception = await Should.ThrowAsync<Exception>(() => capabilities.SupportsCursorPagingAsync("/ed-fi/students"));
+
+                EdFiApiAuthenticationException.IsRepresentedBy(exception).ShouldBeTrue();
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldNotContain(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("cursor paging"));
+            }
+        }
+
+        [Test]
         public async Task Absent_partitions_endpoint_should_be_memoized_and_reported_at_information()
         {
             TestHelpers.InitializeLogging();

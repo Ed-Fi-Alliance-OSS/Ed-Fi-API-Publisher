@@ -34,6 +34,6 @@
   <ItemGroup>
     <!-- Settings files the configuration builder requires, linked under the names the CLI ships them with -->
     <None Include="Configuration\Fixtures\apiPublisherSettings.json" Link="apiPublisherSettings.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Configuration\Fixtures\configurationStoreSettings.json" Link="configurationStoreSettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Configuration\Fixtures\configurationStoreSettings.json" Link="configurationStoreSettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
