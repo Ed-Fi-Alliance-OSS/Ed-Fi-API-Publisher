@@ -36,6 +36,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
                 .As<IPublishingOperationMetadataCollector>()
                 .SingleInstance();
 
+            // Accumulates the per-resource counts reported in the run summary (see APIPUB-120)
+            builder.RegisterType<RunSummaryCollector>()
+                .As<IRunSummaryCollector>()
+                .SingleInstance();
+
             builder.RegisterDecorator<CurrentChangeVersionCollector, ISourceCurrentChangeVersionProvider>();
             builder.RegisterDecorator<ResourceItemCountCollector, ISourceTotalCountProvider>();
 

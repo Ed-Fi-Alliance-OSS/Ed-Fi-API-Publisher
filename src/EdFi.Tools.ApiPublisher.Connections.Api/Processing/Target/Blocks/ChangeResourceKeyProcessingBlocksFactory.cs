@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
@@ -35,12 +36,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
     public class ChangeResourceKeyProcessingBlocksFactory : IProcessingBlocksFactory<GetItemForKeyChangeMessage>
     {
         private readonly ITargetEdFiApiClientProvider _targetEdFiApiClientProvider;
+        private readonly IRunSummaryCollector _runSummaryCollector;
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(ChangeResourceKeyProcessingBlocksFactory));
 
-        public ChangeResourceKeyProcessingBlocksFactory(ITargetEdFiApiClientProvider targetEdFiApiClientProvider, IRateLimiting<HttpResponseMessage> rateLimiter = null)
+        public ChangeResourceKeyProcessingBlocksFactory(
+            ITargetEdFiApiClientProvider targetEdFiApiClientProvider,
+            IRunSummaryCollector runSummaryCollector,
+            IRateLimiting<HttpResponseMessage> rateLimiter = null)
         {
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
+            _runSummaryCollector = runSummaryCollector;
             _rateLimiter = rateLimiter;
         }
 
@@ -183,6 +189,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 _logger.Warning("{ResourceUrl} (source id: {SourceId}): GET by key for key change returned no results on target API ({QueryString}).",
                                     message.ResourceUrl, sourceId, queryString);
                             }
+
+                            // There is no item on the target under the old key, so there is no key to change
+                            // and the run did not lose the document: it is published without a PUT being sent.
+                            // The warning above is what tells an operator the target was not what was expected.
+                            _runSummaryCollector.AddPublishedItems(PublishingStage.KeyChanges, message.ResourceUrl, 1);
 
                             // No key changes to process
                             return Enumerable.Empty<ChangeKeyMessage>();
@@ -387,7 +398,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             msg.ResourceUrl, sourceId, apiResponse.StatusCode);
                     }
 
-                    // Success - no errors to publish
+                    // Counted where the target confirms it (see APIPUB-120)
+                    _runSummaryCollector.AddPublishedItems(PublishingStage.KeyChanges, msg.ResourceUrl, 1);
+
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
 #pragma warning disable S2139

@@ -158,6 +158,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
                         var error = new ErrorItemMessage
                         {
+                            IsSourceReadError = true,
                             Method = HttpMethod.Get.ToString(),
                             ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                             Id = null,
@@ -212,6 +213,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                         // body-read deadline aborting the response stream falls through to the catches below instead)
                         var error = new ErrorItemMessage
                         {
+                            IsSourceReadError = true,
                             Method = HttpMethod.Get.ToString(),
                             ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                             Id = null,
@@ -250,6 +252,19 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 {
                     pageLogger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.",
                         message.ResourceUrl);
+
+                    // The page, and with it the rest of the resource, is abandoned. Published as an error so
+                    // that the run cannot report success after reading only part of the source (APIPUB-120).
+                    await errorHandlingBlock.SendErrorAsync(
+                            new ErrorItemMessage
+                            {
+                                IsSourceReadError = true,
+                                Method = HttpMethod.Get.ToString(),
+                                ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
+                                Exception = ex,
+                            },
+                            message.CancellationSource.Token)
+                        .ConfigureAwait(false);
                 }
                 break;
             }
@@ -269,6 +284,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
 
             var error = new ErrorItemMessage
             {
+                IsSourceReadError = true,
                 Method = HttpMethod.Get.ToString(),
                 ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                 Exception = timeoutException,
@@ -307,6 +323,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             // An error occurred while parsing the JSON
             var error = new ErrorItemMessage
             {
+                IsSourceReadError = true,
                 Method = HttpMethod.Get.ToString(),
                 ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{message.ResourceUrl}",
                 Exception = ex,

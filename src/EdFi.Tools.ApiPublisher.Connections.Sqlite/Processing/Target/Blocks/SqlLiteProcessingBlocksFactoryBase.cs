@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Sqlite.Helpers;
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -27,15 +28,25 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 
     private readonly ILogger _logger;
 
-    protected SqlLiteProcessingBlocksFactoryBase(Func<SqliteConnection> createConnection)
+    private readonly IRunSummaryCollector _runSummaryCollector;
+
+    protected SqlLiteProcessingBlocksFactoryBase(
+        Func<SqliteConnection> createConnection,
+        IRunSummaryCollector runSummaryCollector)
     {
         _createConnection = createConnection;
+        _runSummaryCollector = runSummaryCollector;
 
         // Log under the concrete factory type (upserts, deletes or key changes), not a fixed one
         _logger = Log.ForContext(GetType());
     }
 
     protected abstract string TableSuffix { get; }
+
+    /// <summary>
+    /// The stage the concrete factory writes for, which the run summary reports the page against.
+    /// </summary>
+    protected abstract PublishingStage Stage { get; }
 
     private readonly ConcurrentDictionary<string, (string schema, string table, string tableSuffix)> _tableTupleByResourceUrl
         = new(StringComparer.OrdinalIgnoreCase);
@@ -122,6 +133,13 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
                             return await cmd.ExecuteNonQueryAsync(ct);
                         }, new Context(), CancellationToken.None);
 
+                    // Counted where the target confirms it, in documents rather than pages (see APIPUB-120)
+                    _runSummaryCollector.AddPublishedItems(
+                        Stage,
+                        msg.ResourceUrl,
+                        msg.ItemCount,
+                        msg.IsAuthorizationRetryPass);
+
                     // Success - no errors to publish
                     return Enumerable.Empty<ErrorItemMessage>();
                 }
@@ -134,6 +152,10 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
                     var error = new ErrorItemMessage
                     {
                         ResourceUrl = msg.ResourceUrl,
+
+                        // The whole page failed to be written, so the error stands for every document in it
+                        ItemCount = msg.ItemCount,
+                        IsAuthorizationRetryPass = msg.IsAuthorizationRetryPass,
                         ResponseContent = msg.Json is { Length: > 200 } ? msg.Json[..200] + "..." : msg.Json,
                         Exception = ex
                     };
@@ -164,12 +186,16 @@ public abstract class SqlLiteProcessingBlocksFactoryBase<TProcessDataMessage> : 
 
         // The API source handler still needs the top-level item count for final-page continuation when
         // downloading to SQLite; run the streaming counting pass only when a caller asks for the count.
-        reportTopLevelItemCount?.Invoke(JsonHelpers.CountTopLevelArrayItems(json));
+        int itemCount = JsonHelpers.CountTopLevelArrayItems(json);
+
+        reportTopLevelItemCount?.Invoke(itemCount);
 
         yield return new TProcessDataMessage
         {
             ResourceUrl = message.ResourceUrl,
-            Json = json
+            Json = json,
+            ItemCount = itemCount,
+            IsAuthorizationRetryPass = message.IsAuthorizationRetryPass,
         };
     }
 }

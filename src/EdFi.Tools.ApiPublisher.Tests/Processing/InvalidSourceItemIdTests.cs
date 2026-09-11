@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.DependencyResolution;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -58,7 +59,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 new EdFiApiClientProvider(new Lazy<EdFiApiClient>(TargetApiClientFactory)),
                 TestHelpers.GetSourceApiConnectionDetails(),
                 A.Fake<ISourceCapabilities>(),
-                A.Fake<ISourceResourceItemProvider>());
+                A.Fake<ISourceResourceItemProvider>(),
+                A.Fake<IRunSummaryCollector>());
         }
 
         // Stands in for nested source data that must never reach the error log by way of the invalid id
@@ -251,7 +253,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // The source "id" on a delete item is diagnostic only -- the actual GET-by-key and DELETE
             // operations are driven entirely by "keyValues". A missing/invalid id is not a functional
             // failure, so it must not throw, cancel the page, or drop the sibling items.
-            var factory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var factory = new DeleteResourceProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
 
             var message = new StreamResourcePageMessage<GetItemForDeletionMessage>
             {
@@ -332,11 +334,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 fakeTargetRequestHandler,
                 errorPublisher: errorPublisher);
 
-            // The run must fail (which the CLI's generic catch turns into a non-zero exit code)
-            var caught = await Should.ThrowAsync<Exception>(
+            // The run must fail, and name the outcome the CLI maps to its exit code (APIPUB-120)
+            var caught = await Should.ThrowAsync<PublishingFailedException>(
                 () => changeProcessor.ProcessChangesAsync(changeProcessorConfiguration, CancellationToken.None));
 
-            caught.Message.ShouldContain("did not complete successfully");
+            caught.Reason.ShouldBe(PublishingFailureReason.ItemErrors);
+            caught.ItemErrorCount.ShouldBe(1);
             publishedErrorCount.ShouldBe(1);
         }
 
@@ -456,7 +459,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // The source "id" on a key-change item is diagnostic only -- the target item to update is found
             // via "oldKeyValues" and identified by its own returned id. A missing/invalid source id is not a
             // functional failure, so it must not throw, cancel the page, or drop the sibling items.
-            var factory = new ChangeResourceKeyProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>());
+            var factory = new ChangeResourceKeyProcessingBlocksFactory(A.Fake<ITargetEdFiApiClientProvider>(), A.Fake<IRunSummaryCollector>());
 
             var message = new StreamResourcePageMessage<GetItemForKeyChangeMessage>
             {

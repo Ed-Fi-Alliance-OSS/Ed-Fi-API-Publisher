@@ -9,6 +9,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -116,7 +117,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 var options = TestHelpers.GetOptions();
                 options.ErrorPublishingBatchSize = 2;
 
-                var (ingestionBlock, completionBlock) = new PublishErrorsBlocksFactory(errorPublisher).CreateBlocks(options);
+                var (ingestionBlock, completionBlock) = new PublishErrorsBlocksFactory(errorPublisher, new RunSummaryCollector(new PublishingOperationMetadataCollector())).CreateBlocks(options);
 
                 // With the publisher stalled, a bounded ingestion path must start declining synchronous posts
                 // after a small finite number of errors (an unbounded path accepts all of them -- APIPUB-112)
@@ -178,7 +179,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var options = TestHelpers.GetOptions();
             options.ErrorPublishingBatchSize = 2;
 
-            var factory = new PublishErrorsBlocksFactory(errorPublisher);
+            var factory = new PublishErrorsBlocksFactory(errorPublisher, new RunSummaryCollector(new PublishingOperationMetadataCollector()));
             var (ingestionBlock, completionBlock) = factory.CreateBlocks(options);
 
             // Offer far more errors than the bound (2 x batch size = 4). A faulting publisher must not
@@ -218,7 +219,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var options = TestHelpers.GetOptions();
             options.ErrorPublishingBatchSize = 1;
 
-            var factory = new PublishErrorsBlocksFactory(errorPublisher);
+            var factory = new PublishErrorsBlocksFactory(errorPublisher, new RunSummaryCollector(new PublishingOperationMetadataCollector()));
             var (ingestionBlock, completionBlock) = factory.CreateBlocks(options);
 
             // Mirror the production topology: processing-output blocks are linked to the error ingestion
@@ -290,7 +291,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 options.ErrorPublishingBatchSize = 2;
                 options.ProcessingBlockBoundedCapacity = -1;
 
-                var (ingestionBlock, completionBlock) = new PublishErrorsBlocksFactory(errorPublisher).CreateBlocks(options);
+                var (ingestionBlock, completionBlock) = new PublishErrorsBlocksFactory(errorPublisher, new RunSummaryCollector(new PublishingOperationMetadataCollector())).CreateBlocks(options);
 
                 // With bounding disabled, every synchronous post must be accepted even with the publisher stalled
                 for (int i = 0; i < ErrorCount; i++)
@@ -361,7 +362,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 targetEdFiApiClientProvider,
                 TestHelpers.GetSourceApiConnectionDetails(),
                 A.Fake<ISourceCapabilities>(),
-                A.Fake<ISourceResourceItemProvider>());
+                A.Fake<ISourceResourceItemProvider>(),
+                A.Fake<IRunSummaryCollector>());
 
             var createBlocksRequest = new CreateBlocksRequest(
                 options,
