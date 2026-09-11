@@ -153,7 +153,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 HttpRequestMessage request,
                 CancellationToken cancellationToken)
             {
-                if (request.Method == HttpMethod.Post)
+                // Keyed on the token endpoint rather than the verb, so that any other request added to this
+                // fixture later is counted rather than silently answered as a token
+                if (request.RequestUri.AbsolutePath.EndsWith("/oauth/token"))
                 {
                     return FakeResponse.OK(new { access_token = "test-access-token" });
                 }

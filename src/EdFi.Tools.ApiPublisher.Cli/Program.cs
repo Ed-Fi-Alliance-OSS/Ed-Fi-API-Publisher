@@ -289,7 +289,7 @@ namespace EdFi.Tools.ApiPublisher.Cli
 
             if (options.MaxConcurrentSourceRequests < 0)
             {
-                validationErrors.Add($"{nameof(options.MaxConcurrentSourceRequests)} cannot be a negative number.");
+                validationErrors.Add($"{nameof(options.MaxConcurrentSourceRequests)} value of '{options.MaxConcurrentSourceRequests}' is invalid. It must be 0 (source API left uncapped) or a positive number.");
             }
 
             if (!string.IsNullOrEmpty(options.RemediationsScriptFile) && !File.Exists(options.RemediationsScriptFile))

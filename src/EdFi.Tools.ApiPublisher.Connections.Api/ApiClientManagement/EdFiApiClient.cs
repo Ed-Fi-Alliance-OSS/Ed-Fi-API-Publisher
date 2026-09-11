@@ -78,9 +78,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     timeProvider
                 );
 
-                // A cap on concurrent requests, where one is configured, sits below the token handling so that a
-                // request waiting for a slot is not sitting on a token it acquired earlier, and so that a replayed
-                // request takes a slot of its own like any other request the API has to serve.
+                // A cap on concurrent requests, where one is configured, sits innermost so that it bounds what the
+                // transport actually has open, and so that a request replayed after an unauthorized response takes
+                // a slot of its own like any other request the API has to serve. The cost of putting it here is
+                // that a request queued for a slot is already carrying the token it was stamped with on the way
+                // down, so a long enough queue can send a token that has since been rotated; that draws a 401 and
+                // is recovered by the handler above, at the price of one round trip.
                 HttpMessageHandler pipeline =
                     throttlingPolicy.MaxConcurrentRequests > 0
                         ? new ConcurrentRequestLimitingHandler(
@@ -97,14 +100,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
                 // Waiting out a 429 goes on the outside, so that the wait is not spent holding a slot other reads
                 // could be using, and so that each replay is sent with a token that is current.
-                if (throttlingPolicy.MaxRetryAttempts > 0)
+                if (throttlingPolicy.TooManyRequestsRetryAttempts > 0)
                 {
                     pipeline = new RetryAfterHandler(pipeline, throttlingPolicy, name, timeProvider);
                 }
 
                 _httpClient = new HttpClient(pipeline, disposeHandler: false)
                 {
-                    BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
+                    BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/")),
+
+                    // Stated rather than left to the HttpClient default, because the handlers above spend their
+                    // waits inside it and have to know what they are working against. The default value is the
+                    // same 100 seconds HttpClient applies on its own, so nothing about an ordinary request or the
+                    // body-read deadlines derived from this changes.
+                    Timeout = throttlingPolicy.RequestBudget
                 };
             }
             catch

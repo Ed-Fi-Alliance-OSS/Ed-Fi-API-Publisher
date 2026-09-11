@@ -6,6 +6,7 @@
         "maxDegreeOfParallelismForResourceProcessing": 7,
         "maxDegreeOfParallelismForPostResourceItem": 15,
         "maxDegreeOfParallelismForStreamResourcePages": 5,
+        "maxConcurrentSourceRequests": 0,
         "streamingPagesWaitDurationSeconds": 10,
         "streamingPageSize": 500,
         "processingBlockBoundedCapacity": 0,

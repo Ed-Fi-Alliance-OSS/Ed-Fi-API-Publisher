@@ -25,12 +25,20 @@ using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Microsoft.Extensions.Configuration;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Modules;
 
 public class EdFiApiAsSourceModule : Module
 {
     private const string OffsetPagingProducerKey = "OffsetPaging";
+
+    /// <summary>
+    /// How much of what the pipeline can offer the source at once the cap has to cover before it is left
+    /// unremarked. Below this the queue is deep enough that reads at the back risk running out of request budget
+    /// rather than merely waiting their turn.
+    /// </summary>
+    private const int MinimumCapShareOfOfferedReads = 4;
 
     private readonly IConfigurationRoot _finalConfiguration;
 
@@ -60,9 +68,12 @@ public class EdFiApiAsSourceModule : Module
                 throttlingPolicy: new ApiThrottlingPolicy
                 {
                     MaxConcurrentRequests = options.MaxConcurrentSourceRequests,
-                    MaxRetryAttempts = options.MaxRetryAttempts,
-                    RetryStartingDelay = TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
+                    TooManyRequestsRetryAttempts = options.MaxRetryAttempts,
+                    TooManyRequestsRetryStartingDelay =
+                        TimeSpan.FromMilliseconds(options.RetryStartingDelayMilliseconds),
                 }));
+
+        WarnIfTheCapCannotAbsorbTheParallelismOffered(options);
 
         builder.RegisterInstance(new EdFiApiClientProvider(sourceEdFiApiClient))
             .As<ISourceEdFiApiClientProvider>()
@@ -166,5 +177,34 @@ public class EdFiApiAsSourceModule : Module
                         (pi, ctx) => pi.ParameterType == typeof(IEdFiApiClientProvider),
                         (pi, ctx) => ctx.Resolve<ISourceEdFiApiClientProvider>()));
         }
+    }
+
+    /// <summary>
+    /// A read waits for its slot inside its own request, so the wait is spent against the request budget. Where
+    /// the cap is far below what the pipeline offers the source at once, the reads at the back of the queue run
+    /// out of budget and are recorded as failures rather than simply being served later, and nothing in that
+    /// failure points back at the cap. Saying so at startup is what connects the two for an operator.
+    /// </summary>
+    private static void WarnIfTheCapCannotAbsorbTheParallelismOffered(Options options)
+    {
+        if (options.MaxConcurrentSourceRequests < 1)
+        {
+            return;
+        }
+
+        int readsOfferedAtOnce =
+            options.MaxDegreeOfParallelismForResourceProcessing
+            * options.MaxDegreeOfParallelismForStreamResourcePages;
+
+        if (options.MaxConcurrentSourceRequests * MinimumCapShareOfOfferedReads >= readsOfferedAtOnce)
+        {
+            return;
+        }
+
+        Log.ForContext<EdFiApiAsSourceModule>()
+            .Warning(
+                "MaxConcurrentSourceRequests is {Cap}, while the parallelism settings can offer the source up to {ReadsOfferedAtOnce} reads at once. Reads queued behind the cap spend the request timeout waiting, so the ones at the back may be recorded as failures instead of being served later. Consider lowering MaxDegreeOfParallelismForResourceProcessing and MaxDegreeOfParallelismForStreamResourcePages alongside the cap.",
+                options.MaxConcurrentSourceRequests,
+                readsOfferedAtOnce);
     }
 }

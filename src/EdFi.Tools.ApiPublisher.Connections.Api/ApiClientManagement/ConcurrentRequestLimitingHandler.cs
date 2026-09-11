@@ -13,11 +13,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     /// produced the requests was divided up between resources, partitions or pipeline blocks.
     /// </summary>
     /// <remarks>
-    /// A request holds its slot from the moment it is sent until its response headers have been received, which is
-    /// the window the API spends producing the response. Reading the response body happens after the slot has been
-    /// released, because the client reads bodies with
-    /// <see cref="HttpCompletionOption.ResponseHeadersRead" /> and a body that is still being consumed is no longer
-    /// work the API is waiting on.
+    /// <para>
+    /// A request holds its slot until the handler chain returns, which is when the response headers have been
+    /// received. The body is streamed after that and is not counted, so the cap bounds requests the API is still
+    /// producing a response for rather than bytes in flight. Bearer token requests are not counted either: the
+    /// token manager sends those on the transport directly rather than through this pipeline.
+    /// </para>
+    /// <para>
+    /// Waiting for a slot happens inside the caller's request, so it is spent against the client's
+    /// <see cref="HttpClient.Timeout" />. A cap far below the parallelism the pipeline offers will therefore
+    /// surface as cancelled requests rather than as slower ones, which is why the publisher warns at startup when
+    /// the two are that far apart.
+    /// </para>
     /// </remarks>
     public class ConcurrentRequestLimitingHandler : DelegatingHandler
     {
@@ -43,7 +50,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             Log.ForContext(typeof(ConcurrentRequestLimitingHandler))
                 .Information(
-                    "Requests to the {Name} API are capped at {MaxConcurrentRequests} concurrent.",
+                    "Requests to the {Name:l} API are capped at {MaxConcurrentRequests} concurrent. Reads waiting for a slot are the cap working, not a hang.",
                     name?.ToLower(),
                     maxConcurrentRequests
                 );
@@ -66,16 +73,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
         }
 
-        protected override void Dispose(bool disposing)
-        {
-            // The inner handler is disposed first, so nothing can still be waiting on a slot by the time the
-            // semaphore itself goes away.
-            base.Dispose(disposing);
-
-            if (disposing)
-            {
-                _availableSlots.Dispose();
-            }
-        }
+        // No Dispose override: the client builds its pipeline with disposeHandler false and disposes the transport
+        // itself, so a handler here is never disposed and an override would only look like it ran. The semaphore
+        // needs no disposal either, because that matters only once AvailableWaitHandle has been asked for, and
+        // nothing here asks for it.
     }
 }
