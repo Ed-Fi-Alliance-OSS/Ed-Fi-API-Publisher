@@ -22,6 +22,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 
         public string ResourceUrl { get; set; }
 
+        /// <summary>
+        /// Gets or sets the number of source documents this error stands for. It is one everywhere a handler
+        /// posts a single document, and a whole page where the handler writes a page at a time.
+        /// </summary>
+        public int ItemCount { get; set; } = 1;
+
 #nullable enable
         public string? Id { get; set; }
 

@@ -184,6 +184,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                     msg.ResourceUrl, msg.Id, queryString);
                             }
 
+                            // The target does not have the item the source deleted, which is the state the
+                            // delete asked for, so it is published without a DELETE being sent. Left uncounted
+                            // it would hold back the last change version processed (see APIPUB-120).
+                            _runSummaryCollector.AddPublishedItems(PublishingStage.Deletes, msg.ResourceUrl, 1);
+
                             return Enumerable.Empty<DeleteItemMessage>();
                         }
 

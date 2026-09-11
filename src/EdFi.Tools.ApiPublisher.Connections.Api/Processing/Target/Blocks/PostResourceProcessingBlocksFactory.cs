@@ -445,6 +445,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 postItemMessage.ResourceUrl, id, HttpStatusCode.Conflict);
                         }
 
+                        // The target holds the value the document asked for, so the document is published: it
+                        // took no write to get there. Left uncounted it would be a document the run read and
+                        // never resolved, which holds back the last change version processed (see APIPUB-120).
+                        _runSummaryCollector.AddPublishedItems(
+                            PublishingStage.Upserts,
+                            postItemMessage.ResourceUrl,
+                            1,
+                            postItemMessage.IsAuthorizationRetryPass);
+
                         return Enumerable.Empty<ErrorItemMessage>();
                     }
 

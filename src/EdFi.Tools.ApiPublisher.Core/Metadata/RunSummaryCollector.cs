@@ -85,8 +85,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Metadata
 
             var counters = GetCounters(stage, StripStageSuffix(error.ResourceUrl));
 
-            Interlocked.Increment(
-                ref error.IsAuthorizationRetryPass ? ref counters.RetryPassFailed : ref counters.Failed);
+            // Added rather than incremented because an error can stand for a whole page of documents: the
+            // SQLite target writes a page at a time and reports how many documents it carried.
+            Interlocked.Add(
+                ref error.IsAuthorizationRetryPass ? ref counters.RetryPassFailed : ref counters.Failed,
+                error.ItemCount);
         }
 
         public void AddSkippedItems(

@@ -190,6 +190,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                     message.ResourceUrl, sourceId, queryString);
                             }
 
+                            // There is no item on the target under the old key, so there is no key to change
+                            // and the run did not lose the document: it is published without a PUT being sent.
+                            // The warning above is what tells an operator the target was not what was expected.
+                            _runSummaryCollector.AddPublishedItems(PublishingStage.KeyChanges, message.ResourceUrl, 1);
+
                             // No key changes to process
                             return Enumerable.Empty<ChangeKeyMessage>();
                         }
