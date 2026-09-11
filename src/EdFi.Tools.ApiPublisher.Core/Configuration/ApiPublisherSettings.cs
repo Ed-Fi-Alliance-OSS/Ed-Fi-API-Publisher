@@ -125,16 +125,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
             };
 
         /// <summary>
-        /// Gets the effective bounded capacity for the block that fetches pages of source items. This capacity
-        /// is denominated in page messages rather than items because of how a TransformManyBlock's bound works:
-        /// expanded outputs do count toward the bound once produced, but input acceptance is gated in message
-        /// units (each unprocessed input counts as 1) and every accepted input is still processed even after
-        /// expansion has pushed the count past the bound. Upstream delivers all page messages instantly, so an
-        /// item-denominated bound of N would admit up to N whole page messages -- N x StreamingPageSize items --
-        /// before the first expansion lands (verified by the TransformManyBlock semantics test in
-        /// BackpressureTests). With a page-denominated bound, worst-case per-resource retention is approximately
-        /// (this value x StreamingPageSize) + <see cref="ResolvedProcessingBlockBoundedCapacity" /> items.
-        /// Returns -1 when bounding is disabled.
+        /// Gets the effective bounded capacity for the block that fetches pages of source items. Bounds how many
+        /// page messages wait for (or are in) handling. Since APIPUB-139 the item buffer between page handling
+        /// and processing (<see cref="ResolvedProcessingBlockBoundedCapacity" />) is what bounds memory; this
+        /// value keeps page-fetch parallelism from being starved. Returns -1 when bounding is disabled.
         /// </summary>
         public int ResolvedStreamResourcePagesBlockBoundedCapacity
             => ResolvedProcessingBlockBoundedCapacity == -1
@@ -198,6 +192,42 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public int RateLimitMaxRetries { get; set; } = 5;
 
         public bool UseReversePaging { get; set; } = false;
+
+        /// <summary>
+        /// Maximum number of partitions the Ed-Fi ODS API accepts on <c>GET /{resource}/partitions</c>
+        /// (<c>number</c> must be 1..200, verified on ODS/API 7.3.2 -- see APIPUB-136).
+        /// </summary>
+        public const int MaxCursorPagingPartitionCount = 200;
+
+        /// <summary>
+        /// When <b>false</b> (the default), main resources are read from an ODS/API 7.3+ source with partitioned
+        /// cursor paging (<c>/partitions</c> + <c>pageToken</c>/<c>pageSize</c>) whenever the source supports
+        /// it, falling back to offset/limit paging otherwise; <b>true</b> forces offset/limit paging for every
+        /// resource (the pre-APIPUB-139 behavior). Deletes and key changes always use offset/limit paging.
+        /// </summary>
+        public bool DisableCursorPaging { get; set; } = false;
+
+        /// <summary>
+        /// Number of partitions requested per resource when cursor paging is in use (1..200). When not set,
+        /// <see cref="MaxDegreeOfParallelismForStreamResourcePages" /> is used (capped at the API maximum),
+        /// so each page-fetch worker walks one partition. The source may return fewer partitions than requested
+        /// for small resources; that is normal.
+        /// </summary>
+        public int? CursorPagingPartitionCount { get; set; }
+
+        /// <summary>
+        /// Gets the effective partition count for cursor paging (see <see cref="CursorPagingPartitionCount" />).
+        /// Throws when an explicit value is outside 1..<see cref="MaxCursorPagingPartitionCount" /> (also rejected
+        /// by CLI options validation).
+        /// </summary>
+        public int ResolvedCursorPagingPartitionCount
+            => CursorPagingPartitionCount switch
+            {
+                null => Math.Clamp(MaxDegreeOfParallelismForStreamResourcePages, 1, MaxCursorPagingPartitionCount),
+                < 1 or > MaxCursorPagingPartitionCount => throw new InvalidOperationException(
+                    $"Cursor paging partition count of '{CursorPagingPartitionCount}' is invalid. Valid values are 1 to {MaxCursorPagingPartitionCount}."),
+                _ => CursorPagingPartitionCount.Value,
+            };
 
         public string LastChangeVersionProcessedNamespace { get; set; }
 

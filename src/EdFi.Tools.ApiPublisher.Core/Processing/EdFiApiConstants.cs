@@ -18,6 +18,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         public const string KeyChangesPathSuffix = "/keyChanges";
 
         /// <summary>
+        /// Gets the path suffix to the "partitions" child resource (ODS/API 7.3+) that returns the starting page
+        /// tokens for partitioned cursor paging of a data management API resource.
+        /// </summary>
+        public const string PartitionsPathSuffix = "/partitions";
+
+        /// <summary>
         /// Gets the path segment to the data management API, including the version.
         /// </summary>
         public const string DataManagementApiSegment = "data/v3";

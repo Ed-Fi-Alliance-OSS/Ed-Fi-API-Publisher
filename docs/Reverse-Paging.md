@@ -41,3 +41,7 @@ Reproducing this problem seemed to be trick. But the help of Visual Studio and t
 ## Other notes
 
 1. Tests will be tricky without the capabilities of Visual Studio in debug mode and with a set of break points. 
+
+## Cursor paging (ODS/API 7.3+)
+
+Against an ODS/API 7.3 or later source, the publisher reads main resources with partitioned cursor paging. Page tokens address stable ranges of aggregate ids rather than positions in a result set, so rows inserted or deleted at the source while a run is in progress no longer shift the pages that follow -- which is the mechanism behind the skipped-record problem described above. This is not a substitute for a consistent read of an active source: snapshot isolation remains the mechanism for that, and cursor paging does not change it. Reverse paging remains available for older sources (setting `useReversePaging` or `useChangeVersionPaging` keeps the offset/limit path even on 7.3+).

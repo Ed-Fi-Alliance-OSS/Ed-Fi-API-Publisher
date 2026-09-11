@@ -12,7 +12,9 @@
     "includeDescriptors": $INCLUDE_DESCRIPTORS,
     "errorPublishingBatchSize": $ERROR_PUBLISHING_BATCH_SIZE,
     "useChangeVersionPaging": $USE_CHANGE_VERSION_PAGING,
-    "changeVersionPagingWindowSize": $CHANGE_VERSION_PAGING_WINDOW_SIZE
+    "changeVersionPagingWindowSize": $CHANGE_VERSION_PAGING_WINDOW_SIZE,
+    "disableCursorPaging": $DISABLE_CURSOR_PAGING,
+    "cursorPagingPartitionCount": $CURSOR_PAGING_PARTITION_COUNT
   },
     "authorizationFailureHandling": [
         {

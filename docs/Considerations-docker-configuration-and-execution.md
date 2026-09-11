@@ -38,6 +38,8 @@ INCLUDE_DESCRIPTORS=<Default. false>
 ERROR_PUBLISHING_BATCH_SIZE=<Default. 25>
 USE_CHANGE_VERSION_PAGING=<Default. false>
 CHANGE_VERSION_PAGING_WINDOW_SIZE=<Default. 25000>
+DISABLE_CURSOR_PAGING=<Default. false; true forces offset/limit paging>
+CURSOR_PAGING_PARTITION_COUNT=<Default. null = MAX_DEGREE_OF_PARALLELISM_FOR_STREAM_RESOURCE_PAGES; 1..200 partitions requested per resource under cursor paging>
 
 # The file configurationStoreSettings
 PROVIDER=<Could be one of the following values: sqlServer, postgreSql, awsParameterStore, or plainText. Default. plainText>
@@ -62,6 +64,8 @@ TARGET_SECRET=<Secret for the target connection Eg. E1iEFusaNf81xzCxwHfbolkC>
 # Logging using Serilog
 WRITE_TO_FILE_PATH=<Path to store the logging file Eg. ../tmp/logs/Ed-Fi-API-PublisherSerilog.log>
 ```
+
+Any option not present in the template can still be set through an environment variable with the `EdFi__ApiPublisher__Options__` prefix, e.g. `EdFi__ApiPublisher__Options__StreamingPageSize=100`. Docker Compose only passes the variables listed under `environment:` in `compose-build.yml` into the container, so such a variable has to be added there as well.
 
 Sample .env provide all the different parameters for run ApiPublisher with different configurations. Please provide the information necessary for a specific configuration.
 

@@ -6,14 +6,18 @@
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 
 public interface IStreamResourcePageMessageHandler
 {
-    Task<IEnumerable<TProcessDataMessage>> HandleStreamResourcePageAsync<TProcessDataMessage>(
+    /// <summary>
+    /// Reads the source page(s) addressed by the message and yields the resulting item messages page by page.
+    /// The sequence is lazy: the next page is fetched only when the consumer pulls past the current one, so the
+    /// consumer's pull rate bounds how much of a multi-page message (e.g. a cursor partition) is in memory.
+    /// </summary>
+    IAsyncEnumerable<TProcessDataMessage> HandleStreamResourcePageAsync<TProcessDataMessage>(
         StreamResourcePageMessage<TProcessDataMessage> message,
         Options options,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock);

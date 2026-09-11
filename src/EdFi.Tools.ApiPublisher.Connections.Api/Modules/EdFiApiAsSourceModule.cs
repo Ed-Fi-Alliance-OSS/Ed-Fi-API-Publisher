@@ -30,6 +30,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Modules;
 
 public class EdFiApiAsSourceModule : Module
 {
+    private const string OffsetPagingProducerKey = "OffsetPaging";
+
     private readonly IConfigurationRoot _finalConfiguration;
 
     public EdFiApiAsSourceModule(IConfigurationRoot finalConfiguration)
@@ -85,32 +87,53 @@ public class EdFiApiAsSourceModule : Module
             .WithParameter("rateLimiter", rateLimiter)
             .SingleInstance();
 
-        // Register resource page message producer using a ChangeVersion paging strategy
+        // Offset-family producer, chosen at registration time exactly as before (limit/offset, change-version or
+        // reverse paging); the dispatcher below routes each resource to it or to the cursor paging producer
         if (options.UseChangeVersionPaging)
         {
             if (options.UseReversePaging)
             {
                 builder.RegisterType<EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer>()
-                .As<IStreamResourcePageMessageProducer>()
-                .SingleInstance();
+                    .Named<IStreamResourcePageMessageProducer>(OffsetPagingProducerKey)
+                    .SingleInstance();
             }
             else
             {
                 builder.RegisterType<EdFiApiChangeVersionPagingStreamResourcePageMessageProducer>()
-                .As<IStreamResourcePageMessageProducer>()
-                .SingleInstance();
+                    .Named<IStreamResourcePageMessageProducer>(OffsetPagingProducerKey)
+                    .SingleInstance();
             }
         }
-        // Register resource page message producer using a limit/offset paging strategy
         else
         {
             builder.RegisterType<EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer>()
-                .As<IStreamResourcePageMessageProducer>()
+                .Named<IStreamResourcePageMessageProducer>(OffsetPagingProducerKey)
                 .SingleInstance();
         }
 
-        // Register the strategy that addresses successive page requests (offset/limit, see APIPUB-138)
-        builder.RegisterType<OffsetPageRequestStrategy>()
+        // Cursor paging (ODS/API 7.3+, see APIPUB-139): per-resource strategy resolution, the partition producer,
+        // and the dispatcher that the pipeline sees as the one IStreamResourcePageMessageProducer
+        builder.RegisterType<SourcePagingStrategyResolver>()
+            .As<ISourcePagingStrategyResolver>()
+            .SingleInstance();
+
+        builder.RegisterType<EdFiApiCursorPagingStreamResourcePageMessageProducer>()
+            .AsSelf()
+            .WithParameter("rateLimiter", rateLimiter)
+            .SingleInstance();
+
+        builder.Register(ctx => new PagingStrategyDispatchingStreamResourcePageMessageProducer(
+                ctx.Resolve<ISourcePagingStrategyResolver>(),
+                ctx.ResolveNamed<IStreamResourcePageMessageProducer>(OffsetPagingProducerKey),
+                ctx.Resolve<EdFiApiCursorPagingStreamResourcePageMessageProducer>()))
+            .As<IStreamResourcePageMessageProducer>()
+            .SingleInstance();
+
+        // Page-request strategies (see APIPUB-138/APIPUB-139): the dispatcher picks offset/limit or cursor per message
+        builder.RegisterType<OffsetPageRequestStrategy>().AsSelf().SingleInstance();
+        builder.RegisterType<CursorPageRequestStrategy>().AsSelf().SingleInstance();
+
+        builder.RegisterType<PageRequestStrategyDispatcher>()
             .As<IPageRequestStrategy>()
             .SingleInstance();
 

@@ -27,9 +27,22 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
         _createConnection = createConnection;
     }
 
-    public async Task<IEnumerable<TProcessDataMessage>> HandleStreamResourcePageAsync<TProcessDataMessage>(
+    public async IAsyncEnumerable<TProcessDataMessage> HandleStreamResourcePageAsync<TProcessDataMessage>(
         StreamResourcePageMessage<TProcessDataMessage> message,
         Options options,
+        ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+    {
+        // SQLite pages are single rowid partitions, so one read yields the whole message
+        var pageItems = await ReadPageAsync(message, errorHandlingBlock).ConfigureAwait(false);
+
+        foreach (var pageItem in pageItems)
+        {
+            yield return pageItem;
+        }
+    }
+
+    private async Task<IReadOnlyList<TProcessDataMessage>> ReadPageAsync<TProcessDataMessage>(
+        StreamResourcePageMessage<TProcessDataMessage> message,
         ITargetBlock<ErrorItemMessage> errorHandlingBlock)
     {
         int pageId = int.Parse(message.PartitionFrom ?? throw new NullReferenceException("PartitionFrom is expected on resource page messages for use with the Sqlite connection."));
@@ -43,7 +56,7 @@ public class SqliteStreamResourcePageMessageHandler : IStreamResourcePageMessage
                 _logger.Debug(
                     $"{message.ResourceUrl}: Cancellation requested while processing page of source items starting at partition '{pageId}'.");
 
-                return Enumerable.Empty<TProcessDataMessage>();
+                return Array.Empty<TProcessDataMessage>();
             }
 
             if (_logger.IsEnabled(LogEventLevel.Debug))

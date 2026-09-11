@@ -31,4 +31,9 @@
     <EmbeddedResource Include="Resources\v6.1-Dependencies-GraphML.xml" />
     <EmbeddedResource Include="Resources\Dependencies-GraphML-v5.2.xml" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Settings files the configuration builder requires, linked under the names the CLI ships them with -->
+    <None Include="Configuration\Fixtures\apiPublisherSettings.json" Link="apiPublisherSettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Configuration\Fixtures\configurationStoreSettings.json" Link="configurationStoreSettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

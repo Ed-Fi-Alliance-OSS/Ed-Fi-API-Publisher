@@ -101,7 +101,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
                 _streamResourceBlockFactory.CreateBlock(createProcessDataMessages, processingContext.StageErrorsBlock, processingContext.Options, cancellationToken);
 
             // Create a new StreamResourcePages block
-            TransformManyBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> streamResourcePagesBlock =
+            IPropagatorBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> streamResourcePagesBlock =
                 _streamResourcePagesBlockFactory.CreateBlock<TProcessDataMessage>(
                     processingContext.Options,
                     processingContext.StageErrorsBlock);

@@ -297,6 +297,11 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.ChangeVersionPagingWindowSize)} must be greater than 0.");
             }
 
+            if (options.CursorPagingPartitionCount is < 1 or > Options.MaxCursorPagingPartitionCount)
+            {
+                validationErrors.Add($"{nameof(options.CursorPagingPartitionCount)} must be between 1 and {Options.MaxCursorPagingPartitionCount}.");
+            }
+
             if (validationErrors.Any())
             {
                 throw new InvalidConfigurationException($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");

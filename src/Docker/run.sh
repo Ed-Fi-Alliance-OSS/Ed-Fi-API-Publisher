@@ -10,6 +10,13 @@ set +x
 # Default to automatic processing block bounded capacity when not provided (see APIPUB-112)
 export PROCESSING_BLOCK_BOUNDED_CAPACITY="${PROCESSING_BLOCK_BOUNDED_CAPACITY:-0}"
 
+# Default to cursor paging enabled when not provided (see APIPUB-139)
+export DISABLE_CURSOR_PAGING="${DISABLE_CURSOR_PAGING:-false}"
+
+# Default to the automatic partition count (JSON null) when not provided; the template emits the value as a bare
+# JSON token, so an empty substitution would produce an invalid settings file (see APIPUB-139)
+export CURSOR_PAGING_PARTITION_COUNT="${CURSOR_PAGING_PARTITION_COUNT:-null}"
+
 envsubst < /app/apiPublisherSettings.template.json > /app/apiPublisherSettings.json
 envsubst < /app/logging.template.json > /app/logging.json
 envsubst < /app/configurationStoreSettings.template.json > /app/configurationStoreSettings.json

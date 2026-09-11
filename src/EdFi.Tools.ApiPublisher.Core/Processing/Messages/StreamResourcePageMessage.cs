@@ -38,6 +38,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public string PartitionUntil { get; set; }
         public bool IsFinalPage { get; set; }
 
+        // Cursor paging (ODS/API 7.3+, see APIPUB-139): the token of the page currently being read (the
+        // partition's starting token until the walk advances, then the token of each following page), the page
+        // size sent with it, the 1-based partition index (for logging only) and the 1-based ordinal of the
+        // current page within the partition. The walk keeps the token and ordinal current so that
+        // DescribeSourcePage() names the request an item actually came from, not the partition's first page.
+        public string PageToken { get; set; }
+        public int? PageSize { get; set; }
+        public int? PartitionIndex { get; set; }
+        public int? PartitionPageNumber { get; set; }
+
         // -------------------------------------------------
         // Source Ed-Fi ODS API processing context (shared)
         // -------------------------------------------------
@@ -55,13 +65,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> CreateProcessDataMessages { get; set; }
 
         /// <summary>
-        /// Describes where this page sits in the source (offset/limit, partition bounds and change window) so that
-        /// an item-level error can be traced back to the source request that produced it. Contains paging metadata
-        /// only -- never document content -- so it is safe to log and to include in published error records.
+        /// Describes where this page sits in the source (offset/limit or cursor page token, partition bounds and
+        /// change window) so that an item-level error can be traced back to the source request that produced it.
+        /// Contains paging metadata only -- never document content -- so it is safe to log and to include in
+        /// published error records.
         /// </summary>
         public string DescribeSourcePage()
         {
-            var parts = new List<string>(4);
+            var parts = new List<string>(6);
 
             if (Offset.HasValue)
             {
@@ -71,6 +82,26 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
             if (Limit.HasValue)
             {
                 parts.Add($"limit {Limit.Value}");
+            }
+
+            if (PartitionIndex.HasValue)
+            {
+                parts.Add($"partition {PartitionIndex.Value}");
+            }
+
+            if (PartitionPageNumber.HasValue)
+            {
+                parts.Add($"page {PartitionPageNumber.Value}");
+            }
+
+            if (PageToken is not null)
+            {
+                parts.Add($"page token {PageToken}");
+            }
+
+            if (PageSize.HasValue)
+            {
+                parts.Add($"page size {PageSize.Value}");
             }
 
             if (PartitionFrom is not null || PartitionUntil is not null)
