@@ -78,32 +78,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     timeProvider
                 );
 
-                // A cap on concurrent requests, where one is configured, sits innermost so that it bounds what the
-                // transport actually has open, and so that a request replayed after an unauthorized response takes
-                // a slot of its own like any other request the API has to serve. The cost of putting it here is
-                // that a request queued for a slot is already carrying the token it was stamped with on the way
-                // down, so a long enough queue can send a token that has since been rotated; that draws a 401 and
-                // is recovered by the handler above, at the price of one round trip.
-                HttpMessageHandler pipeline =
-                    throttlingPolicy.MaxConcurrentRequests > 0
-                        ? new ConcurrentRequestLimitingHandler(
-                            _httpClientHandler,
-                            throttlingPolicy.MaxConcurrentRequests,
-                            name
-                        )
-                        : _httpClientHandler;
-
-                // The handler applies the token to every request and recovers from one the API rejects. It reads the
-                // token from the manager, which is why nothing here has to be published before it is fully built.
-                // Neither client disposes the transport; that is done here, once, after both are gone.
-                pipeline = new BearerTokenHandler(pipeline, _bearerTokenManager, name);
-
-                // Waiting out a 429 goes on the outside, so that the wait is not spent holding a slot other reads
-                // could be using, and so that each replay is sent with a token that is current.
-                if (throttlingPolicy.TooManyRequestsRetryAttempts > 0)
-                {
-                    pipeline = new RetryAfterHandler(pipeline, throttlingPolicy, name, timeProvider);
-                }
+                var pipeline = BuildRequestPipeline(
+                    _httpClientHandler,
+                    _bearerTokenManager,
+                    throttlingPolicy,
+                    name,
+                    timeProvider
+                );
 
                 _httpClient = new HttpClient(pipeline, disposeHandler: false)
                 {
@@ -125,6 +106,49 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
 
             ApiPublisherProductInfo.ApplyTo(_httpClient);
+        }
+
+        /// <summary>
+        /// Builds the request pipeline, outermost first: waiting out a rejected read, then the bearer token, then
+        /// the cap on concurrent requests, then the transport. Only the middle one is always present.
+        /// </summary>
+        /// <remarks>
+        /// The order is load bearing. Waiting out a 429 goes outermost so the wait is not spent holding a slot
+        /// other reads could be using, and so each replay is stamped with a token that is current. The cap goes
+        /// innermost so that it bounds what the transport actually has open, and so a request replayed after an
+        /// unauthorized response takes a slot of its own like any other request the API has to serve. What that
+        /// costs is that a request queued for a slot is already carrying the token it was stamped with on the way
+        /// down, so a long enough queue can send one that has since been rotated; that draws a 401 and is
+        /// recovered by the handler above it, at the price of one round trip.
+        /// </remarks>
+        private static HttpMessageHandler BuildRequestPipeline(
+            HttpClientHandler transport,
+            IBearerTokenProvider bearerTokenProvider,
+            ApiThrottlingPolicy throttlingPolicy,
+            string name,
+            TimeProvider timeProvider
+        )
+        {
+            HttpMessageHandler pipeline =
+                throttlingPolicy.MaxConcurrentRequests > 0
+                    ? new ConcurrentRequestLimitingHandler(
+                        transport,
+                        throttlingPolicy.MaxConcurrentRequests,
+                        name
+                    )
+                    : transport;
+
+            // The handler applies the token to every request and recovers from one the API rejects. It reads the
+            // token from the provider, which is why nothing here has to be published before it is fully built.
+            // Neither client disposes the transport; that is done by the client, once, after both are gone.
+            pipeline = new BearerTokenHandler(pipeline, bearerTokenProvider, name);
+
+            if (throttlingPolicy.TooManyRequestsRetryAttempts > 0)
+            {
+                pipeline = new RetryAfterHandler(pipeline, throttlingPolicy, name, timeProvider);
+            }
+
+            return pipeline;
         }
 
         public HttpClient HttpClient => _httpClient;

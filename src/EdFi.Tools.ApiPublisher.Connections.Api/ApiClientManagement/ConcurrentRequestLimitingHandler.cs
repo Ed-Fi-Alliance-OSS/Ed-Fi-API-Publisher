@@ -3,7 +3,9 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System.Diagnostics;
 using Serilog;
+using Serilog.Events;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
@@ -29,6 +31,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     public class ConcurrentRequestLimitingHandler : DelegatingHandler
     {
         private readonly SemaphoreSlim _availableSlots;
+        private readonly int _maxConcurrentRequests;
+        private readonly string _displayName;
+        private readonly ILogger _logger = Log.ForContext(typeof(ConcurrentRequestLimitingHandler));
 
         public ConcurrentRequestLimitingHandler(
             HttpMessageHandler innerHandler,
@@ -47,13 +52,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
 
             _availableSlots = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
-
-            Log.ForContext(typeof(ConcurrentRequestLimitingHandler))
-                .Information(
-                    "Requests to the {Name:l} API are capped at {MaxConcurrentRequests} concurrent. Reads waiting for a slot are the cap working, not a hang.",
-                    name?.ToLower(),
-                    maxConcurrentRequests
-                );
+            _maxConcurrentRequests = maxConcurrentRequests;
+            _displayName = name?.ToLower();
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -61,7 +61,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             CancellationToken cancellationToken
         )
         {
-            await _availableSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await WaitForSlotAsync(request, cancellationToken).ConfigureAwait(false);
 
             try
             {
@@ -71,6 +71,60 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             {
                 _availableSlots.Release();
             }
+        }
+
+        /// <summary>
+        /// Takes a slot, and reports it if the request does not live long enough to get one. The wait is spent
+        /// against the request's own budget, so a cap well below the parallelism the pipeline offers will run some
+        /// requests out of time while they queue. That surfaces to the caller as a cancellation naming the HTTP
+        /// client and nothing else, which is why the cap has to name itself here.
+        /// </summary>
+        private async Task WaitForSlotAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var slot = _availableSlots.WaitAsync(cancellationToken);
+
+            if (slot.IsCompletedSuccessfully)
+            {
+                return;
+            }
+
+            long startedWaitingAt = Stopwatch.GetTimestamp();
+
+            // Reported from the token rather than from around the await, so that the line is written at the moment
+            // the wait is given up on and the cancellation itself reaches the caller untouched. The registration is
+            // released as soon as the slot arrives, so a request that is served never logs this.
+            using (cancellationToken.Register(() => LogSlotWaitAbandoned(request, startedWaitingAt)))
+            {
+                await slot.ConfigureAwait(false);
+            }
+
+            if (_logger.IsEnabled(LogEventLevel.Debug))
+            {
+                _logger.Debug(
+                    "'{Method:l} {RequestUri}' waited {TotalSeconds:N1}s for one of the {MaxConcurrentRequests} concurrent slots allowed against the {Name:l} API.",
+                    request.Method.Method,
+                    request.RequestUri,
+                    Stopwatch.GetElapsedTime(startedWaitingAt).TotalSeconds,
+                    _maxConcurrentRequests,
+                    _displayName
+                );
+            }
+        }
+
+        /// <summary>
+        /// Names the cap as the thing the request was waiting on. Without this the caller sees only a cancellation
+        /// naming the HTTP client, and nothing connects the failure back to the setting that caused it.
+        /// </summary>
+        private void LogSlotWaitAbandoned(HttpRequestMessage request, long startedWaitingAt)
+        {
+            _logger.Error(
+                "'{Method:l} {RequestUri}' was given up on after waiting {TotalSeconds:N1}s for one of the {MaxConcurrentRequests} concurrent slots allowed against the {Name:l} API. Where this is the request running out of time rather than the run being stopped, the cap is lower than the parallelism settings can keep busy: lower MaxDegreeOfParallelismForResourceProcessing and MaxDegreeOfParallelismForStreamResourcePages to match it, or raise the cap.",
+                request.Method.Method,
+                request.RequestUri,
+                Stopwatch.GetElapsedTime(startedWaitingAt).TotalSeconds,
+                _maxConcurrentRequests,
+                _displayName
+            );
         }
 
         // No Dispose override: the client builds its pipeline with disposeHandler false and disposes the transport
