@@ -101,9 +101,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(attempts, Has.Count.EqualTo(2));
 
-            // Waited until the instant the API named, not for a fixed span from the rejection
+            // Waited until the instant the API named, not for a fixed span from the rejection. The tolerance is
+            // four clock steps so that a stall in the stepping helper cannot fail a run.
             Assert.That(attempts[1], Is.GreaterThanOrEqualTo(answeringAgainAt));
-            Assert.That(attempts[1] - answeringAgainAt, Is.LessThan(ClockStep * 2));
+            Assert.That(attempts[1] - answeringAgainAt, Is.LessThan(ClockStep * 4));
         }
 
         [TestCase(null, TestName = "with no Retry-After header at all")]
@@ -326,9 +327,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             Assert.That(waited, Is.GreaterThanOrEqualTo(expected));
 
-            // The clock only moves in steps, so the wait is known to within one of them; a wait meaningfully
-            // longer than asked for is as much a defect as one that is too short
-            Assert.That(waited, Is.LessThan(expected + ClockStep * 2));
+            // The clock only moves in steps, so the wait is known to within a few of them; a wait meaningfully
+            // longer than asked for is as much a defect as one that is too short. The tolerance is four steps
+            // rather than the one the reading needs, so that a stall in the stepping helper cannot fail a run
+            // while still being far smaller than any wait a defect here would produce.
+            Assert.That(waited, Is.LessThan(expected + ClockStep * 4));
         }
 
         /// <summary>

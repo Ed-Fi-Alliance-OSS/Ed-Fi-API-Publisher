@@ -129,13 +129,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             TimeProvider timeProvider
         )
         {
+            if (throttlingPolicy.MaxConcurrentRequests < 0)
+            {
+                // Rejected rather than read as "no cap", so that a caller that meant to cap the API and got the
+                // sign wrong is told, instead of being left with an uncapped client that looks configured.
+                throw new ArgumentOutOfRangeException(
+                    nameof(throttlingPolicy),
+                    throttlingPolicy.MaxConcurrentRequests,
+                    "A negative cap on concurrent requests is not a way of asking for no cap. Use 0 to leave the API uncapped."
+                );
+            }
+
             HttpMessageHandler pipeline =
                 throttlingPolicy.MaxConcurrentRequests > 0
-                    ? new ConcurrentRequestLimitingHandler(
-                        transport,
-                        throttlingPolicy.MaxConcurrentRequests,
-                        name
-                    )
+                    ? new ConcurrentRequestLimitingHandler(transport, throttlingPolicy, name)
                     : transport;
 
             // The handler applies the token to every request and recovers from one the API rejects. It reads the

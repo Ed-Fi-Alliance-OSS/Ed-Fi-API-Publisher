@@ -32,6 +32,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     public class RetryAfterHandler : DelegatingHandler
     {
         /// <summary>
+        /// How much of a Retry-After value the API sent but the framework could not read is written to the log.
+        /// </summary>
+        private const int MaxLoggedRetryAfterLength = 100;
+
+        /// <summary>
         /// The most of the request budget ever held back for a replay.
         /// </summary>
         private static readonly TimeSpan MaxReplayAllowance = TimeSpan.FromSeconds(10);
@@ -131,7 +136,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 }
             }
 
-            _logger.Error(
+            // Warning rather than Error: the caller that records the read as a failure logs the error, and two
+            // Error lines for one read read as two things having gone wrong. The advice stays here, because this
+            // is the only place that knows the retries were what ran out.
+            _logger.Warning(
                 "'{Method:l} {RequestUri}' was still being rejected as too many requests by the {Name:l} API after {MaxRetryAttempts} retries. The read is recorded as a failure and the run will finish with errors. Consider lowering MaxConcurrentSourceRequests, or the MaxDegreeOfParallelism settings, so the source is asked for less at once, or raising TooManyRequestsRetryAttempts.",
                 request.Method.Method,
                 request.RequestUri,
@@ -151,7 +159,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             TimeSpan remainingBudget
         )
         {
-            _logger.Error(
+            // Warning for the same reason the exhausted line is: the caller records the failure and logs the error.
+            _logger.Warning(
                 "'{Method:l} {RequestUri}' was rejected as too many requests by the {Name:l} API, which asked for a wait of {TotalSeconds:N1}s ({DelaySource:l}). Only {RemainingSeconds:N1}s of the {BudgetSeconds:N0}s request budget is left, so the read is abandoned and recorded as a failure rather than being cut short mid-wait. Consider lowering MaxConcurrentSourceRequests, or the MaxDegreeOfParallelism settings, so the source is asked for less at once.",
                 request.Method.Method,
                 request.RequestUri,
@@ -236,12 +245,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return;
             }
 
+            // The value is whatever the API chose to send and is logged once per rejected read, so it is capped
+            // and left quoted: an unusable header is not a reason to let a source fill the log with one line.
             _logger.Warning(
-                "The {Name:l} API sent a Retry-After value that could not be read ('{RetryAfter:l}'), so the configured back off is used instead.",
+                "The {Name:l} API sent a Retry-After value that could not be read ({RetryAfter}), so the configured back off is used instead.",
                 _displayName,
-                string.Join(", ", rawValues)
+                Truncate(string.Join(", ", rawValues))
             );
         }
+
+        private static string Truncate(string value) =>
+            value.Length > MaxLoggedRetryAfterLength
+                ? value[..MaxLoggedRetryAfterLength] + "... (truncated)"
+                : value;
 
         private static HttpRequestMessage CloneRequestWithoutContent(HttpRequestMessage request)
         {

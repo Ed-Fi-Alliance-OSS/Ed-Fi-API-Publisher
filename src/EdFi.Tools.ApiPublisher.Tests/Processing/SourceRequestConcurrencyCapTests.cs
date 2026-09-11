@@ -84,7 +84,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             Should.Throw<ArgumentOutOfRangeException>(
                 () =>
                 {
-                    _ = new ConcurrentRequestLimitingHandler(transport, maxConcurrentRequests: 0, "Source");
+                    _ = new ConcurrentRequestLimitingHandler(
+                        transport,
+                        new ApiThrottlingPolicy { MaxConcurrentRequests = 0 },
+                        "Source");
                 });
         }
 

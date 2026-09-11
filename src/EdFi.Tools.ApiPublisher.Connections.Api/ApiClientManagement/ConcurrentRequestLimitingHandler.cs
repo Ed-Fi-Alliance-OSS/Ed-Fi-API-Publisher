@@ -30,29 +30,44 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     /// </remarks>
     public class ConcurrentRequestLimitingHandler : DelegatingHandler
     {
+        /// <summary>
+        /// How short of the whole request budget a wait may fall and still be read as the request having run out
+        /// of time. A cancellation that arrives earlier than this came from outside the request, so it is reported
+        /// as what it is rather than as the cap being too low.
+        /// </summary>
+        private static readonly TimeSpan BudgetShortfallAllowance = TimeSpan.FromSeconds(1);
+
         private readonly SemaphoreSlim _availableSlots;
         private readonly int _maxConcurrentRequests;
+        private readonly TimeSpan _requestBudget;
         private readonly string _displayName;
         private readonly ILogger _logger = Log.ForContext(typeof(ConcurrentRequestLimitingHandler));
 
         public ConcurrentRequestLimitingHandler(
             HttpMessageHandler innerHandler,
-            int maxConcurrentRequests,
+            ApiThrottlingPolicy throttlingPolicy,
             string name
         )
             : base(innerHandler)
         {
-            if (maxConcurrentRequests < 1)
+            ArgumentNullException.ThrowIfNull(throttlingPolicy);
+
+            if (throttlingPolicy.MaxConcurrentRequests < 1)
             {
                 throw new ArgumentOutOfRangeException(
-                    nameof(maxConcurrentRequests),
-                    maxConcurrentRequests,
+                    nameof(throttlingPolicy),
+                    throttlingPolicy.MaxConcurrentRequests,
                     "The cap on concurrent requests must be greater than 0. A client that is not meant to be capped should be built without this handler."
                 );
             }
 
-            _availableSlots = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
-            _maxConcurrentRequests = maxConcurrentRequests;
+            _availableSlots = new SemaphoreSlim(
+                throttlingPolicy.MaxConcurrentRequests,
+                throttlingPolicy.MaxConcurrentRequests
+            );
+
+            _maxConcurrentRequests = throttlingPolicy.MaxConcurrentRequests;
+            _requestBudget = throttlingPolicy.RequestBudget;
             _displayName = name?.ToLower();
         }
 
@@ -115,10 +130,32 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Names the cap as the thing the request was waiting on. Without this the caller sees only a cancellation
         /// naming the HTTP client, and nothing connects the failure back to the setting that caused it.
         /// </summary>
+        /// <remarks>
+        /// Only a wait that used up what the request had is reported as a failure of the cap. A wait that ended
+        /// with time still on the clock was ended from outside the request, by a resource whose processing was
+        /// cancelled or by the run being stopped, and telling an operator to change the cap for that is wrong: a
+        /// stopped run with a deep queue would say it once per queued read. Where the request reached the cap with
+        /// most of its budget already spent waiting out a rejection above, the abandonment is recorded at Debug
+        /// rather than Error, which under-reports rather than misdirects.
+        /// </remarks>
         private void LogSlotWaitAbandoned(HttpRequestMessage request, long startedWaitingAt)
         {
+            if (Stopwatch.GetElapsedTime(startedWaitingAt) + BudgetShortfallAllowance < _requestBudget)
+            {
+                _logger.Debug(
+                    "'{Method:l} {RequestUri}' was cancelled after waiting {TotalSeconds:N1}s for one of the {MaxConcurrentRequests} concurrent slots allowed against the {Name:l} API.",
+                    request.Method.Method,
+                    request.RequestUri,
+                    Stopwatch.GetElapsedTime(startedWaitingAt).TotalSeconds,
+                    _maxConcurrentRequests,
+                    _displayName
+                );
+
+                return;
+            }
+
             _logger.Error(
-                "'{Method:l} {RequestUri}' was given up on after waiting {TotalSeconds:N1}s for one of the {MaxConcurrentRequests} concurrent slots allowed against the {Name:l} API. Where this is the request running out of time rather than the run being stopped, the cap is lower than the parallelism settings can keep busy: lower MaxDegreeOfParallelismForResourceProcessing and MaxDegreeOfParallelismForStreamResourcePages to match it, or raise the cap.",
+                "'{Method:l} {RequestUri}' ran out of the time it is allowed after waiting {TotalSeconds:N1}s for one of the {MaxConcurrentRequests} concurrent slots allowed against the {Name:l} API. The cap is lower than the parallelism settings can keep busy: lower MaxDegreeOfParallelismForResourceProcessing and MaxDegreeOfParallelismForStreamResourcePages to match it, or raise the cap.",
                 request.Method.Method,
                 request.RequestUri,
                 Stopwatch.GetElapsedTime(startedWaitingAt).TotalSeconds,
