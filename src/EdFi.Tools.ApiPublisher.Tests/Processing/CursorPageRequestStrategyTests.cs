@@ -67,6 +67,33 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void Page_token_should_be_escaped_in_the_query_string()
+        {
+            // base64url (the ODS/API's alphabet) is left untouched by escaping; characters with query-string meaning are not
+            var sequence = new CursorPageRequestStrategy().Begin(CreateMessage(pageToken: "a+b#c=d"), TestHelpers.GetOptions());
+
+            sequence.BuildQueryString().ShouldBe("?pageToken=a%2Bb%23c%3Dd&pageSize=500");
+        }
+
+        [Test]
+        public void Advancing_should_keep_the_message_page_token_and_page_number_current()
+        {
+            // DescribeSourcePage() on the message is the item error's source locator, so it must name the page an item
+            // actually came from rather than the partition's first page
+            var message = CreateMessage();
+            var sequence = new CursorPageRequestStrategy().Begin(message, TestHelpers.GetOptions());
+
+            message.PartitionPageNumber.ShouldBe(1);
+            message.DescribeSourcePage().ShouldBe("partition 2, page 1, page token MTIzLDQ1Ng, page size 500");
+
+            sequence.TryAdvance(Response("NEXT"), 500).ShouldBeTrue();
+
+            message.PageToken.ShouldBe("NEXT");
+            message.PartitionPageNumber.ShouldBe(2);
+            message.DescribeSourcePage().ShouldBe("partition 2, page 2, page token NEXT, page size 500");
+        }
+
+        [Test]
         public void Descriptions_should_name_the_partition_and_page()
         {
             var sequence = new CursorPageRequestStrategy().Begin(CreateMessage(), TestHelpers.GetOptions());

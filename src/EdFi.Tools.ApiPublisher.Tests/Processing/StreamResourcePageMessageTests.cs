@@ -67,5 +67,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             message.DescribeSourcePage().ShouldBe("partition 2, page token MTIzLDQ1Ng, page size 500, change versions 100 to 200");
         }
+
+        [Test]
+        public void DescribeSourcePage_should_include_the_partition_page_number_when_present()
+        {
+            var message = new StreamResourcePageMessage<PostItemMessage>
+            {
+                PageToken = "NEXT",
+                PageSize = 500,
+                PartitionIndex = 2,
+                PartitionPageNumber = 3,
+            };
+
+            message.DescribeSourcePage().ShouldBe("partition 2, page 3, page token NEXT, page size 500");
+        }
     }
 }

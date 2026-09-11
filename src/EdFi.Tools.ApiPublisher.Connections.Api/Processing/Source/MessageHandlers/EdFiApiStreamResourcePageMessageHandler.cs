@@ -75,11 +75,21 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
             // lives in ReadNextPageAsync: an iterator cannot yield from inside a try block that has a catch.
             while (true)
             {
-                var (pageItems, hasMorePages) = await ReadNextPageAsync(state).ConfigureAwait(false);
+                var (pageItems, hasMorePages, failed) = await ReadNextPageAsync(state).ConfigureAwait(false);
 
                 foreach (var pageItem in pageItems)
                 {
                     yield return pageItem;
+                }
+
+                if (failed && message.PageToken is not null)
+                {
+                    // Under cursor paging a page message is a whole partition, so a page failure (already published
+                    // and logged above) also abandons every page after it -- say so, with what was lost, since the
+                    // failure line alone reads like a single page (see APIPUB-139 review)
+                    state.PageLogger.Warning(
+                        "{ResourceUrl}: The partition walk ended at {PageStart:l} because of the failure above. The partition's remaining pages were not read and the items behind them are missing from this run.",
+                        message.ResourceUrl, pageRequest.DescribeStart());
                 }
 
                 if (!hasMorePages)
@@ -98,7 +108,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
     /// Issues the strategy's current request (with retries), streams the page into item messages, and reports
     /// whether the strategy advanced to another request. Failures are published and end the sequence.
     /// </summary>
-    private async Task<(IReadOnlyList<TProcessDataMessage> Items, bool HasMorePages)> ReadNextPageAsync<TProcessDataMessage>(
+    private async Task<(IReadOnlyList<TProcessDataMessage> Items, bool HasMorePages, bool Failed)> ReadNextPageAsync<TProcessDataMessage>(
         PageReadState<TProcessDataMessage> state)
     {
         var message = state.Message;
@@ -108,7 +118,9 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
         var edFiApiClient = state.EdFiApiClient;
         var pageLogger = state.PageLogger;
 
-        var none = (Items: (IReadOnlyList<TProcessDataMessage>)Array.Empty<TProcessDataMessage>(), HasMorePages: false);
+        // A failed page ends the sequence and is reported by the iterator; a cancelled one ends it quietly
+        var none = (Items: (IReadOnlyList<TProcessDataMessage>)Array.Empty<TProcessDataMessage>(), HasMorePages: false, Failed: true);
+        var cancelled = (Items: (IReadOnlyList<TProcessDataMessage>)Array.Empty<TProcessDataMessage>(), HasMorePages: false, Failed: false);
 
         try
         {
@@ -118,7 +130,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                     "{MessageResourceUrl}: Cancellation requested while processing page of source items starting at {PageStart:l}.",
                     message.ResourceUrl, pageRequest.DescribeStart());
 
-                return none;
+                return cancelled;
             }
 
             if (pageLogger.IsEnabled(LogEventLevel.Debug))
@@ -291,10 +303,10 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 {
                     state.PageLogger = pageRequest.EnrichLogger(_logger);
 
-                    return (pageMessages, true);
+                    return (pageMessages, true, false);
                 }
 
-                return (pageMessages, false);
+                return (pageMessages, false, false);
             }
             catch (RateLimitRejectedException ex)
             {
@@ -353,7 +365,7 @@ public class EdFiApiStreamResourcePageMessageHandler : IStreamResourcePageMessag
                 "{MessageResourceUrl}: Cancellation requested while retrieving page of source items starting at {PageStart:l}.",
                 message.ResourceUrl, pageRequest.DescribeStart());
 
-            return none;
+            return cancelled;
         }
         catch (Exception ex) when (EdFiApiAuthenticationException.IsRepresentedBy(ex))
         {

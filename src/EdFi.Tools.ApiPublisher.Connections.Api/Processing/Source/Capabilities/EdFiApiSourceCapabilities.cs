@@ -130,7 +130,7 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
 
             if (probeResponse.StatusCode == HttpStatusCode.NotFound)
             {
-                _logger.Information("Source API does not expose '{PartitionsPathSuffix}' (status {StatusCode}); offset/limit paging will be used.",
+                _logger.Information("Source API does not expose {PartitionsPathSuffix:l} (status {StatusCode}); offset/limit paging will be used.",
                     EdFiApiConstants.PartitionsPathSuffix, (int)probeResponse.StatusCode);
 
                 return false;
@@ -139,7 +139,7 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
             // Only HTTP 200 is the documented partitions response; any other status (a different 2xx included) is inconclusive
             if (probeResponse.StatusCode != HttpStatusCode.OK)
             {
-                _logger.Warning("Request to Source API for the '{PartitionsPathSuffix}' child resource was unsuccessful (response status was '{StatusCode}'). Offset/limit paging will be used instead of cursor paging.",
+                _logger.Warning("Request to Source API for the {PartitionsPathSuffix:l} child resource was unsuccessful (response status was '{StatusCode}'). Offset/limit paging will be used instead of cursor paging.",
                     EdFiApiConstants.PartitionsPathSuffix, probeResponse.StatusCode);
 
                 return null;
@@ -149,7 +149,7 @@ public class EdFiApiSourceCapabilities : ISourceCapabilities
 
             if (JObject.Parse(content)["pageTokens"] is not JArray)
             {
-                _logger.Warning("Response from Source API for the '{PartitionsPathSuffix}' child resource did not contain a 'pageTokens' array. Offset/limit paging will be used instead of cursor paging.",
+                _logger.Warning("Response from Source API for the {PartitionsPathSuffix:l} child resource did not contain a 'pageTokens' array. Offset/limit paging will be used instead of cursor paging.",
                     EdFiApiConstants.PartitionsPathSuffix);
 
                 return null;

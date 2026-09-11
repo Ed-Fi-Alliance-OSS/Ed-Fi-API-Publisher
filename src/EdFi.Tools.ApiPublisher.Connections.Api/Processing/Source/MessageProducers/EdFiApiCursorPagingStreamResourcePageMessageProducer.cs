@@ -10,7 +10,6 @@ using EdFi.Tools.ApiPublisher.Core.Counting;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
-using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Newtonsoft.Json.Linq;
 using Polly;
@@ -84,7 +83,11 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
             pageTokens = await GetPageTokensAsync(message.ResourceUrl, message.ChangeWindow, partitionCount, options, cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException and not RateLimitRejectedException
+        // Run cancellation, the rate limiter and an authentication failure end the run as they would anywhere else.
+        // A cancellation the run did not ask for is HttpClient.Timeout expiring while waiting for the headers (it
+        // surfaces as a TaskCanceledException), which is a failed partitions request like any other and falls back.
+        catch (Exception ex) when ((ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                                   && ex is not RateLimitRejectedException
                                    && !EdFiApiAuthenticationException.IsRepresentedBy(ex))
         {
             _logger.Warning(ex, "{ResourceUrl}: Partitions request failed. Falling back to offset/limit paging for this resource.", message.ResourceUrl);
@@ -267,7 +270,16 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
             return null;
         }
 
-        return tokens.Select(t => t.Value<string>()).Where(t => !string.IsNullOrEmpty(t)).ToArray();
+        // Every element must be a non-empty string: dropping a null or empty entry would silently skip a partition
+        // (and a lone null would read as an empty resource), so a malformed array is a failed partitions request
+        if (tokens.Any(t => t.Type != JTokenType.String || string.IsNullOrEmpty(t.Value<string>())))
+        {
+            _logger.Warning("{ResourceUrl}: Partitions response contained a null or empty page token. Falling back to offset/limit paging for this resource.", resourceUrl);
+
+            return null;
+        }
+
+        return tokens.Select(t => t.Value<string>()).ToArray();
     }
 
     private static string TruncateForLog(string content)

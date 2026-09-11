@@ -31,7 +31,21 @@ public class CursorPageRequestStrategy : IPageRequestStrategy
         int pageSize = message.PageSize
             ?? throw new NullReferenceException("PageSize is expected on cursor-paged resource page messages for the Ed-Fi ODS API.");
 
-        return new Sequence(_logger, message.ResourceUrl, pageToken, pageSize, message.PartitionIndex);
+        message.PartitionPageNumber = 1;
+
+        // The message travels with every item the walk produces (DescribeSourcePage is the item error's source
+        // locator), so the sequence keeps its token and page ordinal current as the walk advances
+        return new Sequence(
+            _logger,
+            message.ResourceUrl,
+            pageToken,
+            pageSize,
+            message.PartitionIndex,
+            (currentToken, currentPageNumber) =>
+            {
+                message.PageToken = currentToken;
+                message.PartitionPageNumber = currentPageNumber;
+            });
     }
 
     private sealed class Sequence : IPageRequestSequence
@@ -40,20 +54,24 @@ public class CursorPageRequestStrategy : IPageRequestStrategy
         private readonly string _resourceUrl;
         private readonly int _pageSize;
         private readonly int? _partitionIndex;
+        private readonly Action<string, int> _advanced;
         private string _pageToken;
         private int _pageNumber = 1;
 
-        public Sequence(ILogger logger, string resourceUrl, string pageToken, int pageSize, int? partitionIndex)
+        public Sequence(ILogger logger, string resourceUrl, string pageToken, int pageSize, int? partitionIndex, Action<string, int> advanced)
         {
             _logger = logger;
             _resourceUrl = resourceUrl;
             _pageToken = pageToken;
             _pageSize = pageSize;
             _partitionIndex = partitionIndex;
+            _advanced = advanced;
         }
 
-        // The token is an opaque base64url value from the API and is passed back verbatim
-        public string BuildQueryString() => $"?pageToken={_pageToken}&pageSize={_pageSize}";
+        // The token is an opaque value from the API. The ODS/API emits base64url, which escaping leaves untouched.
+        // Escaping guards against a source that emits characters with query-string meaning: a hash sign would
+        // truncate the query on the wire and silently drop the change window, and a plus sign would arrive as a space.
+        public string BuildQueryString() => $"?pageToken={Uri.EscapeDataString(_pageToken)}&pageSize={_pageSize}";
 
         public string Describe() => $"of {DescribePartition()}, page {_pageNumber}";
 
@@ -93,6 +111,7 @@ public class CursorPageRequestStrategy : IPageRequestStrategy
 
             _pageToken = nextPageToken;
             _pageNumber++;
+            _advanced(_pageToken, _pageNumber);
 
             return true;
         }

@@ -230,6 +230,60 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public async Task Header_phase_timeout_on_the_partitions_request_should_fall_back_to_offset_paging()
+        {
+            // HttpClient.Timeout expiring while waiting for the headers surfaces as a TaskCanceledException the run did
+            // not ask for; it is a failed partitions request, not a reason to end the run
+            TestHelpers.InitializeLogging();
+            var (producer, _, _) = Create(() => throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException()));
+
+            using (TestCorrelator.CreateContext())
+            {
+                var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                    CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+                success.ShouldBeFalse();
+                messages.ShouldBeNull();
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("Partitions request failed"));
+            }
+        }
+
+        [Test]
+        public async Task Run_cancellation_during_the_partitions_request_should_propagate()
+        {
+            var cancellation = new CancellationTokenSource();
+            var (producer, _, _) = Create(() =>
+            {
+                cancellation.Cancel();
+                throw new OperationCanceledException(cancellation.Token);
+            });
+
+            await Should.ThrowAsync<OperationCanceledException>(() => producer.TryProduceMessagesAsync<object>(
+                CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, cancellation.Token));
+        }
+
+        [Test]
+        public async Task Null_or_empty_page_token_should_fall_back_to_offset_paging_instead_of_skipping_a_partition()
+        {
+            TestHelpers.InitializeLogging();
+            var (producer, _, _) = Create(() => FakeResponse.OK(new { pageTokens = new[] { "t1", null, "t3" } }));
+
+            using (TestCorrelator.CreateContext())
+            {
+                var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                    CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+                success.ShouldBeFalse();
+                messages.ShouldBeNull();
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("null or empty page token"));
+            }
+        }
+
+        [Test]
         public async Task Stalled_partitions_response_body_should_time_out_and_fall_back_to_offset_paging()
         {
             // RequestHelpers reads with ResponseHeadersRead, so HttpClient.Timeout covers only the headers; the body

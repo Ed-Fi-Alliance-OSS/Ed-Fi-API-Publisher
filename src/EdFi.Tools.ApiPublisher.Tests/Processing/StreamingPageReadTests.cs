@@ -825,7 +825,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             errors.Count.ShouldBe(0);
 
             // 0 or 2: the parse of the first page may itself observe the cancellation via the response-stream abort
-            items.Length.ShouldBeLessThanOrEqualTo(2);
+            items.Length.ShouldBeOneOf(0, 2);
         }
 
         /// <summary>

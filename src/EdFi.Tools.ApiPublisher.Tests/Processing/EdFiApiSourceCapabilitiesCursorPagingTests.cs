@@ -161,6 +161,31 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public async Task Thrown_probe_exception_should_fall_back_warn_once_and_be_re_probed()
+        {
+            // The story's "probe exception" case: offset paging for the resource, one warning, and the inconclusive
+            // answer is not memoized, so the next resource probes again
+            TestHelpers.InitializeLogging();
+            var (capabilities, fake) = Create();
+
+            A.CallTo(() => fake.Get(A<string>.Ignored, A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath.EndsWith("/partitions"))))
+                .Throws(new HttpRequestException("Connection reset by peer."));
+
+            using (TestCorrelator.CreateContext())
+            {
+                (await capabilities.SupportsCursorPagingAsync("/ed-fi/students")).ShouldBeFalse();
+                (await capabilities.SupportsCursorPagingAsync("/ed-fi/schools")).ShouldBeFalse();
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Count(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("cursor paging"))
+                    .ShouldBe(2);
+            }
+
+            A.CallTo(() => fake.Get(A<string>.Ignored, A<HttpRequestMessage>.That.Matches(msg => msg.RequestUri.LocalPath.EndsWith("/partitions"))))
+                .MustHaveHappenedTwiceExactly();
+        }
+
+        [Test]
         public async Task Authentication_failure_during_probe_should_propagate_instead_of_falling_back()
         {
             // The probe runs through the bearer-token handler; an authentication failure means publishing cannot

@@ -44,11 +44,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             Options options,
             ITargetBlock<ErrorItemMessage> errorHandlingBlock)
         {
+            // The capacity is item-denominated (see APIPUB-112) and -1 disables the bound. A message is one document
+            // for the API target, but the SQLite target's messages each carry a whole page (they implement
+            // IItemCountedProcessDataMessage), so for those the capacity is converted to pages exactly as the SQLite
+            // processing block converts it -- applied as-is it would admit that many whole pages (see APIPUB-120).
+            int itemCapacity = options.ResolvedProcessingBlockBoundedCapacity;
+
+            int bufferCapacity = itemCapacity != -1 && typeof(IItemCountedProcessDataMessage).IsAssignableFrom(typeof(TProcessDataMessage))
+                ? Math.Max(1, itemCapacity / Math.Max(1, options.StreamingPageSize))
+                : itemCapacity;
+
             var pageItemsBuffer = new BufferBlock<TProcessDataMessage>(
                 new DataflowBlockOptions
                 {
-                    // Item-denominated (see APIPUB-112); -1 disables the bound
-                    BoundedCapacity = options.ResolvedProcessingBlockBoundedCapacity,
+                    BoundedCapacity = bufferCapacity,
                 });
 
             var pagesBlock = new ActionBlock<StreamResourcePageMessage<TProcessDataMessage>>(

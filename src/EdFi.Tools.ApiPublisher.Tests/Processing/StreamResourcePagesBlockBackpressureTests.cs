@@ -70,6 +70,33 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             }
         }
 
+        /// <summary>A page-sized message, as the SQLite target receives (each message carries a whole page of documents).</summary>
+        private sealed class PageSizedMessage : IItemCountedProcessDataMessage
+        {
+            public int ItemCount => 100;
+        }
+
+        /// <summary>A handler that yields ItemsPerMessage page-sized messages per page message, counting how many it has produced.</summary>
+        private sealed class CountingPageSizedMessageHandler : IStreamResourcePageMessageHandler
+        {
+            private int _produced;
+
+            public int Produced => Volatile.Read(ref _produced);
+
+            public async IAsyncEnumerable<TProcessDataMessage> HandleStreamResourcePageAsync<TProcessDataMessage>(
+                StreamResourcePageMessage<TProcessDataMessage> message,
+                Options options,
+                ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            {
+                for (int i = 0; i < ItemsPerMessage; i++)
+                {
+                    Interlocked.Increment(ref _produced);
+                    await Task.Yield();
+                    yield return (TProcessDataMessage)(object)new PageSizedMessage();
+                }
+            }
+        }
+
         private static async IAsyncEnumerable<int> Produce(int count, Action onItem)
         {
             for (int i = 0; i < count; i++)
@@ -122,6 +149,26 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             await sink.Completion.WaitAsync(TimeSpan.FromSeconds(30));
             consumed.ShouldBe(ItemsPerMessage);
             handler.Produced.ShouldBe(ItemsPerMessage);
+        }
+
+        [Test]
+        public async Task Item_buffer_should_be_denominated_in_pages_when_messages_carry_whole_pages()
+        {
+            // The SQLite target's messages each carry a page, so an item-denominated capacity applied to them would
+            // admit that many whole pages -- the bound the SQLite processing block converts must be converted here too
+            var handler = new CountingPageSizedMessageHandler();
+            var options = TestHelpers.GetOptions();
+            options.ProcessingBlockBoundedCapacity = 1000;
+            options.StreamingPageSize = 100;
+            options.MaxDegreeOfParallelismForStreamResourcePages = 1;
+
+            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>()).CreateBlock<PageSizedMessage>(options, new BufferBlock<ErrorItemMessage>());
+
+            block.Post(new StreamResourcePageMessage<PageSizedMessage> { ResourceUrl = "/ed-fi/students", CancellationSource = new CancellationTokenSource() }).ShouldBeTrue();
+
+            // 1000 items / 100 per page = 10 page messages (+1 parked in SendAsync), not 1000 pages
+            int stalledAt = await GetStableValueAsync(() => handler.Produced);
+            stalledAt.ShouldBeInRange(10, 11);
         }
 
         [Test]

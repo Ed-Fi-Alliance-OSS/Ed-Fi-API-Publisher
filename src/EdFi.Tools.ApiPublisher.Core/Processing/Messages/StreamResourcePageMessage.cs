@@ -38,11 +38,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public string PartitionUntil { get; set; }
         public bool IsFinalPage { get; set; }
 
-        // Cursor paging (ODS/API 7.3+, see APIPUB-139): the opaque starting token of the partition this message
-        // walks, the page size sent with it, and the 1-based partition index (for logging only)
+        // Cursor paging (ODS/API 7.3+, see APIPUB-139): the token of the page currently being read (the
+        // partition's starting token until the walk advances, then the token of each following page), the page
+        // size sent with it, the 1-based partition index (for logging only) and the 1-based ordinal of the
+        // current page within the partition. The walk keeps the token and ordinal current so that
+        // DescribeSourcePage() names the request an item actually came from, not the partition's first page.
         public string PageToken { get; set; }
         public int? PageSize { get; set; }
         public int? PartitionIndex { get; set; }
+        public int? PartitionPageNumber { get; set; }
 
         // -------------------------------------------------
         // Source Ed-Fi ODS API processing context (shared)
@@ -83,6 +87,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
             if (PartitionIndex.HasValue)
             {
                 parts.Add($"partition {PartitionIndex.Value}");
+            }
+
+            if (PartitionPageNumber.HasValue)
+            {
+                parts.Add($"page {PartitionPageNumber.Value}");
             }
 
             if (PageToken is not null)
