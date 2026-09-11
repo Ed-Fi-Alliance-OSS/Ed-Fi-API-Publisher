@@ -87,7 +87,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
             var createBlocksRequest = new CreateBlocksRequest(
                 processingContext.Options,
                 processingContext.AuthorizationFailureHandling,
-                processingContext.PublishErrorsIngestionBlock,
+                processingContext.StageErrorsBlock,
                 processingContext.JavaScriptModuleFactory,
                 retryPipelineResourcePaths);
 
@@ -98,18 +98,18 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
 
             // Create a new StreamResource block for the resource
             TransformManyBlock<StreamResourceMessage, StreamResourcePageMessage<TProcessDataMessage>> streamResourceBlock =
-                _streamResourceBlockFactory.CreateBlock(createProcessDataMessages, processingContext.PublishErrorsIngestionBlock, processingContext.Options, cancellationToken);
+                _streamResourceBlockFactory.CreateBlock(createProcessDataMessages, processingContext.StageErrorsBlock, processingContext.Options, cancellationToken);
 
             // Create a new StreamResourcePages block
             IPropagatorBlock<StreamResourcePageMessage<TProcessDataMessage>, TProcessDataMessage> streamResourcePagesBlock =
                 _streamResourcePagesBlockFactory.CreateBlock<TProcessDataMessage>(
                     processingContext.Options,
-                    processingContext.PublishErrorsIngestionBlock);
+                    processingContext.StageErrorsBlock);
 
             // Link together the general pipeline
             streamResourceBlock.LinkTo(streamResourcePagesBlock, linkOptions);
             streamResourcePagesBlock.LinkTo(processingInputBlock, linkOptions);
-            processingOutputBlock.LinkTo(processingContext.PublishErrorsIngestionBlock, new DataflowLinkOptions { Append = true });
+            processingOutputBlock.LinkTo(processingContext.StageErrorsBlock, new DataflowLinkOptions { Append = true });
 
             streamingResourceBlockByResourceKey.Add(resourceKey, streamResourceBlock);
         }
@@ -156,6 +156,7 @@ public class StreamingResourceProcessor : IStreamingResourceProcessor
                 ChangeWindow = processingContext.ChangeWindow,
                 CancellationSource = cancellationSource,
                 HasAuthorizationRetryPipeline = hasAuthorizationRetryPipeline,
+                IsAuthorizationRetryPass = resourceKey.EndsWith(Conventions.RetryKeySuffix),
                 ProcessingSemaphore = processingContext.Semaphore,
             };
 

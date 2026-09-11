@@ -175,6 +175,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
                 await errorHandlingBlock.SendErrorAsync(
                         new ErrorItemMessage
                         {
+                            IsSourceReadError = true,
                             ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
                             Method = HttpMethod.Get.ToString(),
                             ResponseStatus = apiResponse.StatusCode,
@@ -189,6 +190,20 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         catch (RateLimitRejectedException ex)
         {
             _logger.Fatal(ex, "{Segment}{Url}: Rate limit exceeded. Please try again later.", edFiApiClient.DataManagementApiSegment, resourceUrl);
+
+            // Without a count the resource is not processed at all. Published as an error so that the run
+            // cannot report success after silently leaving a resource out (APIPUB-120).
+            await errorHandlingBlock.SendErrorAsync(
+                    new ErrorItemMessage
+                    {
+                        IsSourceReadError = true,
+                        Method = HttpMethod.Get.ToString(),
+                        ResourceUrl = $"{edFiApiClient.DataManagementApiSegment}{resourceUrl}",
+                        Exception = ex,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+
             return (false, 0);
         }
     }
@@ -229,6 +244,7 @@ public class EdFiApiSourceTotalCountProvider : ISourceTotalCountProvider
         await errorHandlingBlock.SendErrorAsync(
                 new ErrorItemMessage
                 {
+                    IsSourceReadError = true,
                     ResourceUrl =
                         $"{_sourceEdFiApiClientProvider.GetApiClient().DataManagementApiSegment}{resourceUrl}",
                     Method = HttpMethod.Get.ToString(),

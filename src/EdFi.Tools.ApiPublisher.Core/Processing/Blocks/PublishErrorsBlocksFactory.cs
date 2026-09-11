@@ -4,9 +4,11 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Serilog;
 using System;
+using System.Threading;
 using System.Threading.Tasks.Dataflow;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
@@ -15,6 +17,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     {
         private static readonly ILogger _logger = Log.Logger.ForContext(typeof(PublishErrorsBlocksFactory));
         private IErrorPublisher _errorPublisher;
+        private readonly IRunSummaryCollector _runSummaryCollector;
 
         /// <summary>
         /// Gets the first exception thrown by the error publisher during this run, if any. The publishing
@@ -24,9 +27,54 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
         /// </summary>
         public Exception FirstPublishingException { get; private set; }
 
-        public PublishErrorsBlocksFactory(IErrorPublisher errorPublisher)
+        public PublishErrorsBlocksFactory(IErrorPublisher errorPublisher, IRunSummaryCollector runSummaryCollector)
         {
             _errorPublisher = errorPublisher;
+            _runSummaryCollector = runSummaryCollector;
+        }
+
+        /// <summary>
+        /// Creates the block that one stage's producers send their errors to: it records the error against the
+        /// stage in the run summary and forwards it to the shared ingestion block. Errors reach the shared
+        /// block from several places (the processing output blocks, and direct sends from the handlers) and
+        /// only the stage's caller knows which stage they belong to, so the tally is taken at this single
+        /// point rather than at every place an error is created (see APIPUB-120).
+        /// </summary>
+        /// <remarks>
+        /// The caller must complete the returned block, and wait for its completion, once the stage's
+        /// producers have finished and before the ingestion block itself is completed.
+        /// </remarks>
+        public ActionBlock<ErrorItemMessage> CreateStageErrorTallyBlock(
+            PublishingStage stage,
+            ITargetBlock<ErrorItemMessage> publishErrorsIngestionBlock,
+            Options options)
+        {
+            return new ActionBlock<ErrorItemMessage>(
+                async error =>
+                {
+                    try
+                    {
+                        _runSummaryCollector.AddError(stage, error);
+
+                        // Forwarded with the shared send helper so a full (bounded) ingestion block delays this
+                        // block, and through it the stage's producers, instead of dropping the error. The send
+                        // is not cancellable on purpose: the helper's cancellation path falls back to a
+                        // synchronous post, which drops the error when the block is full.
+                        await publishErrorsIngestionBlock.SendErrorAsync(error, CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Never rethrow, for the same reason the publishing block never does: a faulted target
+                        // severs its incoming links, so the processing output blocks feeding this one could
+                        // never drain and the run would hang instead of ending (see CreatePublishErrorsBlock).
+                        _logger.Error(ex, "Unable to record an error against the run summary.");
+                    }
+                },
+                new ExecutionDataflowBlockOptions
+                {
+                    BoundedCapacity = options.ResolvedErrorPublishingBoundedCapacity,
+                    MaxDegreeOfParallelism = 1,
+                });
         }
 
         public ValueTuple<ITargetBlock<ErrorItemMessage>, ActionBlock<ErrorItemMessage[]>> CreateBlocks(Options options)

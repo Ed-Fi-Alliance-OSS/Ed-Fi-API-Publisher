@@ -11,6 +11,7 @@
         "processingBlockBoundedCapacity": 0,
         "includeDescriptors": false,
         "errorPublishingBatchSize": 25,
+        "toleratedItemErrorCount": 0,
         "useChangeVersionPaging": false,
         "changeVersionPagingWindowSize": 25000,
         "enableRateLimit": false,

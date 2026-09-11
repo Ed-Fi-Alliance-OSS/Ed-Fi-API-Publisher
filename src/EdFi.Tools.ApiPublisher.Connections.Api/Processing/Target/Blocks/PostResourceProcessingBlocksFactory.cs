@@ -17,6 +17,7 @@ using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
@@ -39,6 +40,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly ISourceConnectionDetails _sourceConnectionDetails;
         private readonly ISourceCapabilities _sourceCapabilities;
         private readonly ISourceResourceItemProvider _sourceResourceItemProvider;
+        private readonly IRunSummaryCollector _runSummaryCollector;
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
         // Dependency resources for which a deferred (Forbidden) dependency post has already been reported at Warning level
@@ -50,9 +52,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             ISourceConnectionDetails sourceConnectionDetails,
             ISourceCapabilities sourceCapabilities,
             ISourceResourceItemProvider sourceResourceItemProvider,
+            IRunSummaryCollector runSummaryCollector,
             IRateLimiting<HttpResponseMessage> rateLimiter = null
         )
         {
+            _runSummaryCollector = runSummaryCollector;
             _nodeJsService = nodeJsService;
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
             _sourceConnectionDetails = sourceConnectionDetails;
@@ -143,6 +147,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         {
             if (ignoredResourceByUrl.ContainsKey(postItemMessage.ResourceUrl))
             {
+                // Abandoned by an operator's own choice (treatForbiddenPostAsWarning), so it is not an error,
+                // but it is counted so that the run summary cannot report it as published (APIPUB-120).
+                _runSummaryCollector.AddSkippedItems(
+                    PublishingStage.Upserts,
+                    postItemMessage.ResourceUrl,
+                    1,
+                    SkipReasons.ResourceIgnoredAfterAuthorizationFailure,
+                    postItemMessage.IsAuthorizationRetryPass);
+
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 
@@ -164,6 +177,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         Id = postItemMessage.Id,
                         SourcePage = postItemMessage.SourcePage,
                         SourceItemIndex = postItemMessage.SourceItemIndex,
+                        IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                     }
                 };
             }
@@ -199,6 +213,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 {
                     Method = HttpMethod.Post.ToString(),
                     ResourceUrl = postItemMessage.ResourceUrl,
+                    IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                     Id = idToken switch
                     {
                         null => null,
@@ -390,6 +405,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                                 // current item): a Forbidden response on this post can only be deferred if the
                                 // dependency resource itself has a "#Retry" pass that will re-publish it.
                                 HasAuthorizationRetryPipeline = authorizationRetryPipelineResourcePaths.Contains(missingDependencyDetails.DependencyResourceUrl),
+
+                                // The dependency is published as part of the pass that needed it
+                                IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                                 CancellationToken = postItemMessage.CancellationToken,
                             };
 
@@ -426,6 +444,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                             _logger.Debug("{ResourceUrl} (source id: {Id}): POST returned {Conflict}, but for descriptors this means the value is already present.",
                                 postItemMessage.ResourceUrl, id, HttpStatusCode.Conflict);
                         }
+
+                        // The target holds the value the document asked for, so the document is published: it
+                        // took no write to get there. Left uncounted it would be a document the run read and
+                        // never resolved, which holds back the last change version processed (see APIPUB-120).
+                        _runSummaryCollector.AddPublishedItems(
+                            PublishingStage.Upserts,
+                            postItemMessage.ResourceUrl,
+                            1,
+                            postItemMessage.IsAuthorizationRetryPass);
 
                         return Enumerable.Empty<ErrorItemMessage>();
                     }
@@ -468,6 +495,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
 
                         ignoredResourceByUrl.TryAdd(postItemMessage.ResourceUrl, true);
 
+                        _runSummaryCollector.AddSkippedItems(
+                            PublishingStage.Upserts,
+                            postItemMessage.ResourceUrl,
+                            1,
+                            SkipReasons.ResourceIgnoredAfterAuthorizationFailure,
+                            postItemMessage.IsAuthorizationRetryPass);
+
                         return Enumerable.Empty<ErrorItemMessage>();
                     }
 
@@ -483,7 +517,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         Id = id,
                         Body = new JRaw(postItemMessage.Item.ToString(Newtonsoft.Json.Formatting.None)),
                         ResponseStatus = apiResponse.StatusCode,
-                        ResponseContent = responseContent
+                        ResponseContent = responseContent,
+                        IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
                     };
 
                     return new[] { error };
@@ -508,14 +543,35 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     }
                 }
 
-                // Success - no errors to publish
+                // Counted where the target confirms it, so that the summary reports documents the target
+                // accepted rather than a subtraction that cannot see an abandoned document (APIPUB-120)
+                _runSummaryCollector.AddPublishedItems(
+                    PublishingStage.Upserts,
+                    postItemMessage.ResourceUrl,
+                    1,
+                    postItemMessage.IsAuthorizationRetryPass);
+
                 return Enumerable.Empty<ErrorItemMessage>();
             }
 #pragma warning disable S2139
             catch (RateLimitRejectedException ex)
             {
                 _logger.Fatal(ex, "{ResourceUrl}: Rate limit exceeded. Please try again later.", postItemMessage.ResourceUrl);
-                return Enumerable.Empty<ErrorItemMessage>();
+
+                // Reported as an error rather than dropped: the rate limiter has already exhausted its own
+                // retries, so the document was not published and the run must not report success (APIPUB-120).
+                return new[]
+                {
+                    new ErrorItemMessage
+                    {
+                        Method = HttpMethod.Post.ToString(),
+                        ResourceUrl = postItemMessage.ResourceUrl,
+                        Id = id,
+                        Body = null,
+                        Exception = ex,
+                        IsAuthorizationRetryPass = postItemMessage.IsAuthorizationRetryPass,
+                    }
+                };
             }
             catch (OperationCanceledException ex) when (postItemMessage.CancellationToken.IsCancellationRequested)
             {
@@ -739,6 +795,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     Item = j,
                     ResourceUrl = msg.ResourceUrl,
                     HasAuthorizationRetryPipeline = msg.HasAuthorizationRetryPipeline,
+                    IsAuthorizationRetryPass = msg.IsAuthorizationRetryPass,
                     CancellationToken = msg.CancellationSource.Token,
                     SourcePage = page,
                     SourceItemIndex = index,

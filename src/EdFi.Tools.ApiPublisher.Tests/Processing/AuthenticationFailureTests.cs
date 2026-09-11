@@ -21,6 +21,7 @@ using Microsoft.Extensions.Time.Testing;
 using NUnit.Framework;
 using Serilog.Events;
 using Serilog.Sinks.TestCorrelator;
+using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -102,11 +103,13 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             {
                 var caught = await RunAndCaptureAsync(fakeSourceRequestHandler, fakeTargetRequestHandler, timeProvider: clock);
 
-                // The run has to end. The failure surfaces as the processor's own "did not complete successfully"
-                // exception rather than the authentication failure itself, because the pipeline keeps only the task
-                // statuses and not the exceptions behind them. The authoritative message is the Fatal the API client
-                // logs when it gives up; carrying the cause to the top level belongs to the exit code work.
+                // The run has to end, and the cause has to survive to the top level: the failure that escapes
+                // is the authentication failure itself, which is what the CLI recognizes to report an
+                // authentication exit code rather than a generic one (see APIPUB-120).
                 Assert.That(caught, Is.Not.Null, "A source that cannot authenticate must not let the run complete.");
+
+                caught.ShouldBeOfType<EdFiApiAuthenticationException>();
+                EdFiApiAuthenticationException.IsRepresentedBy(caught).ShouldBeTrue();
 
                 // The re-acquisition was retried as often as the policy allows before the client gave up
                 A.CallTo(() => fakeSourceRequestHandler.Post($"{MockRequests.SourceApiBaseUrl}/oauth/token", A<HttpRequestMessage>.Ignored))

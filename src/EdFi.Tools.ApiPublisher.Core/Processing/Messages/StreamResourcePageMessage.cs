@@ -25,6 +25,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         // authorization-retry ("#Retry") pipeline will re-publish this resource after prerequisites complete.
         public bool HasAuthorizationRetryPipeline { get; set; }
 
+        // Indicates that the page belongs to the authorization retry pass, whose documents were already
+        // counted as attempted by the first pass (see APIPUB-120).
+        public bool IsAuthorizationRetryPass { get; set; }
+
         // -------------------------------
         // Paging-strategy specific context
         // --------------------------------

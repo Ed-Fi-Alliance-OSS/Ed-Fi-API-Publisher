@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Polly.RateLimit;
@@ -18,12 +19,16 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     public class StreamResourcePagesBlockFactory
     {
         private readonly IStreamResourcePageMessageHandler _streamResourcePageMessageHandler;
+        private readonly IRunSummaryCollector _runSummaryCollector;
 
         private readonly ILogger _logger = Log.ForContext(typeof(StreamResourcePagesBlockFactory));
 
-        public StreamResourcePagesBlockFactory(IStreamResourcePageMessageHandler streamResourcePageMessageHandler)
+        public StreamResourcePagesBlockFactory(
+            IStreamResourcePageMessageHandler streamResourcePageMessageHandler,
+            IRunSummaryCollector runSummaryCollector)
         {
             _streamResourcePageMessageHandler = streamResourcePageMessageHandler;
+            _runSummaryCollector = runSummaryCollector;
         }
 
         /// <summary>
@@ -85,6 +90,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             ITargetBlock<ErrorItemMessage> errorHandlingBlock,
             ITargetBlock<TProcessDataMessage> pageItemsBuffer)
         {
+            // Counted here because this is the one place every document passes through on its way to the
+            // target, and it is the only measure of attempted publishing the run has: the processing blocks
+            // downstream report errors, never successes. Items stream through lazily, so the count accrues as
+            // each one is handed to the buffer and is recorded once the page message is done (see APIPUB-120).
+            long attemptedItemCount = 0;
+
             try
             {
                 await foreach (var pageItem in _streamResourcePageMessageHandler
@@ -98,6 +109,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
 
                         return;
                     }
+
+                    // A message is one document for every API target, but the SQLite target writes a page at a
+                    // time, so it says how many documents its message carries. Counting messages there would
+                    // report pages as documents (see APIPUB-120).
+                    attemptedItemCount += pageItem is IItemCountedProcessDataMessage counted ? counted.ItemCount : 1;
                 }
             }
             catch (OperationCanceledException) when (msg.CancellationSource.IsCancellationRequested)
@@ -113,6 +129,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             {
                 _logger.Error($"{msg.ResourceUrl}: An unhandled exception occurred in the StreamResourcePages block: {ex}");
                 throw;
+            }
+            finally
+            {
+                // The authorization retry pass re-reads a resource the first pass already counted, under the
+                // same resource URL, so counting it again would report every document of that resource twice
+                // (see APIPUB-120). A document the first pass deferred with a 403 is published by this pass,
+                // which is why it stays in the attempted total.
+                if (attemptedItemCount > 0 && !msg.IsAuthorizationRetryPass)
+                {
+                    _runSummaryCollector.AddAttemptedItems(msg.ResourceUrl, attemptedItemCount);
+                }
             }
         }
     }

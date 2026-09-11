@@ -105,6 +105,7 @@ public class EdFiApiChangeVersionReversePagingStreamResourcePageMessageProducer 
                     // Resource-specific context
                     ResourceUrl = message.ResourceUrl,
                     HasAuthorizationRetryPipeline = message.HasAuthorizationRetryPipeline,
+                    IsAuthorizationRetryPass = message.IsAuthorizationRetryPass,
 
                     // Page-strategy specific context
                     Limit = limitOnWindow,

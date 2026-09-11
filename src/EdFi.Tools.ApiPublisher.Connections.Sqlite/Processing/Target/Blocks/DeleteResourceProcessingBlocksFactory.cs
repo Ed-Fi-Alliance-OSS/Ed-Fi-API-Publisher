@@ -4,14 +4,20 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
+using EdFi.Tools.ApiPublisher.Core.Processing;
 using Microsoft.Data.Sqlite;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Blocks;
 
 public class DeleteResourceProcessingBlocksFactory : SqlLiteProcessingBlocksFactoryBase<DeletesJsonMessage>
 {
-    public DeleteResourceProcessingBlocksFactory(Func<SqliteConnection> createConnection)
-        : base(createConnection) { }
+    public DeleteResourceProcessingBlocksFactory(
+        Func<SqliteConnection> createConnection,
+        IRunSummaryCollector runSummaryCollector)
+        : base(createConnection, runSummaryCollector) { }
+
+    protected override PublishingStage Stage => PublishingStage.Deletes;
 
     protected override string TableSuffix
     {

@@ -68,6 +68,7 @@ public class EdFiApiLimitOffsetPagingStreamResourcePageMessageProducer : IStream
                 // Resource-specific context
                 ResourceUrl = message.ResourceUrl,
                 HasAuthorizationRetryPipeline = message.HasAuthorizationRetryPipeline,
+                IsAuthorizationRetryPass = message.IsAuthorizationRetryPass,
 
                 // Page-strategy specific context
                 Limit = limit,

@@ -22,6 +22,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
 
         public string ResourceUrl { get; set; }
 
+        /// <summary>
+        /// Gets or sets the number of source documents this error stands for. It is one everywhere a handler
+        /// posts a single document, and a whole page where the handler writes a page at a time.
+        /// </summary>
+        public int ItemCount { get; set; } = 1;
+
 #nullable enable
         public string? Id { get; set; }
 
@@ -45,6 +51,22 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         /// that no implicit conversion can silently assign non-JSON content.
         /// </summary>
         public JRaw? Body { get; set; }
+
+        /// <summary>
+        /// Indicates that this error is a failure to read from the source (a page or an item count that could
+        /// not be retrieved) rather than a document the target rejected. The documents behind such an error
+        /// were never attempted and their number is not known, which is why the run summary reports them
+        /// apart from the per-resource counts (see APIPUB-120). Set by the producer that knows: inferring it
+        /// from the method and the item id was wrong for three of the paths that reach here.
+        /// </summary>
+        public bool IsSourceReadError { get; set; }
+
+        /// <summary>
+        /// Indicates that the failure happened during the authorization retry pass, which re-publishes an
+        /// entire resource after its update prerequisites complete. The run summary reports that pass apart
+        /// from the first one, because both carry the same resource URL (see APIPUB-120).
+        /// </summary>
+        public bool IsAuthorizationRetryPass { get; set; }
 
         public HttpStatusCode? ResponseStatus { get; set; }
 

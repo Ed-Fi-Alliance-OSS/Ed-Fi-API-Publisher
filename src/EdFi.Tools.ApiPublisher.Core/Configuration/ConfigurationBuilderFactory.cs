@@ -70,6 +70,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--processingBlockBoundedCapacity"] = "Options:ProcessingBlockBoundedCapacity",
                     ["--includeDescriptors"] = "Options:IncludeDescriptors",
                     ["--errorPublishingBatchSize"] = "Options:ErrorPublishingBatchSize",
+                    ["--toleratedItemErrorCount"] = "Options:ToleratedItemErrorCount",
                     ["--ignoreSslErrors"] = "Options:IgnoreSslErrors",
                     ["--useSourceDependencyMetadata"] = "Options:UseSourceDependencyMetadata",
                     ["--whatIf"] = "Options:WhatIf",

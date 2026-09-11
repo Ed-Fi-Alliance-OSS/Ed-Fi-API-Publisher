@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
@@ -82,7 +83,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 options.MaxDegreeOfParallelismForPostResourceItem = 1;
                 options.ProcessingBlockBoundedCapacity = configuredCapacity;
 
-                var factory = new DeleteResourceProcessingBlocksFactory(CreateTargetApiClientProvider(fakeTargetRequestHandler));
+                var factory = new DeleteResourceProcessingBlocksFactory(CreateTargetApiClientProvider(fakeTargetRequestHandler), A.Fake<IRunSummaryCollector>());
 
                 var (inputBlock, outputBlock) = factory.CreateProcessingBlocks(CreateBlocksRequest(options));
                 outputBlock.LinkTo(DataflowBlock.NullTarget<ErrorItemMessage>());
@@ -155,7 +156,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 options.MaxDegreeOfParallelismForPostResourceItem = 1;
                 options.ProcessingBlockBoundedCapacity = configuredCapacity;
 
-                var factory = new ChangeResourceKeyProcessingBlocksFactory(CreateTargetApiClientProvider(fakeTargetRequestHandler));
+                var factory = new ChangeResourceKeyProcessingBlocksFactory(CreateTargetApiClientProvider(fakeTargetRequestHandler), A.Fake<IRunSummaryCollector>());
 
                 var (inputBlock, outputBlock) = factory.CreateProcessingBlocks(CreateBlocksRequest(options));
                 outputBlock.LinkTo(DataflowBlock.NullTarget<ErrorItemMessage>());

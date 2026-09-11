@@ -48,7 +48,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         /// Maximum number of already-formed error batches allowed to queue for publication behind the
         /// (bounded) error ingestion block. Total pending errors can therefore reach approximately
         /// <see cref="ResolvedErrorPublishingBoundedCapacity" /> plus this value x
-        /// <see cref="ErrorPublishingBatchSize" /> (150 at shipped defaults), not the ingestion bound alone.
+        /// <see cref="ErrorPublishingBatchSize" />, plus another
+        /// <see cref="ResolvedErrorPublishingBoundedCapacity" /> for the active stage's error tally block
+        /// (200 at shipped defaults), not the ingestion bound alone.
         /// </summary>
         public const int MaxQueuedErrorBatches = 4;
 
@@ -157,6 +159,19 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
         public bool WhatIf { get; set; } = false;
 
         public int ErrorPublishingBatchSize { get; set; } = 25;
+
+        /// <summary>
+        /// The number of documents that may fail to publish before the run itself is reported as a failure.
+        /// The default of 0 fails a run that lost any document at all; -1 tolerates any number of them
+        /// (best-effort publishing), leaving the loss visible in the run summary and the published errors.
+        /// Values below -1 are invalid and are rejected by CLI options validation.
+        /// </summary>
+        /// <remarks>
+        /// A tolerated run still does not advance the last change version processed: the documents that
+        /// failed are inside the change window, so re-publishing the window is what gives them another
+        /// chance. Advancing it would make them unrecoverable without a full re-publish (see APIPUB-120).
+        /// </remarks>
+        public int ToleratedItemErrorCount { get; set; }
 
         public bool IgnoreSSLErrors { get; set; } = false;
 
