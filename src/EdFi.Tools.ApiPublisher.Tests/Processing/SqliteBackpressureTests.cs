@@ -6,9 +6,11 @@
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Blocks;
 using EdFi.Tools.ApiPublisher.Connections.Sqlite.Processing.Target.Messages;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
+using FakeItEasy;
 using Microsoft.Data.Sqlite;
 using NUnit.Framework;
 using Shouldly;
@@ -66,7 +68,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         connectionGate.Wait(TimeSpan.FromSeconds(30));
 
                         return new SqliteConnection(connectionString);
-                    });
+                    },
+                    A.Fake<IRunSummaryCollector>());
 
                 var createBlocksRequest = new CreateBlocksRequest(
                     options,

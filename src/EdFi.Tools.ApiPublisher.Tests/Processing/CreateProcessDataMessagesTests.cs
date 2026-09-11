@@ -192,7 +192,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             TestHelpers.InitializeLogging();
 
-            var factory = new SqliteUpsertFactory(() => null);
+            var factory = new SqliteUpsertFactory(() => null, A.Fake<IRunSummaryCollector>());
             var pageMessage = CreatePageMessage<SqliteMessages.UpsertsJsonMessage>("/ed-fi/students");
 
             int? reportedCount = null;
@@ -207,19 +207,21 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // Documented exemption: one message carrying the whole page string
             pageMessages.Length.ShouldBe(1);
             pageMessages[0].Json.ShouldBe(Json);
+            pageMessages[0].ItemCount.ShouldBe(3);
             reportedCount.ShouldBe(3);
         }
 
         [Test]
-        public void Sqlite_factory_should_skip_the_counting_pass_when_no_callback_is_supplied()
+        public void Sqlite_factory_should_count_the_documents_in_the_page_without_a_callback()
         {
+            // The count is no longer only for the caller's callback: the page message carries it so the run
+            // summary can report documents rather than pages (see APIPUB-120), so it is taken either way.
             TestHelpers.InitializeLogging();
 
-            var factory = new SqliteUpsertFactory(() => null);
+            var factory = new SqliteUpsertFactory(() => null, A.Fake<IRunSummaryCollector>());
             var pageMessage = CreatePageMessage<SqliteMessages.UpsertsJsonMessage>("/ed-fi/students");
 
-            // Non-array content would make the counting pass throw, proving it is skipped for null callbacks
-            const string Json = @"{""not"":""an array""}";
+            const string Json = @"[{""id"":""1""}, {""id"":""2""}]";
 
             using var jsonReader = new StringReader(Json);
 
@@ -227,6 +229,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             pageMessages.Length.ShouldBe(1);
             pageMessages[0].Json.ShouldBe(Json);
+            pageMessages[0].ItemCount.ShouldBe(2);
         }
 
         [Test]
@@ -234,7 +237,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             TestHelpers.InitializeLogging();
 
-            var factory = new SqliteUpsertFactory(() => null);
+            var factory = new SqliteUpsertFactory(() => null, A.Fake<IRunSummaryCollector>());
             var pageMessage = CreatePageMessage<SqliteMessages.UpsertsJsonMessage>("/ed-fi/students");
 
             using var jsonReader = new StringReader(@"{""not"":""an array""}");

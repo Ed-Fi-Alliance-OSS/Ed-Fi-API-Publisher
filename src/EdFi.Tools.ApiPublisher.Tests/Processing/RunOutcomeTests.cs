@@ -321,6 +321,79 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .ShouldContain("the authorization retry pass republished");
         }
 
+        [TestCase(HttpStatusCode.Conflict, true, TestName = "A descriptor the target already holds is published without a write")]
+        [TestCase(HttpStatusCode.BadRequest, false, TestName = "A descriptor the target rejects is not published")]
+        public async Task A_document_the_target_already_satisfies_is_published(
+            HttpStatusCode postResponseCode,
+            bool expectPublished)
+        {
+            // A descriptor POST answered with 409 means the value is already present, so nothing more needs to
+            // be done and the document is published without a write. Counting nothing there left it as a
+            // document the run read and never resolved, which held back the last change version processed and
+            // made a completely successful run stop the watermark for good (see APIPUB-120).
+            const string DescriptorResource = "/ed-fi/academicSubjectDescriptors";
+
+            var fakeSourceRequestHandler = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
+                .AvailableChangeVersions(1100)
+                .ResourceCount(responseTotalCountHeader: 2)
+                .GetResourceData(
+                    $"{EdFiApiConstants.DataManagementApiSegment}{DescriptorResource}",
+                    TestHelpers.GetGenericResourceFaker().Generate(2).ToArray());
+
+            var fakeTargetRequestHandler = TestHelpers.GetFakeBaselineTargetApiRequestHandler()
+                .PostResource(
+                    $"{EdFiApiConstants.DataManagementApiSegment}{DescriptorResource}",
+                    postResponseCode,
+                    postResponseCode);
+
+            var options = TestHelpers.GetOptions();
+            options.IncludeDescriptors = true;
+
+            TestHelpers.InitializeLogging();
+
+            var metadataCollector = new PublishingOperationMetadataCollector();
+            var runSummaryCollector = new RunSummaryCollector(metadataCollector);
+            var changeVersionProcessedWriter = A.Fake<IChangeVersionProcessedWriter>();
+
+            var changeProcessor = TestHelpers.CreateChangeProcessorWithDefaultDependencies(
+                options,
+                TestHelpers.GetSourceApiConnectionDetails(include: new[] { DescriptorResource }),
+                fakeSourceRequestHandler,
+                TestHelpers.GetTargetApiConnectionDetails(),
+                fakeTargetRequestHandler,
+                errorPublisher: new SerilogErrorPublisher(),
+                runSummaryCollector: runSummaryCollector,
+                metadataCollector: metadataCollector,
+                changeVersionProcessedWriter: changeVersionProcessedWriter);
+
+            try
+            {
+                await changeProcessor.ProcessChangesAsync(
+                    TestHelpers.CreateChangeProcessorConfiguration(options),
+                    CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                // The rejected case fails the run, which is not what this test is about
+            }
+
+            var resource = runSummaryCollector.GetSummary().Resources
+                .Single(r => r.Stage == PublishingStage.Upserts && r.ResourcePath == DescriptorResource);
+
+            resource.AttemptedItemCount.ShouldBe(2);
+            resource.PublishedItemCount.ShouldBe(expectPublished ? 2 : 0);
+            resource.UnresolvedItemCount.ShouldBe(0);
+
+            // The rejected case is the positive control: the same harness does withhold the change version
+            // when documents really are missing from the target
+            A.CallTo(() => changeVersionProcessedWriter.SetProcessedChangeVersionAsync(
+                    A<string>.Ignored,
+                    A<string>.Ignored,
+                    A<long>.Ignored,
+                    A<IConfigurationSection>.Ignored))
+                .MustHaveHappened(expectPublished ? 1 : 0, Times.Exactly);
+        }
+
         private static async Task<RunResult> RunStudentsWithRetryPassAsync(
             IFakeHttpRequestHandler fakeSourceRequestHandler,
             IFakeHttpRequestHandler fakeTargetRequestHandler)
