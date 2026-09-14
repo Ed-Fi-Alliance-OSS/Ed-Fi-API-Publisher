@@ -11,7 +11,7 @@
     <PackageReference Include="AWSSDK.CloudWatchLogs" Version="4.0.104" />
     <PackageReference Include="AWSSDK.Core" Version="4.0.102.1" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
-    <PackageReference Include="Serilog.Settings.Configuration" Version="9.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
     <PackageReference Include="Serilog.Sinks.AwsCloudWatch" Version="4.4.42" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.11" />
