@@ -135,6 +135,10 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
                 ResourceUrl = message.ResourceUrl,
                 HasAuthorizationRetryPipeline = message.HasAuthorizationRetryPipeline,
 
+                // Carried like every other producer does: without it the retry pass's documents are
+                // counted against the pass that read the resource first (see APIPUB-120)
+                IsAuthorizationRetryPass = message.IsAuthorizationRetryPass,
+
                 // Page-strategy specific context (cursor)
                 PageToken = pageToken,
                 PageSize = message.PageSize,
