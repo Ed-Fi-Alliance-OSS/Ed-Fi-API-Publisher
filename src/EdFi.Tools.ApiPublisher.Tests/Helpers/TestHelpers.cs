@@ -26,6 +26,7 @@ using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using FakeItEasy;
@@ -273,7 +274,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             IRunSummaryCollector runSummaryCollector = null,
             IPublishingOperationMetadataCollector metadataCollector = null,
             IChangeVersionProcessedWriter changeVersionProcessedWriter = null,
-            IRateLimiting<HttpResponseMessage> postResourceRateLimiter = null)
+            IRateLimiting<HttpResponseMessage> postResourceRateLimiter = null,
+            IPublishRunStateStore publishRunStateStore = null)
         {
             EdFiApiClient SourceApiClientFactory() =>
                 new EdFiApiClient(
@@ -300,6 +302,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             var resourceDependencyProvider = new ResourceDependencyProvider(resourceDependencyMetadataProvider);
             changeVersionProcessedWriter ??= A.Fake<IChangeVersionProcessedWriter>();
             errorPublisher ??= A.Fake<IErrorPublisher>();
+
+            // Faked by default so that a run under test neither reads nor writes run state on disk; a resume
+            // test supplies its own (see APIPUB-142).
+            publishRunStateStore ??= A.Fake<IPublishRunStateStore>();
 
             // Real collectors by default: the run summary is assembled from counts taken across the whole
             // pipeline, so a fake would report an empty summary for every run. A test that asserts on the
@@ -396,7 +402,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 publishErrorsBlocksFactory,
                 runSummaryCollector,
                 stageInitiators,
-                Array.Empty<IFinalizationActivity>());
+                Array.Empty<IFinalizationActivity>(),
+                publishRunStateStore);
         }
     }
 

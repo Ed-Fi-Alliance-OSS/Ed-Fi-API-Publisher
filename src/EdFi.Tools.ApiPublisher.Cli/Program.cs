@@ -312,6 +312,20 @@ namespace EdFi.Tools.ApiPublisher.Cli
                 validationErrors.Add($"{nameof(options.CursorPagingPartitionCount)} must be between 1 and {Options.MaxCursorPagingPartitionCount}.");
             }
 
+            // Rejected here rather than when the run state store is resolved, so that an unusable path is
+            // named as a configuration mistake before the run reaches the source API (see APIPUB-142).
+            if (!string.IsNullOrWhiteSpace(options.RunStatePath))
+            {
+                try
+                {
+                    Path.GetFullPath(options.RunStatePath.Trim());
+                }
+                catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+                {
+                    validationErrors.Add($"{nameof(options.RunStatePath)} value of '{options.RunStatePath}' is not a usable file or directory path: {ex.Message}");
+                }
+            }
+
             if (validationErrors.Any())
             {
                 throw new InvalidConfigurationException($"Options are invalid:{Environment.NewLine}{string.Join(Environment.NewLine, validationErrors)}");

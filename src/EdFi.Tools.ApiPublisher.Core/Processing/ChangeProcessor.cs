@@ -22,6 +22,7 @@ using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Newtonsoft.Json;
 using Polly.RateLimit;
@@ -54,6 +55,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly IRunSummaryCollector _runSummaryCollector;
         private readonly IIndex<PublishingStage, IPublishingStageInitiator> _publishingStageInitiatorByStage;
         private readonly IFinalizationActivity[] _finalizationActivities;
+        private readonly IPublishRunStateStore _publishRunStateStore;
         private string _lcvpTargetName;
 
         public ChangeProcessor(
@@ -69,7 +71,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             PublishErrorsBlocksFactory publishErrorsBlocksFactory,
             IRunSummaryCollector runSummaryCollector,
             IIndex<PublishingStage, IPublishingStageInitiator> publishingStageInitiatorByStage,
-            IFinalizationActivity[] finalizationActivities)
+            IFinalizationActivity[] finalizationActivities,
+            IPublishRunStateStore publishRunStateStore)
         {
             _resourceDependencyProvider = resourceDependencyProvider;
             _changeVersionProcessedWriter = changeVersionProcessedWriter;
@@ -84,6 +87,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _runSummaryCollector = runSummaryCollector;
             _publishingStageInitiatorByStage = publishingStageInitiatorByStage;
             _finalizationActivities = finalizationActivities;
+            _publishRunStateStore = publishRunStateStore;
         }
 
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
@@ -144,6 +148,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         .ConfigureAwait(false);
                 }
 
+                // Pick up where a previous run left off, if asked to and if what it left behind describes this
+                // same work (see APIPUB-142). Anything else starts from the beginning, with the reason logged.
+                var resumedRunState = await TryResumeRunStateAsync(options, cancellationToken).ConfigureAwait(false);
+
                 // Establish the change window we're processing, if any.
                 ChangeWindow changeWindow = null;
 
@@ -157,8 +165,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     {
                         _lcvpTargetName = $"{options.LastChangeVersionProcessedNamespace}:{_targetConnectionDetails.Name}";
                     }
-                    changeWindow = await EstablishChangeWindowAsync().ConfigureAwait(false);
+
+                    // A resumed run replays the window the original run pinned instead of recomputing it, so
+                    // that it reads the window that was in force when that run started rather than a wider one
+                    // ending at the source's current change version.
+                    changeWindow = resumedRunState is null
+                        ? await EstablishChangeWindowAsync().ConfigureAwait(false)
+                        : resumedRunState.GetPinnedChangeWindow();
                 }
+
+                // The state of the run in progress: the resumed one when resuming, a new one otherwise.
+                var runState = resumedRunState
+                    ?? PublishRunState.StartNew(_sourceConnectionDetails.Name, _targetConnectionDetails.Name, changeWindow);
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
@@ -177,6 +195,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     return;
                 }
+
+                // Written before the first document moves, and only once the run is certain to publish, so that
+                // a run which fails early is still resumable and a --whatIf run leaves nothing behind.
+                await _publishRunStateStore.SaveAsync(runState, cancellationToken).ConfigureAwait(false);
 
                 // Create the shared error processing block
                 var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) = _publishErrorsBlocksFactory.CreateBlocks(options);
@@ -253,6 +275,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     await UpdateChangeVersionAsync(configuration, changeWindow)
                         .ConfigureAwait(false);
+
+                    // The same condition governs the run state: there is nothing left to resume, and leaving it
+                    // behind would offer a resume of a run that lost nothing (see APIPUB-142).
+                    await _publishRunStateStore.DeleteAsync(cancellationToken).ConfigureAwait(false);
                 }
             }
             catch (RateLimitRejectedException ex)
@@ -711,6 +737,54 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     .OrderBy(e => e.Key)
                     .ToList();
             }
+        }
+
+        /// <summary>
+        /// Loads what a previous run left behind, when a resume was asked for and what was left behind
+        /// describes this same work. Returns null when the run should start from the beginning. Every refusal
+        /// is reported at Warning: an operator who asked to resume needs to be told they did not (APIPUB-142).
+        /// </summary>
+        private async Task<PublishRunState> TryResumeRunStateAsync(Options options, CancellationToken cancellationToken)
+        {
+            if (!options.ResumeLastRun)
+            {
+                return null;
+            }
+
+            var storedState = await _publishRunStateStore.TryLoadAsync(cancellationToken).ConfigureAwait(false);
+
+            if (storedState is null)
+            {
+                _logger.Warning(
+                    "A resume was requested but no run state was found at '{Location}'. The run will start from the beginning.",
+                    _publishRunStateStore.Location);
+
+                return null;
+            }
+
+            if (!storedState.Matches(_sourceConnectionDetails.Name, _targetConnectionDetails.Name, out string mismatchReason))
+            {
+                _logger.Warning(
+                    "The run state at '{Location}' cannot be resumed because {MismatchReason:l}. The run will start from the beginning.",
+                    _publishRunStateStore.Location, mismatchReason);
+
+                return null;
+            }
+
+            if (storedState.GetPinnedChangeWindow() is { } pinnedChangeWindow)
+            {
+                _logger.Information(
+                    "Resuming run '{RunId}' started at {StartedAt:u}, replaying its change window of {MinChangeVersion} to {MaxChangeVersion}.",
+                    storedState.RunId, storedState.StartedAt, pinnedChangeWindow.MinChangeVersion, pinnedChangeWindow.MaxChangeVersion);
+            }
+            else
+            {
+                _logger.Information(
+                    "Resuming run '{RunId}' started at {StartedAt:u}. It had no change window, so the whole source is in scope as it was for that run.",
+                    storedState.RunId, storedState.StartedAt);
+            }
+
+            return storedState;
         }
 
         private async Task<ChangeWindow> EstablishChangeWindowAsync()
