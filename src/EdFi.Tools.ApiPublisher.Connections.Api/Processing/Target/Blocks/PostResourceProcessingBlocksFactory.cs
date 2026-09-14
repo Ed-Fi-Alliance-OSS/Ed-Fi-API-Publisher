@@ -21,6 +21,7 @@ using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using Jering.Javascript.NodeJS;
 using Newtonsoft.Json.Linq;
 using Polly;
@@ -41,6 +42,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         private readonly ISourceCapabilities _sourceCapabilities;
         private readonly ISourceResourceItemProvider _sourceResourceItemProvider;
         private readonly IRunSummaryCollector _runSummaryCollector;
+        private readonly IPageCheckpointCoordinator _pageCheckpointCoordinator;
         private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
         // Dependency resources for which a deferred (Forbidden) dependency post has already been reported at Warning level
@@ -53,10 +55,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             ISourceCapabilities sourceCapabilities,
             ISourceResourceItemProvider sourceResourceItemProvider,
             IRunSummaryCollector runSummaryCollector,
+            IPageCheckpointCoordinator pageCheckpointCoordinator,
             IRateLimiting<HttpResponseMessage> rateLimiter = null
         )
         {
             _runSummaryCollector = runSummaryCollector;
+            _pageCheckpointCoordinator = pageCheckpointCoordinator;
             _nodeJsService = nodeJsService;
             _targetEdFiApiClientProvider = targetEdFiApiClientProvider;
             _sourceConnectionDetails = sourceConnectionDetails;
@@ -110,16 +114,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
             var authorizationRetryPipelineResourcePaths = createBlocksRequest.AuthorizationRetryPipelineResourcePaths;
 
             var postResourceBlock = new TransformManyBlock<PostItemMessage, ErrorItemMessage>(
-                async msg =>
-                    await HandlePostItemMessage(
-                        ignoredResourceByUrl,
-                        msg,
-                        options,
-                        javaScriptModuleFactory,
-                        targetEdFiApiClient,
-                        knownUnremediatedRequests,
-                        missingDependencyByResourcePath,
-                        authorizationRetryPipelineResourcePaths),
+                HandleAndReportOutcomeAsync,
                 new ExecutionDataflowBlockOptions
                 {
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelismForPostResourceItem,
@@ -132,6 +127,40 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 });
 
             return (postResourceBlock, postResourceBlock);
+
+            // Every terminal outcome for a document leaves through HandlePostItemMessage, so this is the one
+            // place a checkpoint can learn that the document is done with, and whether the target took it.
+            // A document whose handling threw is lost as surely as one the target rejected. One that never
+            // gets here at all leaves its page short and stops that partition's mark, which is exactly what
+            // a run killed mid-flight should do. See APIPUB-142.
+            async Task<IEnumerable<ErrorItemMessage>> HandleAndReportOutcomeAsync(PostItemMessage msg)
+            {
+                IEnumerable<ErrorItemMessage> errors = null;
+                bool handled = false;
+
+                try
+                {
+                    errors = await HandlePostItemMessage(
+                        ignoredResourceByUrl,
+                        msg,
+                        options,
+                        javaScriptModuleFactory,
+                        targetEdFiApiClient,
+                        knownUnremediatedRequests,
+                        missingDependencyByResourcePath,
+                        authorizationRetryPipelineResourcePaths);
+
+                    handled = true;
+
+                    return errors;
+                }
+                finally
+                {
+                    _pageCheckpointCoordinator.ItemCompleted(
+                        msg.SourcePageReference,
+                        lost: !handled || errors?.Any() == true);
+                }
+            }
         }
 
         private async Task<IEnumerable<ErrorItemMessage>> HandlePostItemMessage(

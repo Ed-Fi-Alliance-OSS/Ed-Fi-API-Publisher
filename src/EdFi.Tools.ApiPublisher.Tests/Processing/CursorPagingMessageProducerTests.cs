@@ -61,7 +61,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var clientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(ClientFactory));
 
-            return (new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider)), fake, partitionRequests);
+            return (new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider), NullPageCheckpointCoordinator.Instance), fake, partitionRequests);
         }
 
         private static StreamResourceMessage CreateResourceMessage(ChangeWindow changeWindow = null) =>
@@ -365,7 +365,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var clientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(ClientFactory));
             clientProvider.GetApiClient().HttpClient.Timeout = TimeSpan.FromMilliseconds(500);
 
-            var producer = new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider));
+            var producer = new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider), NullPageCheckpointCoordinator.Instance);
 
             using (TestCorrelator.CreateContext())
             {

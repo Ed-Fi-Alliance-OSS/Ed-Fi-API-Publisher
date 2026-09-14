@@ -56,6 +56,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly IIndex<PublishingStage, IPublishingStageInitiator> _publishingStageInitiatorByStage;
         private readonly IFinalizationActivity[] _finalizationActivities;
         private readonly IPublishRunStateStore _publishRunStateStore;
+        private readonly IPageCheckpointCoordinator _pageCheckpointCoordinator;
         private string _lcvpTargetName;
 
         public ChangeProcessor(
@@ -72,7 +73,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             IRunSummaryCollector runSummaryCollector,
             IIndex<PublishingStage, IPublishingStageInitiator> publishingStageInitiatorByStage,
             IFinalizationActivity[] finalizationActivities,
-            IPublishRunStateStore publishRunStateStore)
+            IPublishRunStateStore publishRunStateStore,
+            IPageCheckpointCoordinator pageCheckpointCoordinator)
         {
             _resourceDependencyProvider = resourceDependencyProvider;
             _changeVersionProcessedWriter = changeVersionProcessedWriter;
@@ -88,6 +90,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _publishingStageInitiatorByStage = publishingStageInitiatorByStage;
             _finalizationActivities = finalizationActivities;
             _publishRunStateStore = publishRunStateStore;
+            _pageCheckpointCoordinator = pageCheckpointCoordinator;
         }
 
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
@@ -200,6 +203,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // a run which fails early is still resumable and a --whatIf run leaves nothing behind.
                 await _publishRunStateStore.SaveAsync(runState, cancellationToken).ConfigureAwait(false);
 
+                // From here on the pipeline reports what it gets through, and the coordinator writes it
+                _pageCheckpointCoordinator.Begin(runState, cancellationToken);
+
                 // Create the shared error processing block
                 var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) = _publishErrorsBlocksFactory.CreateBlocks(options);
 
@@ -293,6 +299,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
             finally
             {
+                // Written from the finally for the same reason the summary is: a run that broke partway is
+                // exactly the run whose progress is worth keeping (see APIPUB-142).
+                await _pageCheckpointCoordinator.StopAsync().ConfigureAwait(false);
+
                 // Reported from the finally so that a run which failed still accounts for what it published:
                 // the outcome of a partial run is exactly when an operator needs the counts (APIPUB-120).
                 ReportRunSummary();

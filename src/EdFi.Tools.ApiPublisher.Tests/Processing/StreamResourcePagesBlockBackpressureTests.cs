@@ -132,7 +132,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             options.ProcessingBlockBoundedCapacity = 10;
             options.MaxDegreeOfParallelismForStreamResourcePages = 1;
 
-            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>()).CreateBlock<object>(options, new BufferBlock<ErrorItemMessage>());
+            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>(), NullPageCheckpointCoordinator.Instance).CreateBlock<object>(options, new BufferBlock<ErrorItemMessage>());
 
             block.Post(new StreamResourcePageMessage<object> { ResourceUrl = "/ed-fi/students", CancellationSource = new CancellationTokenSource() }).ShouldBeTrue();
 
@@ -162,7 +162,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             options.StreamingPageSize = 100;
             options.MaxDegreeOfParallelismForStreamResourcePages = 1;
 
-            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>()).CreateBlock<PageSizedMessage>(options, new BufferBlock<ErrorItemMessage>());
+            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>(), NullPageCheckpointCoordinator.Instance).CreateBlock<PageSizedMessage>(options, new BufferBlock<ErrorItemMessage>());
 
             block.Post(new StreamResourcePageMessage<PageSizedMessage> { ResourceUrl = "/ed-fi/students", CancellationSource = new CancellationTokenSource() }).ShouldBeTrue();
 
@@ -179,7 +179,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             options.ProcessingBlockBoundedCapacity = 10;
             options.MaxDegreeOfParallelismForStreamResourcePages = 1;
 
-            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>()).CreateBlock<object>(options, new BufferBlock<ErrorItemMessage>());
+            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>(), NullPageCheckpointCoordinator.Instance).CreateBlock<object>(options, new BufferBlock<ErrorItemMessage>());
             var cancellation = new CancellationTokenSource();
 
             block.Post(new StreamResourcePageMessage<object> { ResourceUrl = "/ed-fi/students", CancellationSource = cancellation }).ShouldBeTrue();
@@ -210,7 +210,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var options = TestHelpers.GetOptions();
             options.ProcessingBlockBoundedCapacity = -1;
 
-            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>()).CreateBlock<object>(options, new BufferBlock<ErrorItemMessage>());
+            var block = new StreamResourcePagesBlockFactory(handler, A.Fake<IRunSummaryCollector>(), NullPageCheckpointCoordinator.Instance).CreateBlock<object>(options, new BufferBlock<ErrorItemMessage>());
 
             block.Post(new StreamResourcePageMessage<object> { ResourceUrl = "/ed-fi/students", CancellationSource = new CancellationTokenSource() }).ShouldBeTrue();
 
@@ -226,7 +226,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var options = TestHelpers.GetOptions();
 
-            var block = new StreamResourcePagesBlockFactory(new ThrowingPageHandler(), A.Fake<IRunSummaryCollector>())
+            var block = new StreamResourcePagesBlockFactory(new ThrowingPageHandler(), A.Fake<IRunSummaryCollector>(), NullPageCheckpointCoordinator.Instance)
                 .CreateBlock<object>(options, new BufferBlock<ErrorItemMessage>());
 
             var sink = new ActionBlock<object>(_ => { });

@@ -64,7 +64,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 A.Fake<ISourceConnectionDetails>(),
                 A.Fake<ISourceCapabilities>(),
                 A.Fake<ISourceResourceItemProvider>(),
-                A.Fake<IRunSummaryCollector>());
+                A.Fake<IRunSummaryCollector>(),
+                NullPageCheckpointCoordinator.Instance);
         }
 
         [Test]

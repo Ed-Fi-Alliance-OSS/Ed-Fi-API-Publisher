@@ -59,6 +59,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
                 .As<IPublishRunStateStore>()
                 .SingleInstance();
 
+            // Shared across the whole run: it follows every partition of every resource at once
+            builder.RegisterType<PageCheckpointCoordinator>()
+                .As<IPageCheckpointCoordinator>()
+                .SingleInstance();
+
             builder.RegisterType<ChangeProcessor>();
 
             // Register fallback implementations

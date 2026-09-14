@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
 {
-    public class PostItemMessage
+    public class PostItemMessage : ISourcePagedProcessDataMessage
     {
         public string ResourceUrl { get; set; }
 

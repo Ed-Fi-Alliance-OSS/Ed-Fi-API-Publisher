@@ -12,6 +12,7 @@ using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Helpers;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using Newtonsoft.Json.Linq;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
@@ -36,6 +37,7 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
 
     private readonly ISourceEdFiApiClientProvider _sourceEdFiApiClientProvider;
     private readonly ISourceTotalCountProvider _sourceTotalCountProvider;
+    private readonly IPageCheckpointCoordinator _pageCheckpointCoordinator;
     private readonly IRateLimiting<HttpResponseMessage> _rateLimiter;
 
     private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiCursorPagingStreamResourcePageMessageProducer));
@@ -43,6 +45,7 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
     public EdFiApiCursorPagingStreamResourcePageMessageProducer(
         ISourceEdFiApiClientProvider sourceEdFiApiClientProvider,
         ISourceTotalCountProvider sourceTotalCountProvider,
+        IPageCheckpointCoordinator pageCheckpointCoordinator,
         IRateLimiting<HttpResponseMessage> rateLimiter = null)
     {
         _sourceEdFiApiClientProvider = sourceEdFiApiClientProvider
@@ -50,6 +53,9 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
 
         _sourceTotalCountProvider = sourceTotalCountProvider
             ?? throw new ArgumentNullException(nameof(sourceTotalCountProvider));
+
+        _pageCheckpointCoordinator = pageCheckpointCoordinator
+            ?? throw new ArgumentNullException(nameof(pageCheckpointCoordinator));
 
         _rateLimiter = rateLimiter;
     }
@@ -128,6 +134,10 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
                 message.ResourceUrl, pageTokens.Length, partitionCount);
         }
 
+        // Recorded before the first page is read, so that a resumed run walks the ranges this run was given
+        // instead of asking for partitions again (see APIPUB-142)
+        _pageCheckpointCoordinator.PartitionsProduced(message.ResourceUrl, message.IsAuthorizationRetryPass, pageTokens);
+
         var pageMessages = pageTokens
             .Select((pageToken, index) => new StreamResourcePageMessage<TProcessDataMessage>
             {
@@ -135,8 +145,9 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
                 ResourceUrl = message.ResourceUrl,
                 HasAuthorizationRetryPipeline = message.HasAuthorizationRetryPipeline,
 
-                // Carried like every other producer does: without it the retry pass's documents are
-                // counted against the pass that read the resource first (see APIPUB-120)
+                // Carried like every other producer does: without it the retry pass's documents are counted
+                // against the pass that read the resource first (see APIPUB-120), and its pages would share
+                // that pass's checkpoint
                 IsAuthorizationRetryPass = message.IsAuthorizationRetryPass,
 
                 // Page-strategy specific context (cursor)

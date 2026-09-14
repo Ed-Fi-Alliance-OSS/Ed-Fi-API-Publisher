@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 
 namespace EdFi.Tools.ApiPublisher.Core.Processing.RunState;
@@ -49,6 +50,19 @@ public class PublishRunState
     public long? MinChangeVersion { get; set; }
 
     public long? MaxChangeVersion { get; set; }
+
+    /// <summary>
+    /// How far each cursor-paged resource got, one entry per resource URL and pass.
+    /// </summary>
+    public List<PublishRunResourceState> Resources { get; set; } = new();
+
+    /// <summary>
+    /// Finds the recorded progress for one pass over one resource, or null when the run has none for it.
+    /// </summary>
+    public PublishRunResourceState FindResource(string resourceUrl, bool isAuthorizationRetryPass)
+        => Resources?.Find(
+            resource => string.Equals(resource.ResourceUrl, resourceUrl, StringComparison.OrdinalIgnoreCase)
+                && resource.IsAuthorizationRetryPass == isAuthorizationRetryPass);
 
     /// <summary>
     /// Starts the state for a new run. The change window may be null; see <see cref="MinChangeVersion" />.
