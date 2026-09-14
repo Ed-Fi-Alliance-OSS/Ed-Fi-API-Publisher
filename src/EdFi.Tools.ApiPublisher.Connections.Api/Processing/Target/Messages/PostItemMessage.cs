@@ -3,6 +3,7 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using Newtonsoft.Json.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
@@ -31,6 +32,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Messages
         /// non-object elements that produce no message), captured when the message is created from the page.
         /// </summary>
         public int? SourceItemIndex { get; set; }
+
+        /// <summary>
+        /// Identifies the cursor-paged source page this item came from, so that the run can tell when every
+        /// document of that page has reached the target and record the page as behind it (see APIPUB-142).
+        /// Null for an item read with offset paging, which is not checkpointed. One instance is shared by
+        /// every item of a page, like <see cref="SourcePage" />.
+        /// </summary>
+        public SourcePageReference SourcePageReference { get; set; }
 
         /// <summary>
         /// Indicates an authorization-retry ("#Retry") pipeline exists that will re-publish the entire resource

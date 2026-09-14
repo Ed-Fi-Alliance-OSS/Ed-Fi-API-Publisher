@@ -754,6 +754,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
         {
             // Describe the page once; every item message of the page shares the same string instance
             string sourcePage = message.DescribeSourcePage();
+
+            // Taken here too, and for the same reason: a partition walk moves the page message forward, so
+            // neither the locator nor the page's identity can be recovered from it later (see APIPUB-142)
+            var sourcePageReference = message.CaptureSourcePageReference();
+
             int sourceItemIndex = -1;
 
             // Iterate through the page of items, materializing one element at a time (see APIPUB-134)
@@ -768,7 +773,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     continue;
                 }
 
-                var itemMessage = CreateItemActionMessage(message, item, sourcePage, sourceItemIndex);
+                var itemMessage = CreateItemActionMessage(message, item, sourcePage, sourcePageReference, sourceItemIndex);
 
                 // Stop processing individual items if cancellation has been requested
                 if (message.CancellationSource.IsCancellationRequested)
@@ -788,7 +793,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 yield return itemMessage;
             }
 
-            PostItemMessage CreateItemActionMessage(StreamResourcePageMessage<PostItemMessage> msg, JObject j, string page, int index)
+            PostItemMessage CreateItemActionMessage(
+                StreamResourcePageMessage<PostItemMessage> msg,
+                JObject j,
+                string page,
+                SourcePageReference pageReference,
+                int index)
             {
                 return new PostItemMessage
                 {
@@ -798,6 +808,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                     IsAuthorizationRetryPass = msg.IsAuthorizationRetryPass,
                     CancellationToken = msg.CancellationSource.Token,
                     SourcePage = page,
+                    SourcePageReference = pageReference,
                     SourceItemIndex = index,
                 };
             }
