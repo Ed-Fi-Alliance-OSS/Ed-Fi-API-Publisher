@@ -119,6 +119,20 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                             + (Options.MaxQueuedErrorBatches * Math.Max(1, options.ErrorPublishingBatchSize)));
                 }
 
+                // Reported in both directions for the same reason as the bounding above: a capped run looks like a
+                // slow one, and support reading a log needs to be able to tell which it is without asking.
+                if (options.MaxConcurrentSourceRequests > 0)
+                {
+                    _logger.Information(
+                        "Source requests are capped at {MaxConcurrentSourceRequests} concurrent (maxConcurrentSourceRequests setting). Reads waiting for a slot are the cap working, not a hang.",
+                        options.MaxConcurrentSourceRequests);
+                }
+                else
+                {
+                    _logger.Information(
+                        "Source requests are not capped (maxConcurrentSourceRequests setting: 0); the parallelism settings alone govern how much the source API is asked to serve at once.");
+                }
+
                 // Check Ed-Fi API and Standard versions for compatibility
                 await _edFiVersionsChecker.CheckApiVersionsAsync(configuration).ConfigureAwait(false);
 

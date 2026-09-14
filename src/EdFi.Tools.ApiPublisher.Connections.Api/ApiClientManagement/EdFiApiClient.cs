@@ -28,9 +28,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             int bearerTokenRefreshMinutes,
             bool ignoreSslErrors,
             HttpClientHandler httpClientHandler = null,
-            TimeProvider timeProvider = null
+            TimeProvider timeProvider = null,
+            ApiThrottlingPolicy throttlingPolicy = null
         )
         {
+            throttlingPolicy ??= ApiThrottlingPolicy.None;
+
             ConnectionDetails =
                 apiConnectionDetails ?? throw new ArgumentNullException(nameof(apiConnectionDetails));
             _name = name;
@@ -75,15 +78,23 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     timeProvider
                 );
 
-                // The handler applies the token to every request and recovers from one the API rejects. It reads the
-                // token from the manager, which is why nothing here has to be published before it is fully built.
-                // Neither client disposes the transport; that is done here, once, after both are gone.
-                _httpClient = new HttpClient(
-                    new BearerTokenHandler(_httpClientHandler, _bearerTokenManager, name),
-                    disposeHandler: false
-                )
+                var pipeline = BuildRequestPipeline(
+                    _httpClientHandler,
+                    _bearerTokenManager,
+                    throttlingPolicy,
+                    name,
+                    timeProvider
+                );
+
+                _httpClient = new HttpClient(pipeline, disposeHandler: false)
                 {
-                    BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"))
+                    BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/")),
+
+                    // Stated rather than left to the HttpClient default, because the handlers above spend their
+                    // waits inside it and have to know what they are working against. The default value is the
+                    // same 100 seconds HttpClient applies on its own, so nothing about an ordinary request or the
+                    // body-read deadlines derived from this changes.
+                    Timeout = throttlingPolicy.RequestBudget
                 };
             }
             catch
@@ -95,6 +106,56 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
 
             ApiPublisherProductInfo.ApplyTo(_httpClient);
+        }
+
+        /// <summary>
+        /// Builds the request pipeline, outermost first: waiting out a rejected read, then the bearer token, then
+        /// the cap on concurrent requests, then the transport. Only the middle one is always present.
+        /// </summary>
+        /// <remarks>
+        /// The order is load bearing. Waiting out a 429 goes outermost so the wait is not spent holding a slot
+        /// other reads could be using, and so each replay is stamped with a token that is current. The cap goes
+        /// innermost so that it bounds what the transport actually has open, and so a request replayed after an
+        /// unauthorized response takes a slot of its own like any other request the API has to serve. What that
+        /// costs is that a request queued for a slot is already carrying the token it was stamped with on the way
+        /// down, so a long enough queue can send one that has since been rotated; that draws a 401 and is
+        /// recovered by the handler above it, at the price of one round trip.
+        /// </remarks>
+        private static HttpMessageHandler BuildRequestPipeline(
+            HttpClientHandler transport,
+            IBearerTokenProvider bearerTokenProvider,
+            ApiThrottlingPolicy throttlingPolicy,
+            string name,
+            TimeProvider timeProvider
+        )
+        {
+            if (throttlingPolicy.MaxConcurrentRequests < 0)
+            {
+                // Rejected rather than read as "no cap", so that a caller that meant to cap the API and got the
+                // sign wrong is told, instead of being left with an uncapped client that looks configured.
+                throw new ArgumentOutOfRangeException(
+                    nameof(throttlingPolicy),
+                    throttlingPolicy.MaxConcurrentRequests,
+                    "A negative cap on concurrent requests is not a way of asking for no cap. Use 0 to leave the API uncapped."
+                );
+            }
+
+            HttpMessageHandler pipeline =
+                throttlingPolicy.MaxConcurrentRequests > 0
+                    ? new ConcurrentRequestLimitingHandler(transport, throttlingPolicy, name)
+                    : transport;
+
+            // The handler applies the token to every request and recovers from one the API rejects. It reads the
+            // token from the provider, which is why nothing here has to be published before it is fully built.
+            // Neither client disposes the transport; that is done by the client, once, after both are gone.
+            pipeline = new BearerTokenHandler(pipeline, bearerTokenProvider, name);
+
+            if (throttlingPolicy.TooManyRequestsRetryAttempts > 0)
+            {
+                pipeline = new RetryAfterHandler(pipeline, throttlingPolicy, name, timeProvider);
+            }
+
+            return pipeline;
         }
 
         public HttpClient HttpClient => _httpClient;

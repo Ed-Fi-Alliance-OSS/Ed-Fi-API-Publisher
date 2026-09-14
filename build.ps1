@@ -190,10 +190,10 @@ function RunTests {
     )
 
     $testAssemblyPath = "$solutionRoot/$Filter/bin/$Configuration/"
-    $testAssemblies = Get-ChildItem -Path $testAssemblyPath -Filter "$Filter.dll" -Recurse
+    $testAssemblies = @(Get-ChildItem -Path $testAssemblyPath -Filter "$Filter.dll" -Recurse -ErrorAction SilentlyContinue)
 
-    if ($testAssemblies.Length -eq 0) {
-        Write-Host "no test assemblies found in $testAssemblyPath"
+    if ($testAssemblies.Count -eq 0) {
+        throw "No test assembly matching '$Filter.dll' was found under $testAssemblyPath, so nothing was tested."
     }
 
     $testAssemblies | ForEach-Object {
@@ -224,6 +224,9 @@ function Invoke-BuildAndPublish {
 }
 
 function Invoke-UnitTests {
+    # RunTests executes an assembly that has already been built, so without compiling here the command reports
+    # on whatever was last compiled -- or, on a clean checkout, on nothing at all.
+    Invoke-Step { Compile }
     Invoke-Step { UnitTests }
 }
 
