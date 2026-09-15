@@ -19,7 +19,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
     {
         public static readonly NullPageCheckpointCoordinator Instance = new();
 
-        public void Begin(PublishRunState runState, CancellationToken cancellationToken) { }
+        public void Begin(PublishRunState runState) { }
 
         public IReadOnlyList<string> TryGetResumeTokens(string resourceUrl, bool isAuthorizationRetryPass) => null;
 

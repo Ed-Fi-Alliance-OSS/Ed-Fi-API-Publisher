@@ -65,12 +65,6 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
         public Func<StreamResourcePageMessage<TProcessDataMessage>, TextReader, Action<int>, IEnumerable<TProcessDataMessage>> CreateProcessDataMessages { get; set; }
 
         /// <summary>
-        /// Describes where this page sits in the source (offset/limit or cursor page token, partition bounds and
-        /// change window) so that an item-level error can be traced back to the source request that produced it.
-        /// Contains paging metadata only -- never document content -- so it is safe to log and to include in
-        /// published error records.
-        /// </summary>
-        /// <summary>
         /// Takes the page's identity for checkpointing, or <b>null</b> when the page was not read with cursor
         /// paging and so has no partition or page token to record (see APIPUB-142). Taken at the same moment
         /// as <see cref="DescribeSourcePage" />, because a partition walk moves this message forward and
@@ -86,6 +80,12 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Messages
                     PageToken)
                 : null;
 
+        /// <summary>
+        /// Describes where this page sits in the source (offset/limit or cursor page token, partition bounds and
+        /// change window) so that an item-level error can be traced back to the source request that produced it.
+        /// Contains paging metadata only -- never document content -- so it is safe to log and to include in
+        /// published error records.
+        /// </summary>
         public string DescribeSourcePage()
         {
             var parts = new List<string>(6);

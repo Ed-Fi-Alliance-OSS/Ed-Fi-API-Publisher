@@ -10,6 +10,8 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
+using System.Linq;
 using NUnit.Framework;
 using Shouldly;
 using System;
@@ -32,6 +34,106 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private const int ItemsPerMessage = 1000;
 
         /// <summary>A handler that yields ItemsPerMessage items per message, counting how many it has produced.</summary>
+        /// <summary>
+        /// APIPUB-142: a page the walk abandons partway never settles, so a resumed run reads it again.
+        /// </summary>
+        /// <remarks>
+        /// Two mechanisms deliver this and either one suffices, which is why this test pins the outcome rather
+        /// than either mechanism: a document is counted as produced before it is handed over, so one the buffer
+        /// then refuses leaves the page permanently short of settling; and the page is marked fully read only
+        /// where the walk ran to its end. Moving that mark into the finally does not break the behaviour,
+        /// because the first mechanism still holds the page open.
+        /// </remarks>
+        [Test]
+        public async Task A_page_abandoned_partway_should_not_be_marked_as_fully_read()
+        {
+            var store = new RecordingRunStateStore();
+            var coordinator = new PageCheckpointCoordinator(store);
+            var runState = PublishRunState.StartNew("TestSource", "TestTarget", changeWindow: null);
+            coordinator.Begin(runState);
+
+            var page = new SourcePageReference("/ed-fi/students", false, PartitionIndex: 1, PartitionPageNumber: 1, "TOKEN-1");
+            var cancellationSource = new CancellationTokenSource();
+
+            var options = TestHelpers.GetOptions();
+            options.MaxDegreeOfParallelismForStreamResourcePages = 1;
+
+            var block = new StreamResourcePagesBlockFactory(
+                    new AbandoningPageHandler(page, cancellationSource),
+                    A.Fake<IRunSummaryCollector>(),
+                    coordinator)
+                .CreateBlock<PagedTestMessage>(options, new BufferBlock<ErrorItemMessage>());
+
+            var sink = new ActionBlock<PagedTestMessage>(_ => { });
+            block.LinkTo(sink, new DataflowLinkOptions { PropagateCompletion = true });
+
+            block.Post(
+                new StreamResourcePageMessage<PagedTestMessage>
+                {
+                    ResourceUrl = "/ed-fi/students",
+                    CancellationSource = cancellationSource,
+                }).ShouldBeTrue();
+
+            block.Complete();
+            await sink.Completion.WaitAsync(TimeSpan.FromSeconds(30));
+
+            // The one document that was handed over comes back cleanly. If the abandoned page had been marked
+            // as fully read, that alone would settle it and move the mark.
+            coordinator.ItemCompleted(page, lost: false);
+
+            await coordinator.StopAsync();
+
+            runState.FindResource("/ed-fi/students", isAuthorizationRetryPass: false)
+                ?.Partitions.SingleOrDefault()
+                ?.LastCompletedPageToken.ShouldBeNull();
+        }
+
+        private sealed class PagedTestMessage : ISourcePagedProcessDataMessage
+        {
+            public SourcePageReference SourcePageReference { get; init; }
+        }
+
+        /// <summary>
+        /// Hands over one document, then cancels the resource so the next hand-off is refused, which is what a
+        /// run stopped mid-page looks like from the block's side.
+        /// </summary>
+        private sealed class AbandoningPageHandler : IStreamResourcePageMessageHandler
+        {
+            private readonly SourcePageReference _page;
+            private readonly CancellationTokenSource _cancellationSource;
+
+            public AbandoningPageHandler(SourcePageReference page, CancellationTokenSource cancellationSource)
+            {
+                _page = page;
+                _cancellationSource = cancellationSource;
+            }
+
+            public async IAsyncEnumerable<TProcessDataMessage> HandleStreamResourcePageAsync<TProcessDataMessage>(
+                StreamResourcePageMessage<TProcessDataMessage> message,
+                Options options,
+                ITargetBlock<ErrorItemMessage> errorHandlingBlock)
+            {
+                await Task.Yield();
+
+                yield return (TProcessDataMessage)(object)new PagedTestMessage { SourcePageReference = _page };
+
+                _cancellationSource.Cancel();
+
+                yield return (TProcessDataMessage)(object)new PagedTestMessage { SourcePageReference = _page };
+            }
+        }
+
+        private sealed class RecordingRunStateStore : IPublishRunStateStore
+        {
+            public string Location => "(in memory)";
+
+            public Task<PublishRunState> TryLoadAsync(CancellationToken cancellationToken) => Task.FromResult<PublishRunState>(null);
+
+            public Task SaveAsync(PublishRunState state, CancellationToken cancellationToken) => Task.CompletedTask;
+
+            public Task DeleteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
         private sealed class CountingPageHandler : IStreamResourcePageMessageHandler
         {
             private int _produced;

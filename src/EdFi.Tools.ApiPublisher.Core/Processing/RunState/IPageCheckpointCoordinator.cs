@@ -36,7 +36,7 @@ public interface IPageCheckpointCoordinator
     /// is rebuilt from what the coordinator holds every time it is written. A run that is not resuming
     /// arrives here with nothing recorded.
     /// </remarks>
-    void Begin(PublishRunState runState, CancellationToken cancellationToken);
+    void Begin(PublishRunState runState);
 
     /// <summary>
     /// Gets the page tokens a resumed run should walk for one pass over one resource, in partition order, or

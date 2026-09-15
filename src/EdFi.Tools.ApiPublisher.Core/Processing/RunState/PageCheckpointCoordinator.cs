@@ -51,14 +51,15 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
         _publishRunStateStore = publishRunStateStore ?? throw new ArgumentNullException(nameof(publishRunStateStore));
     }
 
-    public void Begin(PublishRunState runState, CancellationToken cancellationToken)
+    public void Begin(PublishRunState runState)
     {
         ArgumentNullException.ThrowIfNull(runState);
 
         _runState = runState;
 
-        // Not linked to the run's token: a cancelled run is exactly when the progress it reached is worth
-        // writing, so the final write in StopAsync has to outlive the cancellation
+        // Owns its own token rather than taking the run's on purpose: a cancelled run is exactly the run whose
+        // progress is worth writing, so the final write in StopAsync has to outlive the cancellation. Do not
+        // link this to the run's token.
         _flushCancellation = new CancellationTokenSource();
 
         _flushLoop = RunFlushLoopAsync(_flushCancellation.Token);

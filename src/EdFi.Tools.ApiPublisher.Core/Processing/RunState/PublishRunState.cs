@@ -106,6 +106,28 @@ public class PublishRunState
     /// </summary>
     public bool Matches(string sourceConnectionName, string targetConnectionName, out string mismatchReason)
     {
+        // Connection names are what tell one publication from another here, and they are optional: a run
+        // configured with a URL, key and secret alone has none. Two of those compare equal to each other, so
+        // without this the state of a publication between one pair of APIs would be accepted by a run between
+        // a different pair, and its page tokens replayed against a source that never issued them. A run with
+        // no names also has no change window to pin, since only named connections get one, so there is
+        // nothing left to identify the work by. Refuse rather than guess.
+        if (string.IsNullOrWhiteSpace(SourceConnectionName) || string.IsNullOrWhiteSpace(TargetConnectionName))
+        {
+            mismatchReason =
+                "it was written by a run whose source and target were not named, so there is nothing to tell it apart from a run between different APIs. Name both connections (--sourceName and --targetName) for a run to be resumable";
+
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(sourceConnectionName) || string.IsNullOrWhiteSpace(targetConnectionName))
+        {
+            mismatchReason =
+                "this run's source and target are not named, so it cannot be matched against recorded state. Name both connections (--sourceName and --targetName) for a run to be resumable";
+
+            return false;
+        }
+
         if (!string.Equals(SourceConnectionName, sourceConnectionName, StringComparison.Ordinal))
         {
             mismatchReason =
@@ -134,7 +156,7 @@ public class PublishRunState
 
         return true;
 
-        static string Describe(string value) => string.IsNullOrEmpty(value) ? "(unnamed)" : value;
+        static string Describe(string value) => value;
     }
 
     private static string CurrentPublisherVersion { get; } =

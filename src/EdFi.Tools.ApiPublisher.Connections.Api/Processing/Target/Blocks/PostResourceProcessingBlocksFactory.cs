@@ -156,9 +156,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                 }
                 finally
                 {
+                    // Cancellation is counted as loss: HandlePostItemMessage abandons a cancelled POST and
+                    // returns no errors, which would otherwise read as a clean outcome and let the page settle
+                    // on documents the target never received.
                     _pageCheckpointCoordinator.ItemCompleted(
                         msg.SourcePageReference,
-                        lost: !handled || errors?.Any() == true);
+                        lost: !handled || errors?.Any() == true || msg.CancellationToken.IsCancellationRequested);
                 }
             }
         }

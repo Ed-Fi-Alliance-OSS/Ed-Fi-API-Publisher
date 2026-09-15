@@ -113,7 +113,9 @@ A run reading a cursor-paged source records how far each partition got, so a run
 - The resumed run replays the change window the original run recorded rather than computing a new one, so it reads the window that was in force when that run started. Anything written to the source since then is above that window and is picked up by the next run instead.
 - Only cursor-paged main resources are resumed. Offset-paged reads, which includes every `/deletes` and `/keyChanges`, have no partition or page token to record and are read in full.
 - `--runStatePath=PATH` says where the run state is kept; a directory takes the default file name inside it, which is what a containerised run wants when the path is a mounted volume. Without it the file sits in the working directory.
-- Resume is refused, with a `WARN` line and a normal run from the beginning, when the state was written for a different source connection, a different target connection or a different publisher version. The state is removed by a run that finishes without losing a document.
+- **Both connections must be named** (`--sourceName` and `--targetName`) for a run to be resumable. Connection names are what tell one publication's state from another's, and a run configured with only a URL, key and secret has none; two such runs would be indistinguishable, so a resume between them is refused rather than guessed at.
+- Resume is refused, with a `WARN` line and a normal run from the beginning, when the state was written for a different source connection, a different target connection or a different publisher version, or when either run's connections are unnamed. The state is removed by a run that finishes without losing a document.
+- The log names the state file when the run starts, and again on the way out of a run that did not finish cleanly, so the file can be found without knowing where the run was launched from.
 
 ## Known Limitations for Ed-Fi ODS / API 5.1 through 5.3
 

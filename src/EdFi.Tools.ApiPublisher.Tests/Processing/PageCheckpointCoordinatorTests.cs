@@ -176,7 +176,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     Partitions = { new PublishRunPartitionState { PartitionIndex = 1, StartingPageToken = "f1" } },
                 });
 
-            coordinator.Begin(runState, CancellationToken.None);
+            coordinator.Begin(runState);
 
             // The run ends without reaching either resource
             await coordinator.StopAsync();
@@ -212,7 +212,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var coordinator = new PageCheckpointCoordinator(store);
             var runState = PublishRunState.StartNew("TestSource", "TestTarget", changeWindow: null);
 
-            coordinator.Begin(runState, CancellationToken.None);
+            coordinator.Begin(runState);
 
             return (coordinator, store, runState);
         }

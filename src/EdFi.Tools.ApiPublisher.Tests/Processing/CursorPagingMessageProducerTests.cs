@@ -65,7 +65,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             return (new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider), pageCheckpointCoordinator ?? NullPageCheckpointCoordinator.Instance), fake, partitionRequests);
         }
 
-        private static StreamResourceMessage CreateResourceMessage(ChangeWindow changeWindow = null) =>
+        private static StreamResourceMessage CreateResourceMessage(
+            ChangeWindow changeWindow = null,
+            bool isAuthorizationRetryPass = false) =>
             new StreamResourceMessage
             {
                 ResourceUrl = Students,
@@ -73,6 +75,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 ChangeWindow = changeWindow,
                 CancellationSource = new CancellationTokenSource(),
                 HasAuthorizationRetryPipeline = true,
+                IsAuthorizationRetryPass = isAuthorizationRetryPass,
             };
 
         [Test]
@@ -124,7 +127,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     },
                 });
 
-            coordinator.Begin(runState, CancellationToken.None);
+            coordinator.Begin(runState);
 
             var (producer, _, requests) = Create(
                 () => throw new InvalidOperationException("A resumed resource must not request partitions."),
@@ -157,7 +160,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     Partitions = { new PublishRunPartitionState { PartitionIndex = 1, StartingPageToken = "other" } },
                 });
 
-            coordinator.Begin(runState, CancellationToken.None);
+            coordinator.Begin(runState);
 
             var (producer, _, requests) = Create(
                 () => FakeResponse.OK(new { pageTokens = new[] { "t1", "t2" } }),
@@ -185,6 +188,30 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             public Task SaveAsync(PublishRunState state, CancellationToken cancellationToken) => Task.CompletedTask;
 
             public Task DeleteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// A resource with an authorization retry pipeline is read twice under the same URL. The flag is what
+        /// the run summary counts the two passes by (APIPUB-120) and what keeps their resume positions apart
+        /// (APIPUB-142); the cursor producer was the only producer not carrying it.
+        /// </summary>
+        [Test]
+        public async Task Page_messages_should_carry_the_resource_message_authorization_retry_pass_flag()
+        {
+            var options = TestHelpers.GetOptions();
+            options.CursorPagingPartitionCount = 2;
+
+            foreach (bool isRetryPass in new[] { true, false })
+            {
+                var (producer, _, _) = Create(() => FakeResponse.OK(new { pageTokens = new[] { "t1", "t2" } }));
+
+                var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                    CreateResourceMessage(isAuthorizationRetryPass: isRetryPass),
+                    options, new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+                success.ShouldBeTrue();
+                messages.ShouldAllBe(m => m.IsAuthorizationRetryPass == isRetryPass);
+            }
         }
 
         [Test]

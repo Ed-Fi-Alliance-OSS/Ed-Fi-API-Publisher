@@ -203,8 +203,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // a run which fails early is still resumable and a --whatIf run leaves nothing behind.
                 await _publishRunStateStore.SaveAsync(runState, cancellationToken).ConfigureAwait(false);
 
+                // Said once, up front: a run that dies later cannot report where it left its state, and an
+                // operator reading the log afterwards has no other way to find it (see APIPUB-142).
+                _logger.Information(
+                    "Run state for this run is kept at '{Location}'. A run that does not finish cleanly can be continued from it with --resumeLastRun=true.",
+                    _publishRunStateStore.Location);
+
                 // From here on the pipeline reports what it gets through, and the coordinator writes it
-                _pageCheckpointCoordinator.Begin(runState, cancellationToken);
+                _pageCheckpointCoordinator.Begin(runState);
 
                 // Create the shared error processing block
                 var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) = _publishErrorsBlocksFactory.CreateBlocks(options);
@@ -289,6 +295,14 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     // The same condition governs the run state: there is nothing left to resume, and leaving it
                     // behind would offer a resume of a run that lost nothing (see APIPUB-142).
                     await _publishRunStateStore.DeleteAsync(cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    // The run the operator reads about the next morning. Naming the file and the flag here is
+                    // what makes the state discoverable at all.
+                    _logger.Information(
+                        "This run did not finish without losing documents, so its state has been kept at '{Location}'. Re-run with --resumeLastRun=true to continue from where it got to.",
+                        _publishRunStateStore.Location);
                 }
             }
             catch (RateLimitRejectedException ex)
