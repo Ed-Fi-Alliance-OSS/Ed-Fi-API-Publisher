@@ -179,7 +179,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 // The state of the run in progress: the resumed one when resuming, a new one otherwise.
                 var runState = resumedRunState
-                    ?? PublishRunState.StartNew(_sourceConnectionDetails.Name, _targetConnectionDetails.Name, changeWindow);
+                    ?? PublishRunState.StartNew(
+                        _sourceConnectionDetails.Name,
+                        _targetConnectionDetails.Name,
+                        changeWindow,
+                        options.LastChangeVersionProcessedNamespace);
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
@@ -289,12 +293,15 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 // when the loss was tolerated by configuration (see APIPUB-120).
                 if (!RunLostDocuments())
                 {
+                    // The same condition governs the run state: there is nothing left to resume, and leaving it
+                    // behind would offer a resume of a run that lost nothing (see APIPUB-142). Removed before
+                    // the change version advances so that a process dying between the two leaves the harmless
+                    // half done: the next run recomputes its window from the change version it still has,
+                    // rather than being offered a resume of a window that was already committed.
+                    await _publishRunStateStore.DeleteAsync(cancellationToken).ConfigureAwait(false);
+
                     await UpdateChangeVersionAsync(configuration, changeWindow)
                         .ConfigureAwait(false);
-
-                    // The same condition governs the run state: there is nothing left to resume, and leaving it
-                    // behind would offer a resume of a run that lost nothing (see APIPUB-142).
-                    await _publishRunStateStore.DeleteAsync(cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
@@ -790,7 +797,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 return null;
             }
 
-            if (!storedState.Matches(_sourceConnectionDetails.Name, _targetConnectionDetails.Name, out string mismatchReason))
+            if (!storedState.Matches(
+                    _sourceConnectionDetails.Name,
+                    _targetConnectionDetails.Name,
+                    options.LastChangeVersionProcessedNamespace,
+                    out string mismatchReason))
             {
                 _logger.Warning(
                     "The run state at '{Location}' cannot be resumed because {MismatchReason:l}. The run will start from the beginning.",
@@ -810,7 +821,7 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 .ToArray();
 
             _logger.Information(
-                "Resuming: {ResourceCount} resource(s) carry recorded positions, {ConfirmedPartitionCount} of {PartitionCount} partition(s) have a confirmed page that will not be read again (the furthest at page {FurthestPage}). Everything else is read in full.",
+                "Resuming: {ResourceCount} resource(s) carry recorded positions, {ConfirmedPartitionCount} of {PartitionCount} partition(s) restart at a confirmed page (the furthest at page {FurthestPage}); that page is read a second time and the pages before it are not. Everything else is read in full.",
                 storedState.Resources.Count,
                 confirmedPartitions.Length,
                 recordedPartitions.Length,

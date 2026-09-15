@@ -47,23 +47,38 @@ public class FilePublishRunStateStore : IPublishRunStateStore
 
         Location = ResolvePath(
             options.RunStatePath,
-            BuildDefaultFileName(sourceConnectionDetails?.Name, targetConnectionDetails?.Name));
+            BuildDefaultFileName(
+                sourceConnectionDetails?.Name,
+                targetConnectionDetails?.Name,
+                options.LastChangeVersionProcessedNamespace));
     }
 
     /// <summary>
     /// Names the default file after the publication it records, so that publications sharing a working
     /// directory keep their own progress. Running several at once is an ordinary shape for this tool, and one
-    /// file for all of them means the last writer wins and the others silently lose their resume. Falls back
-    /// to the bare name when the connections are unnamed, which is a run that cannot be resumed anyway.
+    /// file for all of them means the last writer wins and the others silently lose their resume. The change
+    /// version namespace is part of that name because two publications can otherwise share a source and a
+    /// target and be told apart only by it. Falls back to the bare name when the connections are unnamed,
+    /// which is a run that cannot be resumed anyway.
     /// </summary>
-    public static string BuildDefaultFileName(string sourceConnectionName, string targetConnectionName)
+    public static string BuildDefaultFileName(
+        string sourceConnectionName,
+        string targetConnectionName,
+        string lastChangeVersionProcessedNamespace = null)
     {
         if (string.IsNullOrWhiteSpace(sourceConnectionName) || string.IsNullOrWhiteSpace(targetConnectionName))
         {
             return DefaultFileNamePrefix + DefaultFileExtension;
         }
 
-        return $"{DefaultFileNamePrefix}-{MakeFileNameSafe(sourceConnectionName)}-to-{MakeFileNameSafe(targetConnectionName)}{DefaultFileExtension}";
+        string publication = $"{MakeFileNameSafe(sourceConnectionName)}-to-{MakeFileNameSafe(targetConnectionName)}";
+
+        if (!string.IsNullOrWhiteSpace(lastChangeVersionProcessedNamespace))
+        {
+            publication = $"{MakeFileNameSafe(lastChangeVersionProcessedNamespace)}-{publication}";
+        }
+
+        return $"{DefaultFileNamePrefix}-{publication}{DefaultFileExtension}";
     }
 
     private static string MakeFileNameSafe(string value)
@@ -99,6 +114,17 @@ public class FilePublishRunStateStore : IPublishRunStateStore
             if (state is null)
             {
                 _logger.Warning("Run state file '{Location}' is empty. The run will start from the beginning.", Location);
+
+                return null;
+            }
+
+            if (!IsUsable(state, out string problem))
+            {
+                _logger.Warning(
+                    "Run state file '{Location}' cannot be used because {Problem:l}. The run will start from the beginning.",
+                    Location, problem);
+
+                return null;
             }
 
             return state;
@@ -167,6 +193,52 @@ public class FilePublishRunStateStore : IPublishRunStateStore
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Whether the state is something a run can act on. Reading it back without error is not the same thing:
+    /// a file edited by hand, or written by something other than this publisher, can be valid JSON and still
+    /// leave out a list the resume walks or half of the window it replays. Checked here so that such a file
+    /// costs the run its resume and not the run, which is what this store promises everywhere else.
+    /// </summary>
+    private static bool IsUsable(PublishRunState state, out string problem)
+    {
+        if (state.Resources is null)
+        {
+            problem = "it records no list of resources at all";
+
+            return false;
+        }
+
+        foreach (var resource in state.Resources)
+        {
+            if (resource?.Partitions is null || resource.Partitions.Exists(partition => partition is null))
+            {
+                problem = "one of its resources is missing the partitions it recorded";
+
+                return false;
+            }
+        }
+
+        // Both ends are written together or not at all, so one of them alone is an edited file. Taken as it
+        // stands it would read as no window, turning a resumed incremental publish into a full one in silence.
+        if (state.MinChangeVersion.HasValue != state.MaxChangeVersion.HasValue)
+        {
+            problem = "it records only one end of a change window, so the window it pinned cannot be replayed";
+
+            return false;
+        }
+
+        if (state.MinChangeVersion > state.MaxChangeVersion)
+        {
+            problem = "the change window it pinned ends before it begins";
+
+            return false;
+        }
+
+        problem = null;
+
+        return true;
     }
 
     /// <summary>

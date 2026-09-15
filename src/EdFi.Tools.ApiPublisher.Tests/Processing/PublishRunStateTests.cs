@@ -21,7 +21,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var state = PublishRunState.StartNew("SourceOds", "TargetOds", changeWindow: null);
 
-            state.Matches("SourceOds", "TargetOds", out string reason).ShouldBeTrue();
+            state.Matches("SourceOds", "TargetOds", null, out string reason).ShouldBeTrue();
             reason.ShouldBeNull();
         }
 
@@ -30,7 +30,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var state = PublishRunState.StartNew("SourceOds", "TargetOds", changeWindow: null);
 
-            state.Matches("AnotherSourceOds", "TargetOds", out string reason).ShouldBeFalse();
+            state.Matches("AnotherSourceOds", "TargetOds", null, out string reason).ShouldBeFalse();
             reason.ShouldContain("SourceOds");
             reason.ShouldContain("AnotherSourceOds");
         }
@@ -40,7 +40,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var state = PublishRunState.StartNew("SourceOds", "TargetOds", changeWindow: null);
 
-            state.Matches("SourceOds", "AnotherTargetOds", out string reason).ShouldBeFalse();
+            state.Matches("SourceOds", "AnotherTargetOds", null, out string reason).ShouldBeFalse();
             reason.ShouldContain("TargetOds");
             reason.ShouldContain("AnotherTargetOds");
         }
@@ -55,7 +55,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var state = PublishRunState.StartNew(sourceConnectionName: null, targetConnectionName: null, changeWindow: null);
 
-            state.Matches(null, null, out string reason).ShouldBeFalse();
+            state.Matches(null, null, null, out string reason).ShouldBeFalse();
             reason.ShouldContain("not named");
         }
 
@@ -64,7 +64,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var state = PublishRunState.StartNew("SourceOds", "TargetOds", changeWindow: null);
 
-            state.Matches(null, null, out string reason).ShouldBeFalse();
+            state.Matches(null, null, null, out string reason).ShouldBeFalse();
             reason.ShouldContain("not named");
         }
 
@@ -73,7 +73,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             var state = PublishRunState.StartNew("   ", "TargetOds", changeWindow: null);
 
-            state.Matches("   ", "TargetOds", out string reason).ShouldBeFalse();
+            state.Matches("   ", "TargetOds", null, out string reason).ShouldBeFalse();
             reason.ShouldContain("not named");
         }
 
@@ -85,8 +85,54 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // What an upgrade between the failed run and the resume leaves behind
             state.PublisherVersion = "0.0.1-from-an-older-build";
 
-            state.Matches("SourceOds", "TargetOds", out string reason).ShouldBeFalse();
+            state.Matches("SourceOds", "TargetOds", null, out string reason).ShouldBeFalse();
             reason.ShouldContain("0.0.1-from-an-older-build");
+        }
+
+        /// <summary>
+        /// --lastChangeVersionProcessedNamespace is what separates two publications that share a named source
+        /// and a named target, each with its own last change version processed. One taking the other's state
+        /// would replay a window it never asked for and then advance its own change version past everything
+        /// in between.
+        /// </summary>
+        [Test]
+        public void State_for_another_change_version_namespace_is_refused()
+        {
+            var state = PublishRunState.StartNew(
+                "SourceOds",
+                "TargetOds",
+                changeWindow: null,
+                lastChangeVersionProcessedNamespace: "assessments");
+
+            state.Matches("SourceOds", "TargetOds", "enrollment", out string reason).ShouldBeFalse();
+            reason.ShouldContain("assessments");
+            reason.ShouldContain("enrollment");
+        }
+
+        [Test]
+        public void State_written_under_a_namespace_is_refused_a_run_that_has_none()
+        {
+            var state = PublishRunState.StartNew(
+                "SourceOds",
+                "TargetOds",
+                changeWindow: null,
+                lastChangeVersionProcessedNamespace: "assessments");
+
+            state.Matches("SourceOds", "TargetOds", null, out string reason).ShouldBeFalse();
+            reason.ShouldContain("assessments");
+        }
+
+        [Test]
+        public void State_for_the_same_change_version_namespace_is_resumable()
+        {
+            var state = PublishRunState.StartNew(
+                "SourceOds",
+                "TargetOds",
+                changeWindow: null,
+                lastChangeVersionProcessedNamespace: "assessments");
+
+            state.Matches("SourceOds", "TargetOds", "assessments", out string reason).ShouldBeTrue();
+            reason.ShouldBeNull();
         }
     }
 }

@@ -210,9 +210,64 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .ShouldBe(FilePublishRunStateStore.DefaultFileNamePrefix + ".json");
         }
 
-        private static FilePublishRunStateStore StoreAt(string path, string sourceName = "SourceOds", string targetName = "TargetOds")
+        /// <summary>
+        /// --lastChangeVersionProcessedNamespace exists so two publications can share a source and a target,
+        /// so it has to reach the file name as well: without it they share one file and each destroys the
+        /// other's resume.
+        /// </summary>
+        [Test]
+        public void Two_namespaces_over_the_same_connections_should_get_their_own_state_files()
+        {
+            string first = StoreAt(_directory, changeVersionNamespace: "assessments").Location;
+            string second = StoreAt(_directory, changeVersionNamespace: "enrollment").Location;
+
+            first.ShouldNotBe(second);
+            Path.GetFileName(first).ShouldContain("assessments");
+            StoreAt(_directory).Location.ShouldNotBe(first);
+        }
+
+        [Test]
+        public async Task State_that_records_no_resources_should_cost_the_resume_and_not_the_run()
+        {
+            string path = Path.Combine(_directory, "edited.json");
+
+            // Valid JSON, matching identity, and a list the resume walks removed by hand
+            await File.WriteAllTextAsync(path, "{\"runId\":\"abc\",\"resources\":null}");
+
+            (await StoreAt(path).TryLoadAsync(CancellationToken.None)).ShouldBeNull();
+        }
+
+        [Test]
+        public async Task State_with_half_a_change_window_should_cost_the_resume_and_not_the_run()
+        {
+            string path = Path.Combine(_directory, "half-window.json");
+
+            // Taken as it stands this reads as no window at all, turning a resumed incremental publish into a
+            // full one without a word
+            await File.WriteAllTextAsync(path, "{\"runId\":\"abc\",\"minChangeVersion\":10,\"resources\":[]}");
+
+            (await StoreAt(path).TryLoadAsync(CancellationToken.None)).ShouldBeNull();
+        }
+
+        [Test]
+        public async Task State_with_a_partition_list_removed_should_cost_the_resume_and_not_the_run()
+        {
+            string path = Path.Combine(_directory, "no-partitions.json");
+
+            await File.WriteAllTextAsync(
+                path,
+                "{\"runId\":\"abc\",\"resources\":[{\"resourceUrl\":\"/ed-fi/students\",\"partitions\":null}]}");
+
+            (await StoreAt(path).TryLoadAsync(CancellationToken.None)).ShouldBeNull();
+        }
+
+        private static FilePublishRunStateStore StoreAt(
+            string path,
+            string sourceName = "SourceOds",
+            string targetName = "TargetOds",
+            string changeVersionNamespace = null)
             => new(
-                new Options { RunStatePath = path },
+                new Options { RunStatePath = path, LastChangeVersionProcessedNamespace = changeVersionNamespace },
                 new ApiConnectionDetailsStub { Name = sourceName },
                 new ApiConnectionDetailsStub { Name = targetName });
 

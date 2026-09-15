@@ -38,6 +38,14 @@ public class PublishRunState
 
     public string TargetConnectionName { get; set; }
 
+    /// <summary>
+    /// The change version namespace the run published under, null when it had none. Two publications can
+    /// share a named source and a named target and be told apart only by this
+    /// (<c>--lastChangeVersionProcessedNamespace</c>), each keeping its own last change version processed,
+    /// so it is part of what identifies the work.
+    /// </summary>
+    public string LastChangeVersionProcessedNamespace { get; set; }
+
     public DateTime StartedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
@@ -70,7 +78,8 @@ public class PublishRunState
     public static PublishRunState StartNew(
         string sourceConnectionName,
         string targetConnectionName,
-        ChangeWindow changeWindow)
+        ChangeWindow changeWindow,
+        string lastChangeVersionProcessedNamespace = null)
     {
         var now = DateTime.UtcNow;
 
@@ -80,6 +89,7 @@ public class PublishRunState
             PublisherVersion = CurrentPublisherVersion,
             SourceConnectionName = sourceConnectionName,
             TargetConnectionName = targetConnectionName,
+            LastChangeVersionProcessedNamespace = lastChangeVersionProcessedNamespace,
             StartedAt = now,
             UpdatedAt = now,
             MinChangeVersion = changeWindow?.MinChangeVersion,
@@ -101,10 +111,19 @@ public class PublishRunState
 
     /// <summary>
     /// Whether the state describes the same work this run is about to do. A resume against a different
-    /// source, a different target or a different publisher build starts over instead, because nothing
-    /// recorded here would mean the same thing.
+    /// source, a different target, a different change version namespace or a different publisher build
+    /// starts over instead, because nothing recorded here would mean the same thing.
     /// </summary>
-    public bool Matches(string sourceConnectionName, string targetConnectionName, out string mismatchReason)
+    /// <remarks>
+    /// The namespace is a required argument rather than an optional one, unlike on <see cref="StartNew" />,
+    /// because the two directions fail differently: a caller that omits it when writing state leaves a run
+    /// unable to resume, and a caller that omits it when matching lets one publication resume another.
+    /// </remarks>
+    public bool Matches(
+        string sourceConnectionName,
+        string targetConnectionName,
+        string lastChangeVersionProcessedNamespace,
+        out string mismatchReason)
     {
         // Connection names are what tell one publication from another here, and they are optional: a run
         // configured with a URL, key and secret alone has none. Two of those compare equal to each other, so
@@ -144,6 +163,22 @@ public class PublishRunState
             return false;
         }
 
+        // Two publications can share a named source and a named target and differ only by the change version
+        // namespace, which is what --lastChangeVersionProcessedNamespace is for: each keeps its own last
+        // change version processed. Taking one publication's state for the other would replay a window this
+        // one never asked for and then advance this one's last change version to the end of it, leaving
+        // everything between the two positions unpublished and nothing in the log saying so.
+        if (!string.Equals(
+                NormalizeNamespace(LastChangeVersionProcessedNamespace),
+                NormalizeNamespace(lastChangeVersionProcessedNamespace),
+                StringComparison.Ordinal))
+        {
+            mismatchReason =
+                $"it was written for change version namespace {DescribeNamespace(LastChangeVersionProcessedNamespace)} and this run publishes under {DescribeNamespace(lastChangeVersionProcessedNamespace)}";
+
+            return false;
+        }
+
         if (!string.Equals(PublisherVersion, CurrentPublisherVersion, StringComparison.Ordinal))
         {
             mismatchReason =
@@ -157,6 +192,11 @@ public class PublishRunState
         return true;
 
         static string Describe(string value) => value;
+
+        static string NormalizeNamespace(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+
+        static string DescribeNamespace(string value)
+            => string.IsNullOrWhiteSpace(value) ? "none" : $"'{value}'";
     }
 
     private static string CurrentPublisherVersion { get; } =
