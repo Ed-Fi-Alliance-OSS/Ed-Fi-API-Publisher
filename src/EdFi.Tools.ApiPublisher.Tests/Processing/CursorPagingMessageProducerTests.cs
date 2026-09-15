@@ -27,6 +27,7 @@ using System.Threading.Tasks.Dataflow;
 using Serilog.Sinks.TestCorrelator;
 using Serilog.Events;
 using System.IO;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using System.Text;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
@@ -43,7 +44,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private const string PartitionsPath = "/data/v3/ed-fi/students/partitions";
 
         private static (EdFiApiCursorPagingStreamResourcePageMessageProducer producer, IFakeHttpRequestHandler fake, ConcurrentQueue<HttpRequestMessage> partitionRequests)
-            Create(Func<HttpResponseMessage> partitionsResponse, int totalCount = 10)
+            Create(Func<HttpResponseMessage> partitionsResponse, int totalCount = 10, IPageCheckpointCoordinator pageCheckpointCoordinator = null)
         {
             var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler().ResourceCount(responseTotalCountHeader: totalCount);
             var partitionRequests = new ConcurrentQueue<HttpRequestMessage>();
@@ -61,7 +62,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             var clientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(ClientFactory));
 
-            return (new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider), NullPageCheckpointCoordinator.Instance), fake, partitionRequests);
+            return (new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider), pageCheckpointCoordinator ?? NullPageCheckpointCoordinator.Instance), fake, partitionRequests);
         }
 
         private static StreamResourceMessage CreateResourceMessage(ChangeWindow changeWindow = null) =>
@@ -97,6 +98,93 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             requests.Single().RequestUri.ParseQueryString()["number"].ShouldBe("4");
             requests.Single().RequestUri.ParseQueryString()["minChangeVersion"].ShouldBe("10");
             requests.Single().RequestUri.ParseQueryString()["maxChangeVersion"].ShouldBe("20");
+        }
+
+        /// <summary>
+        /// APIPUB-142: a resumed run walks the ranges the run it continues was given. Asking the source to
+        /// partition the resource again would hand back ranges no recorded position belongs to.
+        /// </summary>
+        [Test]
+        public async Task A_resumed_resource_should_walk_the_recorded_positions_without_asking_for_partitions()
+        {
+            var coordinator = new PageCheckpointCoordinator(new NoOpRunStateStore());
+
+            var runState = PublishRunState.StartNew("TestSource", "TestTarget", changeWindow: null);
+            runState.Resources.Add(
+                new PublishRunResourceState
+                {
+                    ResourceUrl = Students,
+                    Partitions =
+                    {
+                        // Confirmed a page: resume reads that page again and carries on from it
+                        new PublishRunPartitionState { PartitionIndex = 1, StartingPageToken = "p1", LastCompletedPageToken = "p1-page4" },
+
+                        // Confirmed nothing: resume starts where the source originally said it starts
+                        new PublishRunPartitionState { PartitionIndex = 2, StartingPageToken = "p2" },
+                    },
+                });
+
+            coordinator.Begin(runState, CancellationToken.None);
+
+            var (producer, _, requests) = Create(
+                () => throw new InvalidOperationException("A resumed resource must not request partitions."),
+                pageCheckpointCoordinator: coordinator);
+
+            var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                CreateResourceMessage(), TestHelpers.GetOptions(), new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+            await coordinator.StopAsync();
+
+            success.ShouldBeTrue();
+
+            var pages = messages.ToArray();
+            pages.Select(p => p.PageToken).ShouldBe(new[] { "p1-page4", "p2" });
+            pages.Select(p => p.PartitionIndex).ShouldBe(new int?[] { 1, 2 });
+
+            requests.ShouldBeEmpty();
+        }
+
+        [Test]
+        public async Task A_resource_the_previous_run_never_reached_should_be_partitioned_as_usual()
+        {
+            var coordinator = new PageCheckpointCoordinator(new NoOpRunStateStore());
+
+            var runState = PublishRunState.StartNew("TestSource", "TestTarget", changeWindow: null);
+            runState.Resources.Add(
+                new PublishRunResourceState
+                {
+                    ResourceUrl = "/ed-fi/staffs",
+                    Partitions = { new PublishRunPartitionState { PartitionIndex = 1, StartingPageToken = "other" } },
+                });
+
+            coordinator.Begin(runState, CancellationToken.None);
+
+            var (producer, _, requests) = Create(
+                () => FakeResponse.OK(new { pageTokens = new[] { "t1", "t2" } }),
+                pageCheckpointCoordinator: coordinator);
+
+            var options = TestHelpers.GetOptions();
+            options.CursorPagingPartitionCount = 2;
+
+            var (success, messages) = await producer.TryProduceMessagesAsync<object>(
+                CreateResourceMessage(), options, new BufferBlock<ErrorItemMessage>(), null, CancellationToken.None);
+
+            await coordinator.StopAsync();
+
+            success.ShouldBeTrue();
+            messages.Select(m => m.PageToken).ShouldBe(new[] { "t1", "t2" });
+            requests.Count.ShouldBe(1);
+        }
+
+        private sealed class NoOpRunStateStore : IPublishRunStateStore
+        {
+            public string Location => "(in memory)";
+
+            public Task<PublishRunState> TryLoadAsync(CancellationToken cancellationToken) => Task.FromResult<PublishRunState>(null);
+
+            public Task SaveAsync(PublishRunState state, CancellationToken cancellationToken) => Task.CompletedTask;
+
+            public Task DeleteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         }
 
         [Test]

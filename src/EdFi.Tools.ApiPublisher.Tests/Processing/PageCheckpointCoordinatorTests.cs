@@ -148,6 +148,64 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             store.SaveCount.ShouldBe(0);
         }
 
+        /// <summary>
+        /// The state is rebuilt from what the coordinator holds each time it is written, so a resumed run
+        /// has to carry the previous run's positions forward or it would erase the marks of every resource
+        /// it has not reached yet.
+        /// </summary>
+        [Test]
+        public async Task A_resumed_run_keeps_the_positions_of_resources_it_has_not_reached()
+        {
+            var store = new CapturingRunStateStore();
+            var coordinator = new PageCheckpointCoordinator(store);
+
+            var runState = PublishRunState.StartNew("TestSource", "TestTarget", changeWindow: null);
+            runState.Resources.Add(
+                new PublishRunResourceState
+                {
+                    ResourceUrl = StudentsUrl,
+                    Partitions =
+                    {
+                        new PublishRunPartitionState { PartitionIndex = 1, StartingPageToken = "s1", LastCompletedPageToken = "s1-page7" },
+                    },
+                });
+            runState.Resources.Add(
+                new PublishRunResourceState
+                {
+                    ResourceUrl = "/ed-fi/staffs",
+                    Partitions = { new PublishRunPartitionState { PartitionIndex = 1, StartingPageToken = "f1" } },
+                });
+
+            coordinator.Begin(runState, CancellationToken.None);
+
+            // The run ends without reaching either resource
+            await coordinator.StopAsync();
+
+            runState.Resources.Count.ShouldBe(2);
+
+            var students = runState.FindResource(StudentsUrl, isAuthorizationRetryPass: false).Partitions.Single();
+            students.StartingPageToken.ShouldBe("s1-page7");
+            students.LastCompletedPageToken.ShouldBeNull();
+
+            runState.FindResource("/ed-fi/staffs", isAuthorizationRetryPass: false)
+                .Partitions.Single().StartingPageToken.ShouldBe("f1");
+        }
+
+        [Test]
+        public void A_resource_with_no_recorded_position_is_not_resumable()
+        {
+            var (coordinator, _, _) = StartCoordinator();
+
+            coordinator.TryGetResumeTokens(StudentsUrl, isAuthorizationRetryPass: false).ShouldBeNull();
+
+            // Reading a resource this run does not make it look like something to resume from
+            var page = Page(pageNumber: 1, token: "TOKEN-1");
+            ReadPage(coordinator, page, documentCount: 1);
+            CompleteDocuments(coordinator, page, count: 1);
+
+            coordinator.TryGetResumeTokens(StudentsUrl, isAuthorizationRetryPass: false).ShouldBeNull();
+        }
+
         private static (PageCheckpointCoordinator, CapturingRunStateStore, PublishRunState) StartCoordinator()
         {
             var store = new CapturingRunStateStore();

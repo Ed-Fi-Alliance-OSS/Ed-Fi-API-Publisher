@@ -30,7 +30,21 @@ public interface IPageCheckpointCoordinator
     /// Attaches the coordinator to the run's state and starts writing progress to it. Until this is called,
     /// everything reported is ignored, which is what keeps a run that is not checkpointing free of the cost.
     /// </summary>
+    /// <remarks>
+    /// Progress already in the state is taken as the point this run carries on from, which is how a resumed
+    /// run both starts in the right place and keeps the marks of resources it has not reached yet: the state
+    /// is rebuilt from what the coordinator holds every time it is written. A run that is not resuming
+    /// arrives here with nothing recorded.
+    /// </remarks>
     void Begin(PublishRunState runState, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets the page tokens a resumed run should walk for one pass over one resource, in partition order, or
+    /// null when the previous run recorded nothing for it and the source should be asked for partitions as
+    /// usual. A partition that confirmed at least one page resumes at that page, which is read again and then
+    /// walked on from; one that confirmed none resumes where the source originally said it starts.
+    /// </summary>
+    IReadOnlyList<string> TryGetResumeTokens(string resourceUrl, bool isAuthorizationRetryPass);
 
     /// <summary>
     /// Records the partition tokens the source handed back for one pass over one resource, in the order it

@@ -80,15 +80,32 @@ public class EdFiApiCursorPagingStreamResourcePageMessageProducer
         // paging on every resource.
         var totalCountTask = GetTotalCountAsync(message, options, errorHandlingBlock, cancellationToken);
 
-        _logger.Information("{ResourceUrl}: Retrieving up to {PartitionCount} partition tokens.", message.ResourceUrl, partitionCount);
+        // A resumed run walks the ranges the run it is continuing was given, so the source is not asked to
+        // partition the resource again: a fresh partitioning would hand back ranges that no recorded position
+        // belongs to (see APIPUB-142).
+        var resumeTokens = _pageCheckpointCoordinator.TryGetResumeTokens(message.ResourceUrl, message.IsAuthorizationRetryPass);
 
-        string[] pageTokens = null;
+        string[] pageTokens = resumeTokens?.ToArray();
         bool partitionsRequestFailed = false;
+
+        if (pageTokens is not null)
+        {
+            _logger.Information(
+                "{ResourceUrl}: Resuming {PartitionCount} partition(s) from the positions the previous run recorded.",
+                message.ResourceUrl, pageTokens.Length);
+        }
+        else
+        {
+            _logger.Information("{ResourceUrl}: Retrieving up to {PartitionCount} partition tokens.", message.ResourceUrl, partitionCount);
+        }
 
         try
         {
-            pageTokens = await GetPageTokensAsync(message.ResourceUrl, message.ChangeWindow, partitionCount, options, cancellationToken)
-                .ConfigureAwait(false);
+            if (pageTokens is null)
+            {
+                pageTokens = await GetPageTokensAsync(message.ResourceUrl, message.ChangeWindow, partitionCount, options, cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
         // Run cancellation, the rate limiter and an authentication failure end the run as they would anywhere else.
         // A cancellation the run did not ask for is HttpClient.Timeout expiring while waiting for the headers (it

@@ -61,6 +61,68 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
         _flushCancellation = new CancellationTokenSource();
 
         _flushLoop = RunFlushLoopAsync(_flushCancellation.Token);
+
+        SeedResumePoints(runState);
+    }
+
+    public IReadOnlyList<string> TryGetResumeTokens(string resourceUrl, bool isAuthorizationRetryPass)
+    {
+        if (_runState is null)
+        {
+            return null;
+        }
+
+        var tokens = _partitionsByKey
+            .Where(entry => entry.Key.IsAuthorizationRetryPass == isAuthorizationRetryPass
+                && string.Equals(entry.Key.ResourceUrl, resourceUrl, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(entry => entry.Key.PartitionIndex)
+            .Select(entry => entry.Value.ResumeFromPageToken)
+            .ToList();
+
+        // Only a partition seeded from a previous run carries a resume token, so a resource this run has
+        // merely started reading never looks resumable. A recorded partition with no token would leave a
+        // hole in the resource's ranges, so the whole resource goes back to asking the source.
+        return tokens.Count == 0 || tokens.Any(string.IsNullOrEmpty) ? null : tokens;
+    }
+
+    /// <summary>
+    /// Takes the previous run's progress as this run's starting points. The marks themselves are not carried
+    /// over: this run numbers the pages it reads from one, and records what it confirms itself. A partition
+    /// therefore reads again from the page it last confirmed, which re-publishes that page's documents -- safe,
+    /// because publishing a document again is an upsert.
+    /// </summary>
+    private void SeedResumePoints(PublishRunState runState)
+    {
+        if (runState.Resources is null)
+        {
+            return;
+        }
+
+        bool seededAnything = false;
+
+        foreach (var resource in runState.Resources)
+        {
+            foreach (var partition in resource.Partitions ?? new List<PublishRunPartitionState>())
+            {
+                var progress = GetPartition(
+                    new PartitionKey(resource.ResourceUrl, resource.IsAuthorizationRetryPass, partition.PartitionIndex));
+
+                lock (progress.SyncRoot)
+                {
+                    progress.ResumeFromPageToken = partition.LastCompletedPageToken ?? partition.StartingPageToken;
+                    progress.StartingPageToken = progress.ResumeFromPageToken;
+                }
+
+                seededAnything = true;
+            }
+        }
+
+        if (seededAnything)
+        {
+            // Written back as it now stands, so that a resumed run which dies before confirming anything
+            // leaves the same starting points behind rather than a state rebuilt from the nothing it has seen
+            Interlocked.Exchange(ref _pendingChanges, 1);
+        }
     }
 
     public void PartitionsProduced(
@@ -326,6 +388,13 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
         public object SyncRoot { get; } = new();
 
         public string StartingPageToken { get; set; }
+
+        /// <summary>
+        /// Where a previous run left this partition, set only when seeding from a resumed state. Kept apart
+        /// from <see cref="StartingPageToken" /> so that a partition this run merely started reading is never
+        /// mistaken for one that can be resumed.
+        /// </summary>
+        public string ResumeFromPageToken { get; set; }
 
         public int MarkedPageNumber { get; set; }
 

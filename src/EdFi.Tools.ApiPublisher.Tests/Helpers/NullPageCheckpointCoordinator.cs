@@ -21,6 +21,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
 
         public void Begin(PublishRunState runState, CancellationToken cancellationToken) { }
 
+        public IReadOnlyList<string> TryGetResumeTokens(string resourceUrl, bool isAuthorizationRetryPass) => null;
+
         public void PartitionsProduced(string resourceUrl, bool isAuthorizationRetryPass, IReadOnlyList<string> startingPageTokens) { }
 
         public void ItemProduced(SourcePageReference page) { }
