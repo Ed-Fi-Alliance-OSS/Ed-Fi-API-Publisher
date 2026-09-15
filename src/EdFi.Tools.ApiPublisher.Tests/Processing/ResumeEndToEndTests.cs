@@ -88,22 +88,96 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             store.State.ShouldBeNull(secondRun.Summary);
         }
 
+        /// <summary>
+        /// The pinned window is what replaced the snapshot identity the original design asked for: on 7.x the
+        /// publisher reads through a boolean Use-Snapshot header and is given no snapshot to pin, so the
+        /// window is what keeps a resumed run to the same scope of work.
+        /// </summary>
+        [Test]
+        public async Task A_resumed_run_should_replay_the_change_window_instead_of_computing_a_new_one()
+        {
+            TestHelpers.InitializeLogging();
+
+            var store = new InMemoryRunStateStore();
+
+            var firstRun = await RunAsync(store, resume: false, rejectedStamp: RejectedStamp, availableChangeVersions: 1100);
+
+            firstRun.CountWindows.ShouldAllBe(w => w == "1001..1100");
+            store.State.MaxChangeVersion.ShouldBe(1100);
+
+            // The source moves on between the two runs, as it would in the field
+            var secondRun = await RunAsync(store, resume: true, rejectedStamp: null, availableChangeVersions: 2000);
+
+            // A resumed run reads the window that was in force when the run it continues started, not a wider
+            // one ending at the source's new change version
+            secondRun.CountWindows.ShouldAllBe(w => w == "1001..1100");
+        }
+
+        [Test]
+        public async Task A_state_written_for_another_source_should_be_refused_and_the_run_should_start_over()
+        {
+            TestHelpers.InitializeLogging();
+
+            var store = new InMemoryRunStateStore();
+
+            await RunAsync(store, resume: false, rejectedStamp: RejectedStamp);
+
+            store.State.ShouldNotBeNull();
+
+            // What an operator pointing a resume at the wrong state file would have
+            store.State.SourceConnectionName = "SomeOtherSource";
+
+            var secondRun = await RunAsync(store, resume: true, rejectedStamp: null);
+
+            // A refused resume asks the source to partition the resource again, as a run from the beginning does
+            secondRun.PartitionsNumbers.OrderBy(n => n).ShouldBe(new[] { "1", Partitions.ToString() });
+
+            secondRun.PageTokens.ShouldContain("p2-1", "a refused resume reads the resource in full");
+        }
+
         private static PublishRunPartitionState PartitionOf(PublishRunState state, int partitionIndex)
             => state.FindResource(Resource, isAuthorizationRetryPass: false)
                 .Partitions.Single(p => p.PartitionIndex == partitionIndex);
 
-        private sealed record RunOutcome(bool Failed, IReadOnlyList<string> PageTokens, IReadOnlyList<string> PartitionsNumbers, string Summary);
+        private sealed record RunOutcome(
+            bool Failed,
+            IReadOnlyList<string> PageTokens,
+            IReadOnlyList<string> PartitionsNumbers,
+            IReadOnlyList<string> CountWindows,
+            string Summary);
 
-        private static async Task<RunOutcome> RunAsync(InMemoryRunStateStore store, bool resume, string rejectedStamp)
+        private static async Task<RunOutcome> RunAsync(
+            InMemoryRunStateStore store,
+            bool resume,
+            string rejectedStamp,
+            int availableChangeVersions = 1100)
         {
             var resourceFaker = TestHelpers.GetGenericResourceFaker();
             var pageTokens = new ConcurrentBag<string>();
             var partitionsNumbers = new ConcurrentBag<string>();
+            var countWindows = new ConcurrentBag<string>();
 
             var source = TestHelpers.GetFakeBaselineSourceApiRequestHandler()
                 .ApiVersionMetadata(apiVersion: "7.3")
-                .AvailableChangeVersions(1100)
+                .AvailableChangeVersions(availableChangeVersions)
                 .ResourceCount(responseTotalCountHeader: TotalItems);
+
+            // The count request carries the window the run is actually reading, and is the one request a
+            // resumed run still makes, so it is where the pinned window can be observed
+            A.CallTo(
+                    () => source.Get(
+                        A<string>.Ignored,
+                        A<HttpRequestMessage>.That.Matches(
+                            msg => msg.RequestUri.ParseQueryString()["totalCount"] == "true"
+                                && msg.RequestUri.LocalPath.EndsWith(Resource))))
+                .ReturnsLazily(
+                    (string _, HttpRequestMessage request) =>
+                    {
+                        var query = request.RequestUri.ParseQueryString();
+                        countWindows.Add(query["minChangeVersion"] + ".." + query["maxChangeVersion"]);
+
+                        return FakeResponse.OK("[]").AppendHeaders(("Total-Count", TotalItems.ToString()));
+                    });
 
             A.CallTo(
                     () => source.Get(
@@ -223,7 +297,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         + " failed=" + r.FailedItemCount + " skipped=" + r.SkippedItemCount
                         + " unresolved=" + r.UnresolvedItemCount));
 
-            return new RunOutcome(failed, pageTokens.ToArray(), partitionsNumbers.ToArray(), described);
+            return new RunOutcome(failed, pageTokens.ToArray(), partitionsNumbers.ToArray(), countWindows.ToArray(), described);
         }
 
         /// <summary>
