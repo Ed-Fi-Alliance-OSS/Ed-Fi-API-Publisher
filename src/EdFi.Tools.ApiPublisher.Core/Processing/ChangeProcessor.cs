@@ -274,6 +274,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     throw;
                 }
 
+                // Written before the run's outcome is acted on, so that removing the state below is the last
+                // word on it: stopping after the removal would write the state back (see APIPUB-142).
+                await _pageCheckpointCoordinator.StopAsync().ConfigureAwait(false);
+
                 // A document that failed is inside the change window, so the window is what gives it another
                 // chance: the last change version processed is advanced only by a run that lost nothing, even
                 // when the loss was tolerated by configuration (see APIPUB-120).
@@ -299,8 +303,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
             finally
             {
-                // Written from the finally for the same reason the summary is: a run that broke partway is
-                // exactly the run whose progress is worth keeping (see APIPUB-142).
+                // Covers the paths that never reached the stop above: a run that broke partway is exactly
+                // the run whose progress is worth keeping (see APIPUB-142). Stopping twice is a no-op.
                 await _pageCheckpointCoordinator.StopAsync().ConfigureAwait(false);
 
                 // Reported from the finally so that a run which failed still accounts for what it published:

@@ -44,6 +44,7 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
     private CancellationTokenSource _flushCancellation;
     private Task _flushLoop;
     private int _pendingChanges;
+    private bool _stopped;
 
     public PageCheckpointCoordinator(IPublishRunStateStore publishRunStateStore)
     {
@@ -222,10 +223,16 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
 
     public async Task StopAsync()
     {
-        if (_runState is null)
+        // Called once where the run decides its outcome and again from its finally, so that a run which broke
+        // still writes what it reached. The second call must do nothing: writing again after a clean run has
+        // removed its state would put the state back, and the next resume would replay a window already
+        // published (see APIPUB-142).
+        if (_runState is null || _stopped)
         {
             return;
         }
+
+        _stopped = true;
 
         _flushCancellation.Cancel();
 
