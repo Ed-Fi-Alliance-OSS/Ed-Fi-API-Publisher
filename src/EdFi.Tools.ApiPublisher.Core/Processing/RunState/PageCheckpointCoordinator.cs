@@ -326,9 +326,26 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
             return;
         }
 
-        _runState.Resources = BuildResourceStates();
+        bool written = false;
 
-        await _publishRunStateStore.SaveAsync(_runState, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _runState.Resources = BuildResourceStates();
+
+            await _publishRunStateStore.SaveAsync(_runState, cancellationToken).ConfigureAwait(false);
+
+            written = true;
+        }
+        finally
+        {
+            // The flag is taken before the write, so a write that does not complete -- the loop's own token
+            // being cancelled part way through it, for one -- would otherwise leave the final write with
+            // nothing to do and quietly drop everything marked since the last one that did complete.
+            if (!written)
+            {
+                Interlocked.Exchange(ref _pendingChanges, 1);
+            }
+        }
     }
 
     /// <summary>

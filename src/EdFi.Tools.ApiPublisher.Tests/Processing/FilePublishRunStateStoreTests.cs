@@ -151,7 +151,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             // What an operator gets by pointing the option at a mounted volume
             StoreAt(_directory).Location
-                .ShouldBe(Path.Combine(_directory, FilePublishRunStateStore.DefaultFileName));
+                .ShouldBe(Path.Combine(_directory, FilePublishRunStateStore.BuildDefaultFileName("SourceOds", "TargetOds")));
         }
 
         [Test]
@@ -166,7 +166,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         public void No_configured_path_should_put_the_file_in_the_working_directory()
         {
             StoreAt(null).Location
-                .ShouldBe(Path.Combine(Environment.CurrentDirectory, FilePublishRunStateStore.DefaultFileName));
+                .ShouldBe(Path.Combine(Environment.CurrentDirectory, FilePublishRunStateStore.BuildDefaultFileName("SourceOds", "TargetOds")));
         }
 
         [Test]
@@ -179,7 +179,46 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             File.Exists(store.Location).ShouldBeTrue();
         }
 
-        private static FilePublishRunStateStore StoreAt(string path)
-            => new(new Options { RunStatePath = path });
+        /// <summary>
+        /// Several publications share a working directory often enough that one file name for all of them
+        /// means the last writer wins and the rest silently lose their resume.
+        /// </summary>
+        [Test]
+        public void Two_publications_sharing_a_directory_should_get_their_own_state_files()
+        {
+            string first = StoreAt(_directory, "OdsA", "OdsB").Location;
+            string second = StoreAt(_directory, "OdsC", "OdsD").Location;
+
+            first.ShouldNotBe(second);
+            Path.GetFileName(first).ShouldContain("OdsA");
+            Path.GetFileName(first).ShouldContain("OdsB");
+        }
+
+        [Test]
+        public void A_connection_name_that_is_not_a_legal_file_name_should_still_produce_one()
+        {
+            string location = StoreAt(_directory, "ods/a:b", "ods*c").Location;
+
+            Path.GetFileName(location).IndexOfAny(Path.GetInvalidFileNameChars()).ShouldBe(-1);
+        }
+
+        [Test]
+        public void Unnamed_connections_should_fall_back_to_the_bare_default_name()
+        {
+            // Such a run is refused a resume anyway, so there is nothing to tell apart
+            FilePublishRunStateStore.BuildDefaultFileName(null, null)
+                .ShouldBe(FilePublishRunStateStore.DefaultFileNamePrefix + ".json");
+        }
+
+        private static FilePublishRunStateStore StoreAt(string path, string sourceName = "SourceOds", string targetName = "TargetOds")
+            => new(
+                new Options { RunStatePath = path },
+                new ApiConnectionDetailsStub { Name = sourceName },
+                new ApiConnectionDetailsStub { Name = targetName });
+
+        /// <summary>Carries a connection name and nothing else; the store reads no other property.</summary>
+        private sealed class ApiConnectionDetailsStub : SourceConnectionDetailsBase, ITargetConnectionDetails
+        {
+        }
     }
 }

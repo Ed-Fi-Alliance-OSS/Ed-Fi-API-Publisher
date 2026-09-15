@@ -799,6 +799,23 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 return null;
             }
 
+            // What the resume is actually going to save. Without it the operator is told a resume happened and
+            // nothing about what it skipped, which is half of what the feature is for.
+            var recordedPartitions = storedState.Resources
+                .SelectMany(resource => resource.Partitions)
+                .ToArray();
+
+            var confirmedPartitions = recordedPartitions
+                .Where(partition => !string.IsNullOrEmpty(partition.LastCompletedPageToken))
+                .ToArray();
+
+            _logger.Information(
+                "Resuming: {ResourceCount} resource(s) carry recorded positions, {ConfirmedPartitionCount} of {PartitionCount} partition(s) have a confirmed page that will not be read again (the furthest at page {FurthestPage}). Everything else is read in full.",
+                storedState.Resources.Count,
+                confirmedPartitions.Length,
+                recordedPartitions.Length,
+                confirmedPartitions.Length == 0 ? 0 : confirmedPartitions.Max(partition => partition.LastCompletedPageNumber));
+
             if (storedState.GetPinnedChangeWindow() is { } pinnedChangeWindow)
             {
                 _logger.Information(

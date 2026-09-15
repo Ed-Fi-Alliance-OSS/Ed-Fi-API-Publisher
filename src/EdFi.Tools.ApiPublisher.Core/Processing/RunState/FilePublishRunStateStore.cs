@@ -25,18 +25,60 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 /// </remarks>
 public class FilePublishRunStateStore : IPublishRunStateStore
 {
-    /// <summary>File name used when no path is configured, and when the configured path is a directory.</summary>
-    public const string DefaultFileName = "api-publisher-run-state.json";
+    /// <summary>
+    /// File name used when no path is configured, and when the configured path is a directory. The publication
+    /// the state belongs to is worked into it (see <see cref="BuildDefaultFileName" />), so that two runs
+    /// sharing a directory do not overwrite each other's progress.
+    /// </summary>
+    public const string DefaultFileNamePrefix = "api-publisher-run-state";
+
+    private const string DefaultFileExtension = ".json";
 
     private readonly ILogger _logger = Log.ForContext(typeof(FilePublishRunStateStore));
 
     private bool _writeFailureReported;
 
-    public FilePublishRunStateStore(Options options)
+    public FilePublishRunStateStore(
+        Options options,
+        ISourceConnectionDetails sourceConnectionDetails,
+        ITargetConnectionDetails targetConnectionDetails)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        Location = ResolvePath(options.RunStatePath);
+        Location = ResolvePath(
+            options.RunStatePath,
+            BuildDefaultFileName(sourceConnectionDetails?.Name, targetConnectionDetails?.Name));
+    }
+
+    /// <summary>
+    /// Names the default file after the publication it records, so that publications sharing a working
+    /// directory keep their own progress. Running several at once is an ordinary shape for this tool, and one
+    /// file for all of them means the last writer wins and the others silently lose their resume. Falls back
+    /// to the bare name when the connections are unnamed, which is a run that cannot be resumed anyway.
+    /// </summary>
+    public static string BuildDefaultFileName(string sourceConnectionName, string targetConnectionName)
+    {
+        if (string.IsNullOrWhiteSpace(sourceConnectionName) || string.IsNullOrWhiteSpace(targetConnectionName))
+        {
+            return DefaultFileNamePrefix + DefaultFileExtension;
+        }
+
+        return $"{DefaultFileNamePrefix}-{MakeFileNameSafe(sourceConnectionName)}-to-{MakeFileNameSafe(targetConnectionName)}{DefaultFileExtension}";
+    }
+
+    private static string MakeFileNameSafe(string value)
+    {
+        var safe = value.Trim().ToCharArray();
+
+        for (int i = 0; i < safe.Length; i++)
+        {
+            if (Array.IndexOf(Path.GetInvalidFileNameChars(), safe[i]) >= 0)
+            {
+                safe[i] = '_';
+            }
+        }
+
+        return new string(safe);
     }
 
     public string Location { get; }
@@ -132,11 +174,11 @@ public class FilePublishRunStateStore : IPublishRunStateStore
     /// separator) takes the default file name inside it, so that pointing the option at a mounted volume
     /// works without naming the file.
     /// </summary>
-    private static string ResolvePath(string configuredPath)
+    private static string ResolvePath(string configuredPath, string defaultFileName)
     {
         if (string.IsNullOrWhiteSpace(configuredPath))
         {
-            return Path.Combine(Environment.CurrentDirectory, DefaultFileName);
+            return Path.Combine(Environment.CurrentDirectory, defaultFileName);
         }
 
         string path = Path.GetFullPath(configuredPath.Trim());
@@ -145,6 +187,6 @@ public class FilePublishRunStateStore : IPublishRunStateStore
             || configuredPath.EndsWith(Path.DirectorySeparatorChar)
             || configuredPath.EndsWith(Path.AltDirectorySeparatorChar);
 
-        return namesADirectory ? Path.Combine(path, DefaultFileName) : path;
+        return namesADirectory ? Path.Combine(path, defaultFileName) : path;
     }
 }

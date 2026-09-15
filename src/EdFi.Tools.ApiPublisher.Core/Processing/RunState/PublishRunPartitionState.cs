@@ -26,6 +26,10 @@ public class PublishRunPartitionState
     /// </summary>
     public string LastCompletedPageToken { get; set; }
 
-    /// <summary>The 1-based ordinal of that page within the partition, for the log line on resume.</summary>
+    /// <summary>
+    /// The 1-based ordinal of that page within the walk that confirmed it, reported when a run is resumed so
+    /// that an operator can see how far each partition had got. A resumed run numbers the pages it reads from
+    /// one again, so this counts that run's own pages rather than every page since the publication began.
+    /// </summary>
     public int LastCompletedPageNumber { get; set; }
 }
