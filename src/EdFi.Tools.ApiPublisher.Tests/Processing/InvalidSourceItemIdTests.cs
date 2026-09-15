@@ -60,7 +60,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 TestHelpers.GetSourceApiConnectionDetails(),
                 A.Fake<ISourceCapabilities>(),
                 A.Fake<ISourceResourceItemProvider>(),
-                A.Fake<IRunSummaryCollector>());
+                A.Fake<IRunSummaryCollector>(),
+                NullPageCheckpointCoordinator.Instance);
         }
 
         // Stands in for nested source data that must never reach the error log by way of the invalid id

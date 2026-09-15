@@ -26,6 +26,7 @@ using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using EdFi.Tools.ApiPublisher.Tests.Models;
 using FakeItEasy;
@@ -273,7 +274,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             IRunSummaryCollector runSummaryCollector = null,
             IPublishingOperationMetadataCollector metadataCollector = null,
             IChangeVersionProcessedWriter changeVersionProcessedWriter = null,
-            IRateLimiting<HttpResponseMessage> postResourceRateLimiter = null)
+            IRateLimiting<HttpResponseMessage> postResourceRateLimiter = null,
+            IPublishRunStateStore publishRunStateStore = null,
+            IPageCheckpointCoordinator pageCheckpointCoordinator = null)
         {
             EdFiApiClient SourceApiClientFactory() =>
                 new EdFiApiClient(
@@ -300,6 +303,13 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
             var resourceDependencyProvider = new ResourceDependencyProvider(resourceDependencyMetadataProvider);
             changeVersionProcessedWriter ??= A.Fake<IChangeVersionProcessedWriter>();
             errorPublisher ??= A.Fake<IErrorPublisher>();
+
+            // Faked by default so that a run under test neither reads nor writes run state on disk; a resume
+            // test supplies its own (see APIPUB-142).
+            publishRunStateStore ??= A.Fake<IPublishRunStateStore>();
+
+            // Records nothing unless a test is about resumability, in which case it supplies a real one
+            pageCheckpointCoordinator ??= NullPageCheckpointCoordinator.Instance;
 
             // Real collectors by default: the run summary is assembled from counts taken across the whole
             // pipeline, so a fake would report an empty summary for every run. A test that asserts on the
@@ -347,13 +357,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                     new PagingStrategyDispatchingStreamResourcePageMessageProducer(
                         new SourcePagingStrategyResolver(dataSourceCapabilities),
                         offsetPagingProducer,
-                        new EdFiApiCursorPagingStreamResourcePageMessageProducer(sourceEdFiApiClientProvider, sourceTotalCountProvider, supportingRateLimiter))),
+                        new EdFiApiCursorPagingStreamResourcePageMessageProducer(sourceEdFiApiClientProvider, sourceTotalCountProvider, pageCheckpointCoordinator, supportingRateLimiter))),
                 new StreamResourcePagesBlockFactory(
                     new EdFiApiStreamResourcePageMessageHandler(
                         sourceEdFiApiClientProvider,
                         new PageRequestStrategyDispatcher(new OffsetPageRequestStrategy(), new CursorPageRequestStrategy()),
                         supportingRateLimiter),
-                    runSummaryCollector),
+                    runSummaryCollector,
+                    pageCheckpointCoordinator),
                 sourceApiConnectionDetails);
 
             var stageInitiators = A.Fake<IIndex<PublishingStage, IPublishingStageInitiator>>();
@@ -375,6 +386,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                             dataSourceCapabilities,
                             new ApiSourceResourceItemProvider(sourceEdFiApiClientProvider, options, supportingRateLimiter),
                             runSummaryCollector,
+                            pageCheckpointCoordinator,
                             postResourceRateLimiter)));
 
             A.CallTo(() => stageInitiators[PublishingStage.Deletes])
@@ -396,7 +408,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
                 publishErrorsBlocksFactory,
                 runSummaryCollector,
                 stageInitiators,
-                Array.Empty<IFinalizationActivity>());
+                Array.Empty<IFinalizationActivity>(),
+                publishRunStateStore,
+                pageCheckpointCoordinator);
         }
     }
 

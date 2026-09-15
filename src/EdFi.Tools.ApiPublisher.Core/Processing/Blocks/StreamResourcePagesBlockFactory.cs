@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using Polly.RateLimit;
 using Serilog;
 using System;
@@ -20,15 +21,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
     {
         private readonly IStreamResourcePageMessageHandler _streamResourcePageMessageHandler;
         private readonly IRunSummaryCollector _runSummaryCollector;
+        private readonly IPageCheckpointCoordinator _pageCheckpointCoordinator;
 
         private readonly ILogger _logger = Log.ForContext(typeof(StreamResourcePagesBlockFactory));
 
         public StreamResourcePagesBlockFactory(
             IStreamResourcePageMessageHandler streamResourcePageMessageHandler,
-            IRunSummaryCollector runSummaryCollector)
+            IRunSummaryCollector runSummaryCollector,
+            IPageCheckpointCoordinator pageCheckpointCoordinator)
         {
             _streamResourcePageMessageHandler = streamResourcePageMessageHandler;
             _runSummaryCollector = runSummaryCollector;
+            _pageCheckpointCoordinator = pageCheckpointCoordinator;
         }
 
         /// <summary>
@@ -105,12 +109,31 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
             // each one is handed to the buffer and is recorded once the page message is done (see APIPUB-120).
             long attemptedItemCount = 0;
 
+            // The page the walk is currently on, so that a checkpoint can tell when one page has given up
+            // every document it has. Items arrive page by page within a partition, so the first item of a new
+            // page is what says the previous one is done (see APIPUB-142). Null under offset paging, which is
+            // not checkpointed.
+            SourcePageReference currentPage = null;
+
             try
             {
                 await foreach (var pageItem in _streamResourcePageMessageHandler
                     .HandleStreamResourcePageAsync(msg, options, errorHandlingBlock)
                     .ConfigureAwait(false))
                 {
+                    var itemPage = (pageItem as ISourcePagedProcessDataMessage)?.SourcePageReference;
+
+                    if (!ReferenceEquals(itemPage, currentPage))
+                    {
+                        _pageCheckpointCoordinator.PageFullyRead(currentPage);
+
+                        currentPage = itemPage;
+                    }
+
+                    // Counted before the hand-off, so that an item the buffer then declines still leaves its
+                    // page short of settling: a page abandoned partway must be read again by a resumed run
+                    _pageCheckpointCoordinator.ItemProduced(itemPage);
+
                     // Waits while the buffer is full; the resource's token releases a parked handler on cancellation
                     if (!await pageItemsBuffer.SendAsync(pageItem, msg.CancellationSource.Token).ConfigureAwait(false))
                     {
@@ -124,6 +147,11 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing.Blocks
                     // report pages as documents (see APIPUB-120).
                     attemptedItemCount += pageItem is IItemCountedProcessDataMessage counted ? counted.ItemCount : 1;
                 }
+
+                // Reached only when the walk ran to its end. The paths that leave the loop early -- a declined
+                // buffer, cancellation, a failure -- deliberately do not mark the page: one abandoned partway
+                // would otherwise settle on the documents it did hand over and be skipped by a resumed run.
+                _pageCheckpointCoordinator.PageFullyRead(currentPage);
             }
             catch (OperationCanceledException) when (msg.CancellationSource.IsCancellationRequested)
             {

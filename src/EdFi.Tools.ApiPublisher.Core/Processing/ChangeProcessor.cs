@@ -22,6 +22,7 @@ using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
 using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 using Newtonsoft.Json;
 using Polly.RateLimit;
@@ -54,6 +55,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         private readonly IRunSummaryCollector _runSummaryCollector;
         private readonly IIndex<PublishingStage, IPublishingStageInitiator> _publishingStageInitiatorByStage;
         private readonly IFinalizationActivity[] _finalizationActivities;
+        private readonly IPublishRunStateStore _publishRunStateStore;
+        private readonly IPageCheckpointCoordinator _pageCheckpointCoordinator;
         private string _lcvpTargetName;
 
         public ChangeProcessor(
@@ -69,7 +72,9 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             PublishErrorsBlocksFactory publishErrorsBlocksFactory,
             IRunSummaryCollector runSummaryCollector,
             IIndex<PublishingStage, IPublishingStageInitiator> publishingStageInitiatorByStage,
-            IFinalizationActivity[] finalizationActivities)
+            IFinalizationActivity[] finalizationActivities,
+            IPublishRunStateStore publishRunStateStore,
+            IPageCheckpointCoordinator pageCheckpointCoordinator)
         {
             _resourceDependencyProvider = resourceDependencyProvider;
             _changeVersionProcessedWriter = changeVersionProcessedWriter;
@@ -84,6 +89,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             _runSummaryCollector = runSummaryCollector;
             _publishingStageInitiatorByStage = publishingStageInitiatorByStage;
             _finalizationActivities = finalizationActivities;
+            _publishRunStateStore = publishRunStateStore;
+            _pageCheckpointCoordinator = pageCheckpointCoordinator;
         }
 
         public async Task ProcessChangesAsync(ChangeProcessorConfiguration configuration, CancellationToken cancellationToken)
@@ -144,6 +151,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                         .ConfigureAwait(false);
                 }
 
+                // Pick up where a previous run left off, if asked to and if what it left behind describes this
+                // same work (see APIPUB-142). Anything else starts from the beginning, with the reason logged.
+                var resumedRunState = await TryResumeRunStateAsync(options, cancellationToken).ConfigureAwait(false);
+
                 // Establish the change window we're processing, if any.
                 ChangeWindow changeWindow = null;
 
@@ -157,8 +168,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     {
                         _lcvpTargetName = $"{options.LastChangeVersionProcessedNamespace}:{_targetConnectionDetails.Name}";
                     }
-                    changeWindow = await EstablishChangeWindowAsync().ConfigureAwait(false);
+
+                    // A resumed run replays the window the original run pinned instead of recomputing it, so
+                    // that it reads the window that was in force when that run started rather than a wider one
+                    // ending at the source's current change version.
+                    changeWindow = resumedRunState is null
+                        ? await EstablishChangeWindowAsync().ConfigureAwait(false)
+                        : resumedRunState.GetPinnedChangeWindow();
                 }
+
+                // The state of the run in progress: the resumed one when resuming, a new one otherwise.
+                var runState = resumedRunState
+                    ?? PublishRunState.StartNew(_sourceConnectionDetails.Name, _targetConnectionDetails.Name, changeWindow);
 
                 // Have all changes already been processed?
                 if (changeWindow?.MinChangeVersion > changeWindow?.MaxChangeVersion)
@@ -177,6 +198,19 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     return;
                 }
+
+                // Written before the first document moves, and only once the run is certain to publish, so that
+                // a run which fails early is still resumable and a --whatIf run leaves nothing behind.
+                await _publishRunStateStore.SaveAsync(runState, cancellationToken).ConfigureAwait(false);
+
+                // Said once, up front: a run that dies later cannot report where it left its state, and an
+                // operator reading the log afterwards has no other way to find it (see APIPUB-142).
+                _logger.Information(
+                    "Run state for this run is kept at '{Location}'. A run that does not finish cleanly can be continued from it with --resumeLastRun=true.",
+                    _publishRunStateStore.Location);
+
+                // From here on the pipeline reports what it gets through, and the coordinator writes it
+                _pageCheckpointCoordinator.Begin(runState);
 
                 // Create the shared error processing block
                 var (publishErrorsIngestionBlock, publishErrorsCompletionBlock) = _publishErrorsBlocksFactory.CreateBlocks(options);
@@ -246,6 +280,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     throw;
                 }
 
+                // Written before the run's outcome is acted on, so that removing the state below is the last
+                // word on it: stopping after the removal would write the state back (see APIPUB-142).
+                await _pageCheckpointCoordinator.StopAsync().ConfigureAwait(false);
+
                 // A document that failed is inside the change window, so the window is what gives it another
                 // chance: the last change version processed is advanced only by a run that lost nothing, even
                 // when the loss was tolerated by configuration (see APIPUB-120).
@@ -253,6 +291,18 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                 {
                     await UpdateChangeVersionAsync(configuration, changeWindow)
                         .ConfigureAwait(false);
+
+                    // The same condition governs the run state: there is nothing left to resume, and leaving it
+                    // behind would offer a resume of a run that lost nothing (see APIPUB-142).
+                    await _publishRunStateStore.DeleteAsync(cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    // The run the operator reads about the next morning. Naming the file and the flag here is
+                    // what makes the state discoverable at all.
+                    _logger.Information(
+                        "This run did not finish without losing documents, so its state has been kept at '{Location}'. Re-run with --resumeLastRun=true to continue from where it got to.",
+                        _publishRunStateStore.Location);
                 }
             }
             catch (RateLimitRejectedException ex)
@@ -267,6 +317,10 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
             }
             finally
             {
+                // Covers the paths that never reached the stop above: a run that broke partway is exactly
+                // the run whose progress is worth keeping (see APIPUB-142). Stopping twice is a no-op.
+                await _pageCheckpointCoordinator.StopAsync().ConfigureAwait(false);
+
                 // Reported from the finally so that a run which failed still accounts for what it published:
                 // the outcome of a partial run is exactly when an operator needs the counts (APIPUB-120).
                 ReportRunSummary();
@@ -711,6 +765,71 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
                     .OrderBy(e => e.Key)
                     .ToList();
             }
+        }
+
+        /// <summary>
+        /// Loads what a previous run left behind, when a resume was asked for and what was left behind
+        /// describes this same work. Returns null when the run should start from the beginning. Every refusal
+        /// is reported at Warning: an operator who asked to resume needs to be told they did not (APIPUB-142).
+        /// </summary>
+        private async Task<PublishRunState> TryResumeRunStateAsync(Options options, CancellationToken cancellationToken)
+        {
+            if (!options.ResumeLastRun)
+            {
+                return null;
+            }
+
+            var storedState = await _publishRunStateStore.TryLoadAsync(cancellationToken).ConfigureAwait(false);
+
+            if (storedState is null)
+            {
+                _logger.Warning(
+                    "A resume was requested but no run state was found at '{Location}'. The run will start from the beginning.",
+                    _publishRunStateStore.Location);
+
+                return null;
+            }
+
+            if (!storedState.Matches(_sourceConnectionDetails.Name, _targetConnectionDetails.Name, out string mismatchReason))
+            {
+                _logger.Warning(
+                    "The run state at '{Location}' cannot be resumed because {MismatchReason:l}. The run will start from the beginning.",
+                    _publishRunStateStore.Location, mismatchReason);
+
+                return null;
+            }
+
+            // What the resume is actually going to save. Without it the operator is told a resume happened and
+            // nothing about what it skipped, which is half of what the feature is for.
+            var recordedPartitions = storedState.Resources
+                .SelectMany(resource => resource.Partitions)
+                .ToArray();
+
+            var confirmedPartitions = recordedPartitions
+                .Where(partition => !string.IsNullOrEmpty(partition.LastCompletedPageToken))
+                .ToArray();
+
+            _logger.Information(
+                "Resuming: {ResourceCount} resource(s) carry recorded positions, {ConfirmedPartitionCount} of {PartitionCount} partition(s) have a confirmed page that will not be read again (the furthest at page {FurthestPage}). Everything else is read in full.",
+                storedState.Resources.Count,
+                confirmedPartitions.Length,
+                recordedPartitions.Length,
+                confirmedPartitions.Length == 0 ? 0 : confirmedPartitions.Max(partition => partition.LastCompletedPageNumber));
+
+            if (storedState.GetPinnedChangeWindow() is { } pinnedChangeWindow)
+            {
+                _logger.Information(
+                    "Resuming run '{RunId}' started at {StartedAt:u}, replaying its change window of {MinChangeVersion} to {MaxChangeVersion}.",
+                    storedState.RunId, storedState.StartedAt, pinnedChangeWindow.MinChangeVersion, pinnedChangeWindow.MaxChangeVersion);
+            }
+            else
+            {
+                _logger.Information(
+                    "Resuming run '{RunId}' started at {StartedAt:u}. It had no change window, so the whole source is in scope as it was for that run.",
+                    storedState.RunId, storedState.StartedAt);
+            }
+
+            return storedState;
         }
 
         private async Task<ChangeWindow> EstablishChangeWindowAsync()
