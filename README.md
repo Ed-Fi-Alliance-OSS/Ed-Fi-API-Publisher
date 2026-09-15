@@ -104,6 +104,17 @@ When the source exposes `GET /{resource}/partitions` (ODS/API 7.3 and later), th
 
 See [API Publisher Configuration](docs/API-Publisher-Configuration.md) for details and the memory-ceiling implications.
 
+### Resuming a run that failed partway
+
+A run reading a cursor-paged source records how far each partition got, so a run that fails or is stopped can be continued with `--resumeLastRun=true` instead of started again from the beginning.
+
+- A partition resumes at the last page whose documents all reached the target. That page is read a second time and the walk carries on from it; republishing its documents is an upsert, so the cost is one page per partition rather than correctness.
+- A page that lost a document is not behind that mark, so a resumed run reads it again. So is a page whose documents never all came back, which is what stopping a run mid-flight leaves behind.
+- The resumed run replays the change window the original run recorded rather than computing a new one, so it reads the window that was in force when that run started. Anything written to the source since then is above that window and is picked up by the next run instead.
+- Only cursor-paged main resources are resumed. Offset-paged reads, which includes every `/deletes` and `/keyChanges`, have no partition or page token to record and are read in full.
+- `--runStatePath=PATH` says where the run state is kept; a directory takes the default file name inside it, which is what a containerised run wants when the path is a mounted volume. Without it the file sits in the working directory.
+- Resume is refused, with a `WARN` line and a normal run from the beginning, when the state was written for a different source connection, a different target connection or a different publisher version. The state is removed by a run that finishes without losing a document.
+
 ## Known Limitations for Ed-Fi ODS / API 5.1 through 5.3
 
 Currently, Ed-Fi ODS / API 5.1 through 5.3 has the following known issues related to Change Queries and the Ed-Fi API Publisher.  These have been resolved in [Ed-Fi ODS / API 5.3-cqe patch](https://edfi.atlassian.net/wiki/spaces/EFTD/pages/24807016/Change+Query+Enhancements) and [Ed-Fi ODS / API 6.1](https://edfi.atlassian.net/wiki/spaces/ODSAPIS3V61/overview).
