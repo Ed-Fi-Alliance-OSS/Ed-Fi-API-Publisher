@@ -262,6 +262,48 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         /// <summary>
+        /// The temporary file carries the same page tokens the state file does, and its name is different
+        /// every write, so a failure after it is created must not leave it sitting in the directory.
+        /// </summary>
+        [Test]
+        public async Task A_write_that_fails_should_not_leave_a_temporary_file_behind()
+        {
+            var store = StoreAt(Path.Combine(_directory, "run.json"));
+
+            // Something else takes the name the state file wants, so the move at the end of the write fails
+            Directory.CreateDirectory(store.Location);
+
+            (await store.SaveAsync(PublishRunState.StartNew("s", "t", changeWindow: null), CancellationToken.None))
+                .ShouldBeFalse();
+
+            Directory.GetFiles(_directory).ShouldBeEmpty();
+        }
+
+        /// <summary>
+        /// Page tokens say what a run has read and how to read more of it, so the file is kept to its owner
+        /// where the platform has a say in that. Windows inherits the directory's ACL instead, so there is
+        /// nothing to assert there.
+        /// </summary>
+        [Test]
+        public async Task The_state_file_should_be_kept_to_its_owner_where_the_platform_says_so()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                // The return is what tells the platform analyzer the call below is not reached here
+                Assert.Ignore("File modes are a Unix concept; Windows takes the directory's ACL.");
+
+                return;
+            }
+
+            var store = StoreAt(Path.Combine(_directory, "run.json"));
+
+            await store.SaveAsync(PublishRunState.StartNew("s", "t", changeWindow: null), CancellationToken.None);
+
+            File.GetUnixFileMode(store.Location)
+                .ShouldBe(UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
+        /// <summary>
         /// A partition this publisher wrote always carries at least its starting token, so one with neither
         /// token is an edited file. Refusing it here is what keeps a resume from falling back to asking the
         /// source to partition a resource it already holds recorded ranges for.

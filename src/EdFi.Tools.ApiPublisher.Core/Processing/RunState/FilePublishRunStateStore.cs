@@ -145,6 +145,12 @@ public class FilePublishRunStateStore : IPublishRunStateStore
 
         state.UpdatedAt = DateTime.UtcNow;
 
+        // Written beside the target and moved over it, so a process killed mid-write leaves either the
+        // previous state or the new one, and never half of either. The name is unique per write and the file
+        // is created exclusively, so a name guessed in advance and planted as a link or a file is a failed
+        // write rather than a write somewhere else.
+        string temporaryPath = $"{Location}.{Guid.NewGuid():N}.tmp";
+
         try
         {
             string directory = Path.GetDirectoryName(Location);
@@ -154,15 +160,28 @@ public class FilePublishRunStateStore : IPublishRunStateStore
                 Directory.CreateDirectory(directory);
             }
 
-            // Written beside the target and moved over it, so a process killed mid-write leaves either the
-            // previous state or the new one, and never half of either
-            string temporaryPath = $"{Location}.tmp";
+            await using (var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                useAsync: true))
+            {
+                // Page tokens say what a run has read and how to read more of it, so the file is kept to its
+                // owner where the platform has a say in that. Windows inherits the directory's ACL instead.
+                if (!OperatingSystem.IsWindows())
+                {
+                    File.SetUnixFileMode(temporaryPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
 
-            await File.WriteAllTextAsync(
-                    temporaryPath,
-                    JsonConvert.SerializeObject(state, Formatting.Indented),
-                    cancellationToken)
-                .ConfigureAwait(false);
+                await using var writer = new StreamWriter(stream);
+
+                await writer.WriteAsync(
+                        JsonConvert.SerializeObject(state, Formatting.Indented).AsMemory(),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
             File.Move(temporaryPath, Location, overwrite: true);
 
@@ -180,6 +199,22 @@ public class FilePublishRunStateStore : IPublishRunStateStore
             }
 
             return false;
+        }
+        finally
+        {
+            // The name is different every time, so a write that failed after creating the file would leave it
+            // behind for the length of the run
+            if (File.Exists(temporaryPath))
+            {
+                try
+                {
+                    File.Delete(temporaryPath);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.Debug(ex, "Could not remove the temporary run state file '{TemporaryPath}'.", temporaryPath);
+                }
+            }
         }
     }
 
