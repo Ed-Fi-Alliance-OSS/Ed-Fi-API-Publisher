@@ -11,6 +11,8 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.MessageProducers
 using EdFi.Tools.ApiPublisher.Connections.Api.Processing.Source.Paging;
 using EdFi.Tools.ApiPublisher.Core.Capabilities;
 using EdFi.Tools.ApiPublisher.Core.Processing.Handlers;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
+using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 using Shouldly;
@@ -50,6 +52,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Modules
 
             var builder = new ContainerBuilder();
             builder.RegisterModule(new EdFiApiAsSourceModule(configuration));
+
+            // Supplied by CoreModule in a real run; stubbed here so the test stays about what the source
+            // module itself registers (see APIPUB-142)
+            builder.RegisterInstance(NullPageCheckpointCoordinator.Instance).As<IPageCheckpointCoordinator>();
 
             return builder.Build();
         }

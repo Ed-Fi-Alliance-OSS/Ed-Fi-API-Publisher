@@ -61,7 +61,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     httpClientHandler: new HttpClientHandlerFakeBridge(fake));
 
             var clientProvider = new EdFiApiClientProvider(new Lazy<EdFiApiClient>(ClientFactory));
-            var cursorProducer = new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider));
+            var cursorProducer = new EdFiApiCursorPagingStreamResourcePageMessageProducer(clientProvider, new EdFiApiSourceTotalCountProvider(clientProvider), NullPageCheckpointCoordinator.Instance);
 
             return (new PagingStrategyDispatchingStreamResourcePageMessageProducer(resolver, offsetProducer, cursorProducer), offsetProducer, fake);
         }

@@ -257,6 +257,21 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                 _ => CursorPagingPartitionCount.Value,
             };
 
+        /// <summary>
+        /// When <b>true</b>, the run continues where the last one left off instead of starting over: the
+        /// change window recorded by that run is replayed rather than recomputed (see APIPUB-142). A stored
+        /// state written for a different source, a different target or a different publisher build is
+        /// refused with a Warning and the run starts from the beginning.
+        /// </summary>
+        public bool ResumeLastRun { get; set; } = false;
+
+        /// <summary>
+        /// Where the run state a resume needs is kept. A directory takes the default file name inside it, so
+        /// a containerised run can point this at a mounted volume without naming the file. When not set, the
+        /// file sits in the working directory.
+        /// </summary>
+        public string RunStatePath { get; set; }
+
         public string LastChangeVersionProcessedNamespace { get; set; }
 
         public bool ProcessDeletesAndKeyChangesOnFullPublish { get; set; } = false;

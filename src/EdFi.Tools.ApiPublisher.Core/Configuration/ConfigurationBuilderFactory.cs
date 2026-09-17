@@ -85,6 +85,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--useReversePaging"] = "Options:UseReversePaging",
                     ["--disableCursorPaging"] = "Options:DisableCursorPaging",
                     ["--cursorPagingPartitionCount"] = "Options:CursorPagingPartitionCount",
+                    ["--resumeLastRun"] = "Options:ResumeLastRun",
+                    ["--runStatePath"] = "Options:RunStatePath",
                     ["--lastChangeVersionProcessedNamespace"] = "Options:LastChangeVersionProcessedNamespace",
                     ["--processDeletesAndKeyChangesOnFullPublish"] = "Options:ProcessDeletesAndKeyChangesOnFullPublish",
 

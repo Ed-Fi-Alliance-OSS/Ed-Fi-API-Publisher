@@ -175,7 +175,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 TestHelpers.GetSourceApiConnectionDetails(),
                 A.Fake<ISourceCapabilities>(),
                 A.Fake<ISourceResourceItemProvider>(),
-                A.Fake<IRunSummaryCollector>());
+                A.Fake<IRunSummaryCollector>(),
+                NullPageCheckpointCoordinator.Instance);
 
             var pageMessage = new StreamResourcePageMessage<PostItemMessage>
             {

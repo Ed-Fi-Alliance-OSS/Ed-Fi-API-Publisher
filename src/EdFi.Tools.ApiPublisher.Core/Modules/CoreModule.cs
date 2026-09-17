@@ -10,6 +10,7 @@ using EdFi.Tools.ApiPublisher.Core.Isolation;
 using EdFi.Tools.ApiPublisher.Core.Metadata;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Core.Processing.Blocks;
+using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using EdFi.Tools.ApiPublisher.Core.Versioning;
 
 namespace EdFi.Tools.ApiPublisher.Core.Modules
@@ -51,6 +52,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Modules
             builder.RegisterType<StreamResourceBlockFactory>(); //.SingleInstance();
             builder.RegisterType<StreamResourcePagesBlockFactory>(); //.SingleInstance();
             builder.RegisterType<PublishErrorsBlocksFactory>(); //.SingleInstance();
+
+            // Holds where a run got to, so that a failed run can be resumed (see APIPUB-142). Registered
+            // explicitly because the interface names the contract, not the backing store.
+            builder.RegisterType<FilePublishRunStateStore>()
+                .As<IPublishRunStateStore>()
+                .SingleInstance();
+
+            // Shared across the whole run: it follows every partition of every resource at once
+            builder.RegisterType<PageCheckpointCoordinator>()
+                .As<IPageCheckpointCoordinator>()
+                .SingleInstance();
 
             builder.RegisterType<ChangeProcessor>();
 

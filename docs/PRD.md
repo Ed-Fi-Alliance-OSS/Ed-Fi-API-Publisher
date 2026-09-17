@@ -176,6 +176,7 @@ The publisher has no persistent HTTP service; it is invoked as a one-shot CLI pr
 - **FR-CHG-4:** The publisher SHALL support a namespace prefix for `lastChangeVersionsProcessed` tracking via `--lastChangeVersionProcessedNamespace`, enabling multiple logical publisher instances sharing a named connection.
 - **FR-CHG-5:** Against an ODS/API 7.3+ source the publisher SHALL read main resources with partitioned cursor paging (`GET /{resource}/partitions`, `pageToken`/`pageSize`, `Next-Page-Token`), detected automatically, with `--disableCursorPaging` forcing `offset`/`limit`; `/deletes` and `/keyChanges` SHALL always use `offset`/`limit`.
 - **FR-CHG-6:** The publisher SHALL request a configurable number of partitions per resource (`--cursorPagingPartitionCount`, 1..200, default = `--maxDegreeOfParallelismForStreamResourcePages`, capped at 200, the API maximum).
+- **FR-CHG-7:** The publisher SHALL persist, per cursor-paged resource and partition, the last page token whose documents all reached the target, together with the run's change window, so that `--resumeLastRun` continues a failed run without re-reading the pages behind that point. A page that lost a document SHALL NOT be recorded as behind it. State SHALL be kept in a local file whose path is configurable (`--runStatePath`) and SHALL be removed by a run that loses no documents.
 
 ### FR-CONN: Connection Management
 
