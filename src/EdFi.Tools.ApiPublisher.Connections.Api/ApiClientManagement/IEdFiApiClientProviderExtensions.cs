@@ -53,10 +53,21 @@ public static class EdFiApiClientProviderExtensions
         if (versionMetadata?["urls"]?[urlName]?.ToString() is string metadataUri &&
             Uri.TryCreate(metadataUri, UriKind.Absolute, out var uri))
         {
-            return uri.AbsolutePath;
+            string metadataPath = uri.AbsolutePath;
+
+            // Refused rather than requested, because a path still carrying a placeholder is not an address.
+            // Requesting it draws a 404 naming a URL with '%7B' in it, which reads as a defect in the tool
+            // rather than as an API that was asked for its URLs at the wrong address.
+            if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(metadataPath))
+            {
+                throw new InvalidOperationException(
+                    $"The {urlName} URL declared by the {edFiApiClient.Name} API is '{metadataUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance}");
+            }
+
+            return metadataPath;
         }
 
-        logger?.Warning("No valid dependencies URL found in metadata. Using default fallback.");
+        logger?.Warning("No valid {UrlName:l} URL found in metadata. Using default fallback.", urlName);
         switch (urlName)
         {
             case "dependencies":
