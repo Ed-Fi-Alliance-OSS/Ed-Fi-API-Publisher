@@ -34,6 +34,8 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
     /// <summary>How often progress is written while the run is publishing.</summary>
     public static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(5);
 
+    private readonly TimeSpan _flushInterval;
+
     private readonly IPublishRunStateStore _publishRunStateStore;
 
     private readonly ConcurrentDictionary<PartitionKey, PartitionProgress> _partitionsByKey = new();
@@ -46,9 +48,14 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
     private int _pendingChanges;
     private bool _stopped;
 
-    public PageCheckpointCoordinator(IPublishRunStateStore publishRunStateStore)
+    /// <param name="flushInterval">
+    /// How often progress is written. Defaults to <see cref="FlushInterval" />; a test shortens it so that
+    /// what a write does between one flush and the next can be observed without waiting for the real one.
+    /// </param>
+    public PageCheckpointCoordinator(IPublishRunStateStore publishRunStateStore, TimeSpan? flushInterval = null)
     {
         _publishRunStateStore = publishRunStateStore ?? throw new ArgumentNullException(nameof(publishRunStateStore));
+        _flushInterval = flushInterval ?? FlushInterval;
     }
 
     public void Begin(PublishRunState runState)
@@ -146,6 +153,21 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
             {
                 partition.StartingPageToken = startingPageTokens[index];
             }
+        }
+
+        // These tokens are the whole of what the resource is being read as, so anything a previous run
+        // recorded beyond them is a range this run will not read. Left in place it would be written back and
+        // replayed by a later resume as an extra range overlapping the ones that replaced it. Reached only
+        // when a resume was refused for this resource and the source was asked to partition it afresh.
+        var abandoned = _partitionsByKey.Keys
+            .Where(key => key.IsAuthorizationRetryPass == isAuthorizationRetryPass
+                && string.Equals(key.ResourceUrl, resourceUrl, StringComparison.OrdinalIgnoreCase)
+                && key.PartitionIndex > startingPageTokens.Count)
+            .ToList();
+
+        foreach (var key in abandoned)
+        {
+            _partitionsByKey.TryRemove(key, out _);
         }
 
         Interlocked.Exchange(ref _pendingChanges, 1);
@@ -304,7 +326,7 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
         {
             try
             {
-                await Task.Delay(FlushInterval, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(_flushInterval, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -332,15 +354,14 @@ public class PageCheckpointCoordinator : IPageCheckpointCoordinator
         {
             _runState.Resources = BuildResourceStates();
 
-            await _publishRunStateStore.SaveAsync(_runState, cancellationToken).ConfigureAwait(false);
-
-            written = true;
+            written = await _publishRunStateStore.SaveAsync(_runState, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             // The flag is taken before the write, so a write that does not complete -- the loop's own token
-            // being cancelled part way through it, for one -- would otherwise leave the final write with
-            // nothing to do and quietly drop everything marked since the last one that did complete.
+            // being cancelled part way through it, or the store reporting that the file could not be written
+            // -- would otherwise leave the final write with nothing to do and quietly drop everything marked
+            // since the last one that did complete.
             if (!written)
             {
                 Interlocked.Exchange(ref _pendingChanges, 1);

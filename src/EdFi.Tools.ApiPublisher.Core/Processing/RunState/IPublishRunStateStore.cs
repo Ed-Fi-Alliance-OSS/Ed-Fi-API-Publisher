@@ -24,10 +24,13 @@ public interface IPublishRunStateStore
     Task<PublishRunState> TryLoadAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Writes the state, replacing what is stored. Implementations write atomically, so a process killed
-    /// mid-write leaves either the previous state or the new one, never half of either.
+    /// Writes the state, replacing what is stored, and says whether it got there. Implementations write
+    /// atomically, so a process killed mid-write leaves either the previous state or the new one, never half
+    /// of either. A write that fails is reported as false rather than thrown, for the same reason a failed
+    /// load is reported as null: it costs the run its resume, never the run. The caller keeps what it was
+    /// trying to write pending so the next attempt carries it.
     /// </summary>
-    Task SaveAsync(PublishRunState state, CancellationToken cancellationToken);
+    Task<bool> SaveAsync(PublishRunState state, CancellationToken cancellationToken);
 
     /// <summary>
     /// Removes the stored state. Does nothing when there is none.

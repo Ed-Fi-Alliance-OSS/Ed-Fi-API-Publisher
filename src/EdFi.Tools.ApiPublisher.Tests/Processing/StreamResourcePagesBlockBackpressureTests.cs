@@ -129,7 +129,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             public Task<PublishRunState> TryLoadAsync(CancellationToken cancellationToken) => Task.FromResult<PublishRunState>(null);
 
-            public Task SaveAsync(PublishRunState state, CancellationToken cancellationToken) => Task.CompletedTask;
+            public Task<bool> SaveAsync(PublishRunState state, CancellationToken cancellationToken) => Task.FromResult(true);
 
             public Task DeleteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         }

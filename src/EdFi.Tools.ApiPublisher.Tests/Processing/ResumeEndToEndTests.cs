@@ -311,11 +311,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             public Task<PublishRunState> TryLoadAsync(CancellationToken cancellationToken) => Task.FromResult(State);
 
-            public Task SaveAsync(PublishRunState state, CancellationToken cancellationToken)
+            public Task<bool> SaveAsync(PublishRunState state, CancellationToken cancellationToken)
             {
                 State = state;
 
-                return Task.CompletedTask;
+                return Task.FromResult(true);
             }
 
             public Task DeleteAsync(CancellationToken cancellationToken)

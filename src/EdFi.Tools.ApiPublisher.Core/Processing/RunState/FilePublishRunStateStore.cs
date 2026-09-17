@@ -139,7 +139,7 @@ public class FilePublishRunStateStore : IPublishRunStateStore
         }
     }
 
-    public async Task SaveAsync(PublishRunState state, CancellationToken cancellationToken)
+    public async Task<bool> SaveAsync(PublishRunState state, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(state);
 
@@ -165,6 +165,8 @@ public class FilePublishRunStateStore : IPublishRunStateStore
                 .ConfigureAwait(false);
 
             File.Move(temporaryPath, Location, overwrite: true);
+
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -176,6 +178,8 @@ public class FilePublishRunStateStore : IPublishRunStateStore
 
                 _logger.Warning(ex, "Run state could not be written to '{Location}'. This run will publish normally but will not be resumable.", Location);
             }
+
+            return false;
         }
     }
 
@@ -225,6 +229,16 @@ public class FilePublishRunStateStore : IPublishRunStateStore
         if (state.MinChangeVersion.HasValue != state.MaxChangeVersion.HasValue)
         {
             problem = "it records only one end of a change window, so the window it pinned cannot be replayed";
+
+            return false;
+        }
+
+        if (state.Resources.Exists(
+                resource => resource.Partitions.Exists(
+                    partition => string.IsNullOrEmpty(partition.StartingPageToken)
+                        && string.IsNullOrEmpty(partition.LastCompletedPageToken))))
+        {
+            problem = "one of its partitions records no page token at all, so there is no position to resume it from";
 
             return false;
         }

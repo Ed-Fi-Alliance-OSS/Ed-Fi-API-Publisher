@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing.Messages;
 using EdFi.Tools.ApiPublisher.Core.Processing.RunState;
 using NUnit.Framework;
 using Shouldly;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -206,6 +207,92 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             coordinator.TryGetResumeTokens(StudentsUrl, isAuthorizationRetryPass: false).ShouldBeNull();
         }
 
+        /// <summary>
+        /// The case where a resume is refused for one resource but its recorded partitions are already in
+        /// hand: the source is asked to partition it afresh, and what it hands back is the whole of what the
+        /// resource is being read as. A mark from the run before must not survive into a range that replaced
+        /// the one it was taken in, and a partition beyond the new count must not be written back at all.
+        /// </summary>
+        [Test]
+        public async Task Repartitioning_a_resource_replaces_every_position_it_had_recorded()
+        {
+            var store = new CapturingRunStateStore();
+            var coordinator = new PageCheckpointCoordinator(store);
+
+            var runState = PublishRunState.StartNew("TestSource", "TestTarget", changeWindow: null);
+            runState.Resources.Add(
+                new PublishRunResourceState
+                {
+                    ResourceUrl = StudentsUrl,
+                    Partitions =
+                    {
+                        new PublishRunPartitionState { PartitionIndex = 1, StartingPageToken = "old-1", LastCompletedPageToken = "old-1-page5", LastCompletedPageNumber = 5 },
+
+                        // No token of any kind, which is what makes the whole resource unresumable
+                        new PublishRunPartitionState { PartitionIndex = 2 },
+                        new PublishRunPartitionState { PartitionIndex = 3, StartingPageToken = "old-3", LastCompletedPageToken = "old-3-page9", LastCompletedPageNumber = 9 },
+                    },
+                });
+
+            coordinator.Begin(runState);
+
+            coordinator.TryGetResumeTokens(StudentsUrl, isAuthorizationRetryPass: false).ShouldBeNull();
+
+            // The source is asked again and hands back fewer ranges than the run before was given
+            coordinator.PartitionsProduced(StudentsUrl, isAuthorizationRetryPass: false, new[] { "new-1", "new-2" });
+
+            var page = Page(pageNumber: 1, token: "new-1");
+            ReadPage(coordinator, page, documentCount: 1);
+            CompleteDocuments(coordinator, page, count: 1);
+
+            await coordinator.StopAsync();
+
+            var partitions = runState.FindResource(StudentsUrl, isAuthorizationRetryPass: false).Partitions;
+
+            // The third range is gone: this run never read it, and replaying it later would overlap the two
+            // that replaced it
+            partitions.Count.ShouldBe(2);
+
+            partitions[0].StartingPageToken.ShouldBe("new-1");
+            partitions[0].LastCompletedPageToken.ShouldBe("new-1");
+            partitions[0].LastCompletedPageNumber.ShouldBe(1);
+
+            partitions[1].StartingPageToken.ShouldBe("new-2");
+            partitions[1].LastCompletedPageToken.ShouldBeNull();
+        }
+
+        /// <summary>
+        /// A write the store could not make must leave its work pending. Without that, a write is skipped
+        /// whenever no mark has moved since the last one, so the write on the way out of a failed run finds
+        /// nothing to do and everything marked since the last write that landed is never recorded.
+        /// </summary>
+        [Test]
+        public async Task A_write_the_store_refuses_leaves_its_progress_to_be_written_again()
+        {
+            var store = new CapturingRunStateStore { WriteSucceeds = false };
+            var coordinator = new PageCheckpointCoordinator(store, flushInterval: TimeSpan.FromMilliseconds(20));
+            var runState = PublishRunState.StartNew("TestSource", "TestTarget", changeWindow: null);
+
+            coordinator.Begin(runState);
+
+            var page = Page(pageNumber: 1, token: "TOKEN-1");
+            ReadPage(coordinator, page, documentCount: 1);
+            CompleteDocuments(coordinator, page, count: 1);
+
+            // Nothing is marked from here on, so every further write is the refused one being carried
+            // forward. Held pending it is attempted again; dropped it would leave the store never asked again.
+            var givingUp = DateTime.UtcNow.AddSeconds(5);
+
+            while (store.SaveCount < 3 && DateTime.UtcNow < givingUp)
+            {
+                await Task.Delay(10);
+            }
+
+            await coordinator.StopAsync();
+
+            store.SaveCount.ShouldBeGreaterThanOrEqualTo(3);
+        }
+
         private static (PageCheckpointCoordinator, CapturingRunStateStore, PublishRunState) StartCoordinator()
         {
             var store = new CapturingRunStateStore();
@@ -251,11 +338,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             public Task<PublishRunState> TryLoadAsync(CancellationToken cancellationToken)
                 => Task.FromResult<PublishRunState>(null);
 
-            public Task SaveAsync(PublishRunState state, CancellationToken cancellationToken)
+            /// <summary>Set to false to stand in for a store that cannot write.</summary>
+            public bool WriteSucceeds { get; set; } = true;
+
+            public Task<bool> SaveAsync(PublishRunState state, CancellationToken cancellationToken)
             {
                 SaveCount++;
 
-                return Task.CompletedTask;
+                return Task.FromResult(WriteSucceeds);
             }
 
             public Task DeleteAsync(CancellationToken cancellationToken) => Task.CompletedTask;

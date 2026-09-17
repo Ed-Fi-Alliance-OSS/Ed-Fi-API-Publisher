@@ -205,6 +205,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
 
                 // Written before the first document moves, and only once the run is certain to publish, so that
                 // a run which fails early is still resumable and a --whatIf run leaves nothing behind.
+                // The store reports a failed write rather than throwing, and warns once when it does. A run
+                // that cannot write its state still publishes correctly, it just cannot be resumed.
                 await _publishRunStateStore.SaveAsync(runState, cancellationToken).ConfigureAwait(false);
 
                 // Said once, up front: a run that dies later cannot report where it left its state, and an

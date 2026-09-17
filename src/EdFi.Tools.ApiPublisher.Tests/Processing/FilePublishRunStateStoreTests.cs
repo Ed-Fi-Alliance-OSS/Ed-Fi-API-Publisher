@@ -261,6 +261,23 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             (await StoreAt(path).TryLoadAsync(CancellationToken.None)).ShouldBeNull();
         }
 
+        /// <summary>
+        /// A partition this publisher wrote always carries at least its starting token, so one with neither
+        /// token is an edited file. Refusing it here is what keeps a resume from falling back to asking the
+        /// source to partition a resource it already holds recorded ranges for.
+        /// </summary>
+        [Test]
+        public async Task State_with_a_partition_that_has_no_token_should_cost_the_resume_and_not_the_run()
+        {
+            string path = Path.Combine(_directory, "tokenless.json");
+
+            await File.WriteAllTextAsync(
+                path,
+                "{\"runId\":\"abc\",\"resources\":[{\"resourceUrl\":\"/ed-fi/students\",\"partitions\":[{\"partitionIndex\":1}]}]}");
+
+            (await StoreAt(path).TryLoadAsync(CancellationToken.None)).ShouldBeNull();
+        }
+
         private static FilePublishRunStateStore StoreAt(
             string path,
             string sourceName = "SourceOds",
