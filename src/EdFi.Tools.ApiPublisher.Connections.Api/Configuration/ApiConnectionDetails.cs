@@ -15,6 +15,20 @@ public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnecti
     public string Scope { get; set; }
     public int? SchoolYear { get; set; }
 
+    /// <summary>
+    /// Gets or sets the path to the data management API, relative to <see cref="Url" />, for an API whose
+    /// Discovery document cannot be read or does not state where it serves. Left unassigned, the path is
+    /// taken from the Discovery document.
+    /// </summary>
+    public string DataManagementUrlSegment { get; set; }
+
+    /// <summary>
+    /// Gets or sets the path to the change queries API, relative to <see cref="Url" />, for an API whose
+    /// Discovery document cannot be read or does not state where it serves. Left unassigned, the path is
+    /// taken from the Discovery document.
+    /// </summary>
+    public string ChangeQueriesUrlSegment { get; set; }
+
     public bool? TreatForbiddenPostAsWarning { get; set; }
 
     public string ProfileName { get; set; }

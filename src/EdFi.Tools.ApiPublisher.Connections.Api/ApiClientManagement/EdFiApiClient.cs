@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+﻿// SPDX-License-Identifier: Apache-2.0
 // Licensed to the Ed-Fi Alliance under one or more agreements.
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
@@ -6,6 +6,8 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
@@ -18,6 +20,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private readonly HttpClientHandler _httpClientHandler;
         private readonly HttpClient _httpClient;
         private readonly BearerTokenManager _bearerTokenManager;
+
+        private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClient));
+
+        // Read once and shared by both segments, because one document states where both of them are served.
+        private readonly Lazy<JObject> _discoveryDocument;
 
         private readonly Lazy<string> _dataManagementApiSegment;
         private readonly Lazy<string> _changeQueriesApiSegment;
@@ -42,18 +49,22 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 apiConnectionDetails.Url
                 ?? throw new InvalidOperationException("URL for API connection '{name}' was not assigned.");
 
+            _discoveryDocument = new Lazy<JObject>(ReadDiscoveryDocument);
+
             _dataManagementApiSegment = new Lazy<string>(
                 () =>
-                    ConnectionDetails.SchoolYear is null
-                        ? EdFiApiConstants.DataManagementApiSegment
-                        : $"{EdFiApiConstants.DataManagementApiSegment}/{ConnectionDetails.SchoolYear}"
+                    ResolveApiSegment(
+                        EdFiApiUrlSegmentResolver.DataManagement,
+                        ConnectionDetails.DataManagementUrlSegment
+                    )
             );
 
             _changeQueriesApiSegment = new Lazy<string>(
                 () =>
-                    ConnectionDetails.SchoolYear is null
-                        ? EdFiApiConstants.ChangeQueriesApiSegment
-                        : $"{EdFiApiConstants.ChangeQueriesApiSegment}/{ConnectionDetails.SchoolYear}"
+                    ResolveApiSegment(
+                        EdFiApiUrlSegmentResolver.ChangeQueries,
+                        ConnectionDetails.ChangeQueriesUrlSegment
+                    )
             );
 
             _httpClientHandler = httpClientHandler ?? new HttpClientHandler();
@@ -156,6 +167,83 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
 
             return pipeline;
+        }
+
+        /// <summary>
+        /// Reads the API's Discovery document, the anonymous document at the root of the connection's URL in
+        /// which the API states where it serves each part of its surface. An API that cannot be asked, or that
+        /// answers with something unreadable, yields an empty document and so states nothing.
+        /// </summary>
+        /// <remarks>
+        /// Blocks, because the segments it feeds are read through synchronous properties by every call site
+        /// that builds a request. It happens once per client, on first use, in the same way the bearer token
+        /// is first obtained while the client is being constructed.
+        /// </remarks>
+        private JObject ReadDiscoveryDocument()
+        {
+            try
+            {
+                using var response = _httpClient.GetAsync("").GetAwaiter().GetResult();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.Warning(
+                        "The {Name:l} API at '{BaseAddress}' answered {StatusCode} for its Discovery document, so the paths it serves cannot be read from it.",
+                        _name,
+                        _httpClient.BaseAddress,
+                        (int)response.StatusCode
+                    );
+
+                    return new JObject();
+                }
+
+                return JObject.Parse(response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+            }
+            catch (Exception ex)
+            {
+                // Not fatal on its own. An ODS/API serves where the publisher has always assumed, and an API
+                // that serves elsewhere can be told outright on the connection.
+                _logger.Warning(
+                    ex,
+                    "The Discovery document for the {Name:l} API at '{BaseAddress}' could not be read.",
+                    _name,
+                    _httpClient.BaseAddress
+                );
+
+                return new JObject();
+            }
+        }
+
+        private string ResolveApiSegment(ApiUrlSegmentDefinition definition, string statedSegment)
+        {
+            var resolver = new EdFiApiUrlSegmentResolver(_httpClient.BaseAddress, _name, _logger);
+
+            return WithSchoolYearApplied(
+                resolver.Resolve(statedSegment, _discoveryDocument.Value, definition)
+            );
+        }
+
+        /// <summary>
+        /// Applies the connection's school year to a segment, for the year-specific routing an ODS/API uses
+        /// when it serves more than one school year from a single address.
+        /// </summary>
+        private string WithSchoolYearApplied(string segment)
+        {
+            if (ConnectionDetails.SchoolYear is null)
+            {
+                return segment;
+            }
+
+            string schoolYearSegment = $"/{ConnectionDetails.SchoolYear}";
+
+            // An API whose paths were read at a year-specific address states the year itself, and stating it
+            // again would address a year within a year.
+            if (segment.EndsWith(schoolYearSegment, StringComparison.Ordinal))
+            {
+                return segment;
+            }
+
+            return $"{segment}{schoolYearSegment}";
         }
 
         public HttpClient HttpClient => _httpClient;
