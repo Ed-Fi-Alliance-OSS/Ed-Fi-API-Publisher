@@ -158,7 +158,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
 
             _logger.Warning(
-                "The {ConnectionName:l} API's Discovery document could not be read, so requests will use the conventional '{ConventionalSegment:l}' rather than the path it serves. Publishing continues. If this API does not serve that path, set {ConfigurationPath:l}.",
+                "The {ConnectionName:l} API's Discovery document could not be read, so the conventional '{ConventionalSegment:l}' would be used for this path. The publisher takes this API's version information from that same document, so the run will not get past the version check while it cannot be read. Setting {ConfigurationPath:l} corrects a path an API declares wrongly; it does not stand in for a document that cannot be read.",
                 _connectionName,
                 definition.ConventionalSegment,
                 ConfigurationPathFor(definition)
