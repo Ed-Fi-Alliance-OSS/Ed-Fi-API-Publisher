@@ -4,9 +4,11 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
+using FakeItEasy;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Serilog.Events;
@@ -15,6 +17,7 @@ using Shouldly;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -66,7 +69,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // The Discovery document is served by the remote API, and a connection's requests carry its
             // credentials. Following a declaration off the connection's own host would send this API's bearer
             // token, and the documents being published, somewhere the operator never named.
-            var exception = Should.Throw<InvalidOperationException>(
+            var exception = Should.Throw<InvalidConfigurationException>(
                 () => ResolverFor()
                     .Resolve(
                         statedSegment: null,
@@ -94,7 +97,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         [Test]
         public void A_segment_stated_on_the_connection_for_another_host_should_be_refused()
         {
-            var exception = Should.Throw<InvalidOperationException>(
+            var exception = Should.Throw<InvalidConfigurationException>(
                 () => ResolverFor()
                     .Resolve(
                         statedSegment: "https://elsewhere.example/collect",
@@ -167,7 +170,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             // A multi-tenant DMS asked for its paths at the server root answers with the placeholders, not
             // with values. Building requests from those would fail later and less clearly than this does.
-            var exception = Should.Throw<InvalidOperationException>(
+            var exception = Should.Throw<InvalidConfigurationException>(
                 () => ResolverFor()
                     .Resolve(
                         statedSegment: null,
@@ -251,14 +254,16 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     edfiVersion: "5.2.0",
                     urls: new Dictionary<string, string>
                     {
+                        // Neither value is the conventional one, so falling back rather than reading the
+                        // declaration would show up here instead of matching by coincidence.
                         { "dataManagementApi", $"{MockRequests.SourceApiBaseUrl}/data" },
-                        { "changeQueries", $"{MockRequests.SourceApiBaseUrl}/changeQueries/v1/" }
+                        { "changeQueries", $"{MockRequests.SourceApiBaseUrl}/changes/" }
                     });
 
             using var client = CreateClient(fake);
 
             client.DataManagementApiSegment.ShouldBe("data");
-            client.ChangeQueriesApiSegment.ShouldBe("changeQueries/v1");
+            client.ChangeQueriesApiSegment.ShouldBe("changes");
         }
 
         [Test]
@@ -285,13 +290,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     edfiVersion: "5.0.0",
                     urls: new Dictionary<string, string>
                     {
-                        // Declared without the year, which is what a year-specific ODS/API states.
-                        { "dataManagementApi", $"{MockRequests.SourceApiBaseUrl}/data/v3/" }
+                        // Declared without a year, and deliberately not the conventional path, so that the
+                        // expectation cannot be met by the fallback appending the year.
+                        { "dataManagementApi", $"{MockRequests.SourceApiBaseUrl}/data" }
                     });
 
             using var client = CreateClient(fake, schoolYear: 2099);
 
-            client.DataManagementApiSegment.ShouldBe("data/v3/2099");
+            client.DataManagementApiSegment.ShouldBe("data/2099");
         }
 
         [Test]
@@ -311,6 +317,47 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             using var client = CreateClient(fake, schoolYear: 2099);
 
             client.DataManagementApiSegment.ShouldBe("data/2099");
+        }
+
+        [Test]
+        public void A_client_whose_discovery_document_is_not_found_should_keep_the_conventional_paths()
+        {
+            // The connection is reachable but its root is not, which is the deployment the per-connection
+            // override exists for. Reading it has to degrade rather than end the run.
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(FakeResponse.NotFound());
+
+            using var client = CreateClient(fake);
+
+            client.DataManagementApiSegment.ShouldBe(EdFiApiConstants.DataManagementApiSegment);
+            client.ChangeQueriesApiSegment.ShouldBe(EdFiApiConstants.ChangeQueriesApiSegment);
+        }
+
+        [Test]
+        public void A_client_whose_discovery_document_is_not_JSON_should_keep_the_conventional_paths()
+        {
+            // Something other than an Ed-Fi API answering at the connection URL, or a proxy error page. The
+            // parse failure belongs to the document, not to the run.
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(FakeResponse.OK("<html><body>Gateway Timeout</body></html>"));
+
+            using var client = CreateClient(fake);
+
+            client.DataManagementApiSegment.ShouldBe(EdFiApiConstants.DataManagementApiSegment);
+        }
+
+        [Test]
+        public void A_client_whose_discovery_document_carries_a_urls_value_that_is_not_an_object_should_keep_the_conventional_paths()
+        {
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(FakeResponse.OK("{\"version\":\"8.0\",\"urls\":\"not-an-object\"}"));
+
+            using var client = CreateClient(fake);
+
+            client.DataManagementApiSegment.ShouldBe(EdFiApiConstants.DataManagementApiSegment);
         }
 
         private static EdFiApiClient CreateClient(IFakeHttpRequestHandler fake, int? schoolYear = null) =>

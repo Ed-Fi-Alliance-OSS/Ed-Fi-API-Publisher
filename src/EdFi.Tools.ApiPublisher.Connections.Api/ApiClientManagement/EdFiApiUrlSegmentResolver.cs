@@ -3,6 +3,7 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json.Linq;
 using Serilog;
@@ -92,8 +93,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             {
                 string declaredSegment = ToRelativeSegment(declaredUrl, definition);
 
-                _logger.Debug(
-                    "The {ConnectionName:l} API declares {DiscoveryUrlName:l} as {DeclaredUrl}, which is '{Segment:l}' relative to '{BaseAddress}'.",
+                // Information rather than Debug: routing now depends on what the API answers, so the path
+                // actually in use is the first thing an operator needs when every request comes back 404.
+                _logger.Information(
+                    "The {ConnectionName:l} API declares {DiscoveryUrlName:l} as {DeclaredUrl}; requests will use '{Segment:l}' relative to '{BaseAddress}'.",
                     _connectionName,
                     definition.DiscoveryUrlName,
                     declaredUrl,
@@ -156,7 +159,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (!Uri.TryCreate(_baseAddress, declaredUrl, out var declaredUri))
             {
-                throw new InvalidOperationException(
+                throw new InvalidConfigurationException(
                     $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection is '{declaredUrl}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {definition.ConfigurationKeyName} on the connection to the path its callers use."
                 );
             }
@@ -171,7 +174,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 ) != 0
             )
             {
-                throw new InvalidOperationException(
+                throw new InvalidConfigurationException(
                     $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri}', which is not served by the host this connection addresses ('{_baseAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host. If this API is reached through a gateway and declares the address it is deployed at rather than the one its callers use, set {definition.ConfigurationKeyName} on the connection to the path those callers use."
                 );
             }
@@ -235,7 +238,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return segment;
             }
 
-            throw new InvalidOperationException(
+            throw new InvalidConfigurationException(
                 $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolved to '{segment}', which still carries a route placeholder. {RouteQualifierGuidance}"
             );
         }

@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Newtonsoft.Json.Linq;
 using Serilog;
 
@@ -26,6 +27,10 @@ public static class EdFiApiClientProviderExtensions
     /// A <see cref="string"/> representing the absolute path of the requested URL,
     /// either retrieved from metadata or constructed from a fallback.
     /// </returns>
+    /// <exception cref="InvalidConfigurationException">
+    /// Thrown when the API declares this URL at an address that still carries a route placeholder, which the
+    /// operator resolves by addressing the connection at a qualified URL.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown if the specified <paramref name="urlName"/> is not found in the metadata
     /// and no fallback is defined for it.
@@ -60,7 +65,7 @@ public static class EdFiApiClientProviderExtensions
             // rather than as an API that was asked for its URLs at the wrong address.
             if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(metadataPath))
             {
-                throw new InvalidOperationException(
+                throw new InvalidConfigurationException(
                     $"The {urlName} URL declared by the {edFiApiClient.Name} API is '{metadataUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance}");
             }
 

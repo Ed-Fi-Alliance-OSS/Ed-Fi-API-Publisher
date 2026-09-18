@@ -1,4 +1,4 @@
-﻿# Ed-Fi API Publisher Configuration
+# Ed-Fi API Publisher Configuration
 
 The Ed-Fi API Publisher provides a hierarchical organization of configuration information, as documented below.
 
