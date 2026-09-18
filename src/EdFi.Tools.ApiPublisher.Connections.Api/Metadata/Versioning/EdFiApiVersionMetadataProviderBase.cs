@@ -25,35 +25,33 @@ public class EdFiApiVersionMetadataProviderBase
         _logger = Log.ForContext(GetType());
     }
 
-    public async Task<JObject> GetVersionMetadata()
+    /// <summary>
+    /// Returns the API's Discovery document, which carries its version information as well as the paths it
+    /// serves.
+    /// </summary>
+    /// <remarks>
+    /// Taken from the copy the client read while the connection was being set up rather than requested again.
+    /// The same document answers the version check, the dependency metadata URL and the path segments, so
+    /// asking for it once is both fewer requests and one answer that cannot disagree with itself.
+    /// </remarks>
+    public Task<JObject> GetVersionMetadata()
     {
-        var versionResponse = _edFiApiClientProvider.GetApiClient().HttpClient.GetAsync("");
+        var edFiApiClient = _edFiApiClientProvider.GetApiClient();
+        var discoveryDocument = edFiApiClient.DiscoveryDocument;
 
-        if (!versionResponse.Result.IsSuccessStatusCode)
+        if (!discoveryDocument.WasRead)
         {
-            throw new Exception($"{_role} API at '{_edFiApiClientProvider.GetApiClient().HttpClient.BaseAddress}' returned status code '{versionResponse.Result.StatusCode}' for request for version information.");
+            throw new Exception(
+                $"{_role} API at '{edFiApiClient.HttpClient.BaseAddress}' did not provide version information, because its Discovery document could not be read. The reason was reported while the connection was being set up.");
         }
 
-        string responseJson = await versionResponse.Result.Content.ReadAsStringAsync().ConfigureAwait(false);
+        // The document is remote content, so it is a property rather than part of the template. Interpolating
+        // it into the template would let a value such as a route placeholder be parsed as a property token.
+        _logger.Information(
+            "{Role:l} version information: {VersionInformation}",
+            _role,
+            discoveryDocument.Content.ToString(Formatting.Indented));
 
-        return GetVersionObject(responseJson);
-
-        JObject GetVersionObject(string versionJson)
-        {
-            JObject versionObject;
-
-            try
-            {
-                versionObject = JObject.Parse(versionJson);
-                var message = $"{_role} version information: {versionObject.ToString(Formatting.Indented)}";
-                _logger.Information(message);
-            }
-            catch (Exception)
-            {
-                throw new Exception($"Unable to parse version information returned from {_role.ToLower()} API.");
-            }
-
-            return versionObject;
-        }
+        return Task.FromResult(discoveryDocument.Content);
     }
 }

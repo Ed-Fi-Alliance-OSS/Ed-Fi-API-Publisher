@@ -109,16 +109,9 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
         private static EdFiApiClient CreateApiClient(GatedTransport transport, int maxConcurrentRequests)
         {
-            // Both paths are stated on the connection so that constructing the client reads no Discovery
-            // document. This test asserts an exact request count, and the read would be one more request that
-            // has nothing to do with the cap.
-            var connectionDetails = TestHelpers.GetSourceApiConnectionDetails();
-            connectionDetails.DataManagementUrlSegment = "data/v3";
-            connectionDetails.ChangeQueriesUrlSegment = "changeQueries/v1";
-
             return new EdFiApiClient(
                 "TestSource",
-                connectionDetails,
+                TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes: 60,
                 ignoreSslErrors: true,
                 transport,
@@ -168,6 +161,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 if (request.RequestUri.AbsolutePath.EndsWith("/oauth/token"))
                 {
                     return FakeResponse.OK(new { access_token = "test-access-token" });
+                }
+
+                // The Discovery document is read once while the connection is being set up, for the same
+                // reason the token is obtained there. Answered outside the gate and outside the count, like
+                // the token: this fixture measures what the source is asked to serve while publishing.
+                if (request.RequestUri.AbsolutePath == "/")
+                {
+                    return FakeResponse.OK(new { version = "7.1" });
                 }
 
                 Interlocked.Increment(ref _totalRequests);

@@ -98,7 +98,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // connection whose requests cannot be addressed should say so while it is being set up, not
                 // from inside a processing block once the source has already been streamed. It also keeps the
                 // blocking read off the publishing threads.
-                _discoveryDocument = ReadDiscoveryDocumentIfNeeded();
+                _discoveryDocument = ReadDiscoveryDocument();
 
                 _dataManagementApiSegment = ResolveApiSegment(
                     EdFiApiUrlSegmentResolver.DataManagement,
@@ -179,27 +179,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Blocks, because the segments it feeds are read through synchronous properties by every call site
         /// that builds a request. It happens once per client, on first use, in the same way the bearer token
         /// is first obtained while the client is being constructed.
-        /// </remarks>
-        /// <summary>
-        /// Reads the Discovery document, unless the connection already states every path that would be taken
-        /// from it. An API whose document cannot be reached is exactly the case the connection settings exist
-        /// for, so asking anyway would spend a round trip and report a failure that changes nothing.
-        /// </summary>
-        private DiscoveryDocument ReadDiscoveryDocumentIfNeeded()
-        {
-            bool everyPathIsStated =
-                !string.IsNullOrWhiteSpace(ConnectionDetails.DataManagementUrlSegment)
-                && !string.IsNullOrWhiteSpace(ConnectionDetails.ChangeQueriesUrlSegment);
-
-            return everyPathIsStated ? DiscoveryDocument.Unread : ReadDiscoveryDocument();
-        }
-
-        /// <remarks>
-        /// Sent through the transport directly rather than through this client's request pipeline, the way the
-        /// token request is. The Discovery document is anonymous, so there is no reason to stamp a bearer token
-        /// onto the request for it; and reading it during construction must not spend a slot from the cap on
-        /// concurrent requests, count against the retry handlers, or leave the client's own
-        /// <see cref="HttpClient" /> started before its caller has finished configuring it.
         /// </remarks>
         private DiscoveryDocument ReadDiscoveryDocument()
         {
