@@ -29,8 +29,18 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     /// decides, and it is held relative to the connection's URL so a prefix carried by both is stated once.
     /// </summary>
     [TestFixture]
+    [NonParallelizable]
     public class EdFiApiUrlSegmentResolutionTests
     {
+        [OneTimeSetUp]
+        public void ConfigureLogging()
+        {
+            // Configured for the fixture rather than from inside two of its tests: this replaces the static
+            // Serilog logger the whole assembly shares, and the resolver reads that logger when none is
+            // passed, so setting it part-way through a run couples those tests to the order they run in.
+            TestHelpers.InitializeLogging();
+        }
+
         private static readonly Uri ServerRoot = new("https://server/");
 
         private static DiscoveryDocument DiscoveryDeclaring(params (string Name, string Url)[] urls)
@@ -179,7 +189,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         EdFiApiUrlSegmentResolver.DataManagement));
 
             exception.Message.ShouldContain("route placeholder");
-            exception.Message.ShouldContain("tenant");
+
+            // Asserted against the escaped spelling the placeholder actually arrives in. The word "tenant" on
+            // its own appears in the guidance appended to every refusal, so asserting that could not fail.
+            exception.Message.ShouldContain("%7Btenant%7D");
         }
 
         [Test]
@@ -199,8 +212,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         {
             // Ordinary rather than exceptional: an ODS/API declares changeQueries only while the feature is
             // enabled, so this is the path a supported deployment takes, not only a broken one.
-            TestHelpers.InitializeLogging();
-
             using (TestCorrelator.CreateContext())
             {
                 var segment = ResolverFor()
@@ -236,8 +247,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // An ODS/API that declares no change queries because the feature is off is ordinary, and saying so
             // at Warning on every run teaches an operator to stop reading warnings. An API that could not be
             // asked at all is not ordinary, and the two are indistinguishable from the contents alone.
-            TestHelpers.InitializeLogging();
-
             using (TestCorrelator.CreateContext())
             {
                 ResolverFor().Resolve(

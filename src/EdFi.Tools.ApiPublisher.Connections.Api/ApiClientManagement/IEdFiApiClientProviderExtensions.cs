@@ -58,6 +58,11 @@ public static class EdFiApiClientProviderExtensions
         if (versionMetadata?["urls"]?[urlName]?.ToString() is string metadataUri &&
             Uri.TryCreate(metadataUri, UriKind.Absolute, out var uri))
         {
+            // Kept absolute, unlike the path segments, which are held relative to the connection URL. The
+            // difference is deliberate: this value is used as a request URI of its own, and a leading slash
+            // resolves against the authority root, where the declared path already carries whatever prefix the
+            // connection URL has. A segment is concatenated onto the connection URL instead, so an absolute
+            // path there would state that prefix twice.
             string metadataPath = uri.AbsolutePath;
 
             // Refused rather than requested, because a path still carrying a placeholder is not an address.

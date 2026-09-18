@@ -218,7 +218,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.Warning(
-                        "The {Name:l} API at '{BaseAddress}' answered {StatusCode} for its Discovery document, so the paths it serves cannot be read from it.",
+                        "The {ConnectionName:l} API at '{BaseAddress}' answered {StatusCode} for its Discovery document, so the paths it serves cannot be read from it.",
                         _name,
                         _httpClient.BaseAddress,
                         (int)response.StatusCode
@@ -238,7 +238,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // that serves elsewhere can be told outright on the connection.
                 _logger.Warning(
                     ex,
-                    "The Discovery document for the {Name:l} API at '{BaseAddress}' could not be read.",
+                    "The Discovery document for the {ConnectionName:l} API at '{BaseAddress}' could not be read.",
                     _name,
                     _httpClient.BaseAddress
                 );
