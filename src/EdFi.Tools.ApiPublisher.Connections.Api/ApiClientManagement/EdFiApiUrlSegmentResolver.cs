@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Licensed to the Ed-Fi Alliance under one or more agreements.
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
@@ -6,30 +6,20 @@
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json.Linq;
 using Serilog;
+using System.Globalization;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
-    /// <summary>
-    /// Describes one of the path segments the publisher prefixes onto its requests: the name the Discovery
-    /// document publishes it under, the value to assume when the API does not declare it, and the connection
-    /// setting an operator uses to state it outright.
-    /// </summary>
-    public sealed record ApiUrlSegmentDefinition(
-        string DiscoveryUrlName,
-        string ConventionalSegment,
-        string ConfigurationKeyName
-    );
-
     /// <summary>
     /// Resolves the path segments the publisher prefixes onto its requests, preferring what the connection
     /// states outright, then what the API declares in its Discovery document, and falling back to the
     /// conventional ODS/API value when neither is available.
     /// </summary>
     /// <remarks>
-    /// A segment is held relative to the connection's own URL rather than as an absolute path. An API served
-    /// under a path prefix, which is how a multi-tenant DMS is addressed, repeats that prefix in every URL it
-    /// declares; appending the absolute path of one of those to a connection URL that already carries the
-    /// prefix would state it twice.
+    /// A declared value is resolved against the connection's own URL and kept relative to it, so that a path
+    /// prefix carried by both is stated once. It is resolved with <see cref="Uri" /> rather than by trimming
+    /// strings, and refused unless it lands on the connection's own host: the Discovery document is served by
+    /// the remote API, so a value taken from it decides where this connection's authenticated requests go.
     /// </remarks>
     public class EdFiApiUrlSegmentResolver
     {
@@ -37,7 +27,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Gets the advice shared by everything that refuses a path carrying a route placeholder.
         /// </summary>
         public const string RouteQualifierGuidance =
-            "An API that qualifies its routes by tenant or school year resolves them only for an address that names one, so the URL for this connection has to include that prefix (for example 'https://server/tenant/') rather than the server root.";
+            "An API that qualifies its routes by tenant resolves them only for an address that names one, so the URL for this connection has to include that prefix (for example 'https://server/tenant1/') rather than the server root. A path can also be set directly on the connection.";
 
         public static readonly ApiUrlSegmentDefinition DataManagement =
             new(
@@ -55,12 +45,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         private readonly Uri _baseAddress;
         private readonly string _connectionName;
+        private readonly int? _schoolYear;
         private readonly ILogger _logger;
 
-        public EdFiApiUrlSegmentResolver(Uri baseAddress, string connectionName, ILogger logger = null)
+        public EdFiApiUrlSegmentResolver(
+            Uri baseAddress,
+            string connectionName,
+            int? schoolYear = null,
+            ILogger logger = null
+        )
         {
             _baseAddress = baseAddress ?? throw new ArgumentNullException(nameof(baseAddress));
             _connectionName = connectionName;
+            _schoolYear = schoolYear;
             _logger = logger ?? Log.ForContext(typeof(EdFiApiUrlSegmentResolver));
         }
 
@@ -76,27 +73,27 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (!string.IsNullOrWhiteSpace(statedSegment))
             {
-                string normalizedStatedSegment = Normalize(statedSegment);
+                string statedRelativeSegment = ToRelativeSegment(statedSegment, definition);
 
                 _logger.Information(
-                    "Using the {ConfigurationKeyName:l} stated for the {ConnectionName:l} connection: '{Segment:l}'. The Discovery document will not be consulted for it.",
+                    "Using the {ConfigurationKeyName:l} stated for the {ConnectionName:l} connection: '{Segment:l}'.",
                     definition.ConfigurationKeyName,
                     _connectionName,
-                    normalizedStatedSegment
+                    statedRelativeSegment
                 );
 
-                return EnsureNoRoutePlaceholder(normalizedStatedSegment, definition);
+                return Finish(statedRelativeSegment, definition);
             }
 
             if (
-                discoveryDocument?["urls"]?[definition.DiscoveryUrlName]?.ToString() is string declaredUrl
+                (discoveryDocument?["urls"] as JObject)?[definition.DiscoveryUrlName]?.ToString() is string declaredUrl
                 && !string.IsNullOrWhiteSpace(declaredUrl)
             )
             {
-                string declaredSegment = ToRelativeSegment(declaredUrl, _baseAddress, _logger);
+                string declaredSegment = ToRelativeSegment(declaredUrl, definition);
 
                 _logger.Debug(
-                    "The {ConnectionName:l} API declares {DiscoveryUrlName:l} as '{DeclaredUrl:l}', which is '{Segment:l}' relative to '{BaseAddress}'.",
+                    "The {ConnectionName:l} API declares {DiscoveryUrlName:l} as {DeclaredUrl}, which is '{Segment:l}' relative to '{BaseAddress}'.",
                     _connectionName,
                     definition.DiscoveryUrlName,
                     declaredUrl,
@@ -104,7 +101,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     _baseAddress
                 );
 
-                return EnsureNoRoutePlaceholder(declaredSegment, definition);
+                return Finish(declaredSegment, definition);
             }
 
             // Reached whenever the document could not be read or does not carry this URL, which is ordinary
@@ -117,60 +114,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 definition.ConfigurationKeyName
             );
 
-            return Normalize(definition.ConventionalSegment);
-        }
-
-        /// <summary>
-        /// Expresses a URL declared by the API as a path relative to the connection's own URL, so that a
-        /// prefix carried by both is stated once.
-        /// </summary>
-        public static string ToRelativeSegment(string declaredUrl, Uri baseAddress, ILogger logger = null)
-        {
-            string declaredPath = Uri.TryCreate(declaredUrl, UriKind.Absolute, out var declaredUri)
-                ? declaredUri.AbsolutePath
-                : declaredUrl;
-
-            string basePath = baseAddress.AbsolutePath;
-
-            if (!basePath.EndsWith('/'))
-            {
-                basePath += "/";
-            }
-
-            if (declaredPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
-            {
-                return Normalize(declaredPath[basePath.Length..]);
-            }
-
-            // The declared URL sits outside the connection's own path, which happens when an API behind a
-            // gateway is not told the address its callers reach it by. Its path is the best available answer,
-            // but it is the one shape that can go wrong silently, so it is reported.
-            if (basePath != "/")
-            {
-                logger?.Warning(
-                    "The API declared '{DeclaredUrl:l}', which is not under the connection URL '{BaseAddress}'. Its path will be used as given. If requests are rejected as not found, state the path on the connection instead.",
-                    declaredUrl,
-                    baseAddress
-                );
-            }
-
-            return Normalize(declaredPath);
-        }
-
-        /// <summary>
-        /// Returns the segment unless it still carries a route placeholder, which means the Discovery document
-        /// was read at an address that does not identify a single tenant or instance.
-        /// </summary>
-        private string EnsureNoRoutePlaceholder(string segment, ApiUrlSegmentDefinition definition)
-        {
-            if (!ContainsRoutePlaceholder(segment))
-            {
-                return segment;
-            }
-
-            throw new InvalidOperationException(
-                $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolved to '{segment}', which still carries a route placeholder. {RouteQualifierGuidance}"
-            );
+            return Finish(Normalize(definition.ConventionalSegment), definition);
         }
 
         /// <summary>
@@ -190,6 +134,123 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 && placeholderMarkers.Any(marker => path.Contains(marker, StringComparison.OrdinalIgnoreCase));
         }
 
+        /// <summary>
+        /// Applies the connection's school year, then refuses anything still carrying a route placeholder.
+        /// The year goes first so that an API which states the year as a placeholder is answered rather than
+        /// rejected.
+        /// </summary>
+        private string Finish(string segment, ApiUrlSegmentDefinition definition) =>
+            EnsureNoRoutePlaceholder(WithSchoolYearApplied(segment, definition), definition);
+
+        /// <summary>
+        /// Expresses a URL declared by the API, or stated on the connection, as a path relative to the
+        /// connection's own address.
+        /// </summary>
+        /// <remarks>
+        /// Resolved through <see cref="Uri" /> rather than by trimming strings. Trimming a leading slash off a
+        /// value the API supplied can turn it into an absolute URL of its own, which an
+        /// <see cref="HttpClient" /> then follows in place of its base address, carrying this connection's
+        /// bearer token and its request bodies to whatever host the value named.
+        /// </remarks>
+        private string ToRelativeSegment(string declaredUrl, ApiUrlSegmentDefinition definition)
+        {
+            if (!Uri.TryCreate(_baseAddress, declaredUrl, out var declaredUri))
+            {
+                throw new InvalidOperationException(
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection is '{declaredUrl}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {definition.ConfigurationKeyName} on the connection to the path its callers use."
+                );
+            }
+
+            if (
+                Uri.Compare(
+                    declaredUri,
+                    _baseAddress,
+                    UriComponents.SchemeAndServer,
+                    UriFormat.UriEscaped,
+                    StringComparison.OrdinalIgnoreCase
+                ) != 0
+            )
+            {
+                throw new InvalidOperationException(
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri}', which is not served by the host this connection addresses ('{_baseAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host. If this API is reached through a gateway and declares the address it is deployed at rather than the one its callers use, set {definition.ConfigurationKeyName} on the connection to the path those callers use."
+                );
+            }
+
+            return Normalize(_baseAddress.MakeRelativeUri(declaredUri).ToString());
+        }
+
+        /// <summary>
+        /// Applies the connection's school year, for the year-specific routing an ODS/API uses when it serves
+        /// more than one school year.
+        /// </summary>
+        /// <remarks>
+        /// A year-specific ODS/API asked for its paths at its unqualified address states a year of its own, and
+        /// some versions state an unresolved token in that position instead. The connection's year replaces
+        /// whichever it finds, because the operator chose the year and the API only reported the one it
+        /// happened to answer with.
+        /// </remarks>
+        private string WithSchoolYearApplied(string segment, ApiUrlSegmentDefinition definition)
+        {
+            if (_schoolYear is null)
+            {
+                return segment;
+            }
+
+            string schoolYear = _schoolYear.Value.ToString(CultureInfo.InvariantCulture);
+            string[] pathSegments = segment.Split('/');
+            string lastPathSegment = pathSegments[^1];
+
+            if (IsSchoolYear(lastPathSegment) || ContainsRoutePlaceholder(lastPathSegment))
+            {
+                if (IsSchoolYear(lastPathSegment) && lastPathSegment != schoolYear)
+                {
+                    _logger.Information(
+                        "The {ConnectionName:l} API declares {DiscoveryUrlName:l} for school year {DeclaredSchoolYear:l}, and this connection asks for {SchoolYear:l}. The connection's school year is used.",
+                        _connectionName,
+                        definition.DiscoveryUrlName,
+                        lastPathSegment,
+                        schoolYear
+                    );
+                }
+
+                pathSegments[^1] = schoolYear;
+
+                return string.Join('/', pathSegments);
+            }
+
+            return segment.Length == 0 ? schoolYear : $"{segment}/{schoolYear}";
+        }
+
+        private static bool IsSchoolYear(string pathSegment) =>
+            pathSegment.Length == 4 && pathSegment.All(char.IsAsciiDigit);
+
+        /// <summary>
+        /// Returns the segment unless it still carries a route placeholder, which means the Discovery document
+        /// was read at an address that does not identify a single tenant or instance.
+        /// </summary>
+        private string EnsureNoRoutePlaceholder(string segment, ApiUrlSegmentDefinition definition)
+        {
+            if (!ContainsRoutePlaceholder(segment))
+            {
+                return segment;
+            }
+
+            throw new InvalidOperationException(
+                $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolved to '{segment}', which still carries a route placeholder. {RouteQualifierGuidance}"
+            );
+        }
+
         private static string Normalize(string segment) => segment.Trim('/');
     }
+
+    /// <summary>
+    /// Describes one of the path segments the publisher prefixes onto its requests: the name the Discovery
+    /// document publishes it under, the value to assume when the API does not declare it, and the connection
+    /// setting an operator uses to state it outright.
+    /// </summary>
+    public sealed record ApiUrlSegmentDefinition(
+        string DiscoveryUrlName,
+        string ConventionalSegment,
+        string ConfigurationKeyName
+    );
 }

@@ -216,34 +216,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         private string ResolveApiSegment(ApiUrlSegmentDefinition definition, string statedSegment)
         {
-            var resolver = new EdFiApiUrlSegmentResolver(_httpClient.BaseAddress, _name, _logger);
-
-            return WithSchoolYearApplied(
-                resolver.Resolve(statedSegment, _discoveryDocument.Value, definition)
+            var resolver = new EdFiApiUrlSegmentResolver(
+                _httpClient.BaseAddress,
+                _name,
+                ConnectionDetails.SchoolYear,
+                _logger
             );
-        }
 
-        /// <summary>
-        /// Applies the connection's school year to a segment, for the year-specific routing an ODS/API uses
-        /// when it serves more than one school year from a single address.
-        /// </summary>
-        private string WithSchoolYearApplied(string segment)
-        {
-            if (ConnectionDetails.SchoolYear is null)
-            {
-                return segment;
-            }
-
-            string schoolYearSegment = $"/{ConnectionDetails.SchoolYear}";
-
-            // An API whose paths were read at a year-specific address states the year itself, and stating it
-            // again would address a year within a year.
-            if (segment.EndsWith(schoolYearSegment, StringComparison.Ordinal))
-            {
-                return segment;
-            }
-
-            return $"{segment}{schoolYearSegment}";
+            return resolver.Resolve(statedSegment, _discoveryDocument.Value, definition);
         }
 
         public HttpClient HttpClient => _httpClient;

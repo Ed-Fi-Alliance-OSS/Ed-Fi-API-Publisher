@@ -42,21 +42,94 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             return new JObject { ["urls"] = declared };
         }
 
-        private static EdFiApiUrlSegmentResolver ResolverFor(Uri baseAddress = null) =>
-            new(baseAddress ?? ServerRoot, "TestSource");
+        private static EdFiApiUrlSegmentResolver ResolverFor(Uri baseAddress = null, int? schoolYear = null) =>
+            new(baseAddress ?? ServerRoot, "TestSource", schoolYear);
 
         [Test]
         public void A_declared_trailing_slash_should_be_dropped()
         {
-            // An ODS/API declares "{root}/data/v3/" and a DMS declares "{root}/data". Call sites append a
-            // resource path that already opens with a slash, so a segment that kept its own would build
-            // "data/v3//students". Asserted against the resolution itself rather than through Resolve,
-            // because for an ODS the conventional value is the same string and would hide the difference.
-            EdFiApiUrlSegmentResolver.ToRelativeSegment("https://server/data/v3/", ServerRoot)
-                .ShouldBe("data/v3");
+            // Call sites append a resource path that already opens with a slash, so a segment that kept its
+            // own would build "changes//students". The declared value is deliberately not the conventional
+            // one, so that falling back rather than resolving would show up here.
+            var segment = ResolverFor()
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("changeQueries", "https://server/changes/")),
+                    EdFiApiUrlSegmentResolver.ChangeQueries);
 
-            EdFiApiUrlSegmentResolver.ToRelativeSegment("https://server/changeQueries/v1/", ServerRoot)
-                .ShouldBe("changeQueries/v1");
+            segment.ShouldBe("changes");
+        }
+
+        [Test]
+        public void A_declaration_on_another_host_should_be_refused()
+        {
+            // The Discovery document is served by the remote API, and a connection's requests carry its
+            // credentials. Following a declaration off the connection's own host would send this API's bearer
+            // token, and the documents being published, somewhere the operator never named.
+            var exception = Should.Throw<InvalidOperationException>(
+                () => ResolverFor()
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://elsewhere.example/collect")),
+                        EdFiApiUrlSegmentResolver.DataManagement));
+
+            exception.Message.ShouldContain("not served by the host this connection addresses");
+        }
+
+        [Test]
+        public void A_declaration_that_would_read_as_an_absolute_URL_once_trimmed_should_stay_on_the_host()
+        {
+            // Resolving by trimming a leading slash turns this value into an absolute URL, which an HttpClient
+            // follows in place of its base address. Resolving it against the connection URL instead keeps it a
+            // path on the connection's own host, where it can only fail to be found.
+            var segment = ResolverFor()
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("dataManagementApi", "/https://elsewhere.example/collect")),
+                    EdFiApiUrlSegmentResolver.DataManagement);
+
+            new Uri(ServerRoot, $"{segment}/ed-fi/students").Host.ShouldBe(ServerRoot.Host);
+        }
+
+        [Test]
+        public void A_segment_stated_on_the_connection_for_another_host_should_be_refused()
+        {
+            var exception = Should.Throw<InvalidOperationException>(
+                () => ResolverFor()
+                    .Resolve(
+                        statedSegment: "https://elsewhere.example/collect",
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data")),
+                        EdFiApiUrlSegmentResolver.DataManagement));
+
+            exception.Message.ShouldContain("not served by the host this connection addresses");
+        }
+
+        [Test]
+        public void A_declared_school_year_should_be_replaced_by_the_connection_school_year()
+        {
+            // A year-specific ODS/API asked at its unqualified address declares a year of its own. Appending
+            // the connection's year to that would address a year within a year, and every request would miss.
+            var segment = ResolverFor(new Uri("https://localhost/WebApi/"), schoolYear: 2024)
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("dataManagementApi", "https://localhost/WebApi/data/v3/2025")),
+                    EdFiApiUrlSegmentResolver.DataManagement);
+
+            segment.ShouldBe("data/v3/2024");
+        }
+
+        [Test]
+        public void A_declared_school_year_placeholder_should_be_answered_rather_than_refused()
+        {
+            // Some ODS/API versions state the year position as an unresolved token. The connection names the
+            // year, so this is a question the publisher can answer instead of a reason to stop.
+            var segment = ResolverFor(schoolYear: 2024)
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("dataManagementApi", "https://server/data/v3/{schoolYear}")),
+                    EdFiApiUrlSegmentResolver.DataManagement);
+
+            segment.ShouldBe("data/v3/2024");
         }
 
         [Test]
@@ -152,27 +225,19 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
-        public void A_declaration_outside_the_connection_URL_should_use_its_path_and_warn()
+        public void A_declaration_beside_the_connection_path_should_resolve_back_to_it()
         {
-            // An API behind a gateway that was not told the address its callers reach it by. Its path is the
-            // best available answer, and the one shape that can go wrong without saying anything.
-            TestHelpers.InitializeLogging();
+            // Same host, but served alongside the connection's path rather than beneath it. Expressing it
+            // relative to the connection yields a path that still composes onto the connection URL, where
+            // taking the declared path as given would have prefixed the connection's own path to it.
+            var segment = ResolverFor(new Uri("https://gateway/edfi/"))
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("dataManagementApi", "https://gateway/other/data/v3/")),
+                    EdFiApiUrlSegmentResolver.DataManagement);
 
-            using (TestCorrelator.CreateContext())
-            {
-                var segment = ResolverFor(new Uri("https://gateway/edfi/"))
-                    .Resolve(
-                        statedSegment: null,
-                        DiscoveryDeclaring(("dataManagementApi", "https://internal-host/data/v3/")),
-                        EdFiApiUrlSegmentResolver.DataManagement);
-
-                segment.ShouldBe("data/v3");
-
-                TestCorrelator.GetLogEventsFromCurrentContext()
-                    .ShouldContain(e =>
-                        e.Level == LogEventLevel.Warning
-                        && e.MessageTemplate.Text.Contains("not under the connection URL"));
-            }
+            new Uri(new Uri("https://gateway/edfi/"), $"{segment}/ed-fi/students")
+                .ShouldBe(new Uri("https://gateway/other/data/v3/ed-fi/students"));
         }
 
         [Test]
