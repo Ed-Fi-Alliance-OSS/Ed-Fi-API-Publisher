@@ -227,6 +227,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 );
             }
 
+            if (!string.IsNullOrEmpty(declaredUri.Query) || !string.IsNullOrEmpty(declaredUri.Fragment))
+            {
+                // A relative URI keeps both, and a resource path is appended to this rather than merged with
+                // it, so a resource would land inside the query string or the fragment instead of on the
+                // server.
+                throw new InvalidConfigurationException(
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri}', which carries a query string or a fragment. Only a path can be prefixed onto a resource. Set {ConfigurationPathFor(definition)} to the path on its own."
+                );
+            }
+
             return Normalize(_baseAddress.MakeRelativeUri(declaredUri).ToString());
         }
 
@@ -251,7 +261,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             string[] pathSegments = segment.Split('/');
             string lastPathSegment = pathSegments[^1];
 
-            if (IsSchoolYear(lastPathSegment) || ContainsRoutePlaceholder(lastPathSegment))
+            if (IsSchoolYear(lastPathSegment) || IsSchoolYearPlaceholder(lastPathSegment))
             {
                 if (IsSchoolYear(lastPathSegment) && lastPathSegment != schoolYear)
                 {
@@ -274,6 +284,24 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         private static bool IsSchoolYear(string pathSegment) =>
             pathSegment.Length == 4 && pathSegment.All(char.IsAsciiDigit);
+
+        /// <summary>
+        /// Reports whether a path segment is the placeholder an API uses for the school year, as opposed to
+        /// any other route placeholder. Only this one is a question the connection can answer; a tenant the
+        /// connection does not name is a configuration error, and answering it with a school year would turn
+        /// a path that cannot be served into one that looks valid and addresses the wrong route.
+        /// </summary>
+        private static bool IsSchoolYearPlaceholder(string pathSegment)
+        {
+            if (!ContainsRoutePlaceholder(pathSegment))
+            {
+                return false;
+            }
+
+            string placeholderName = Uri.UnescapeDataString(pathSegment).Trim('{', '}');
+
+            return placeholderName.Equals("schoolYear", StringComparison.OrdinalIgnoreCase);
+        }
 
         /// <summary>
         /// Returns the segment unless it still carries a route placeholder, which means the Discovery document

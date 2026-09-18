@@ -294,6 +294,50 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_declaration_carrying_a_query_string_should_be_refused()
+        {
+            // A relative URI keeps the query, and a resource path is appended rather than merged, so this
+            // would address '/data?tenant=1/ed-fi/students': the resource inside the query string.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor()
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data?tenant=1")),
+                        EdFiApiUrlSegmentResolver.DataManagement));
+
+            exception.Message.ShouldContain("query string or a fragment");
+        }
+
+        [Test]
+        public void A_declaration_carrying_a_fragment_should_be_refused()
+        {
+            // Worse than the query: everything after the '#' is never sent to the server at all.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor()
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data#section")),
+                        EdFiApiUrlSegmentResolver.DataManagement));
+
+            exception.Message.ShouldContain("query string or a fragment");
+        }
+
+        [Test]
+        public void A_placeholder_that_does_not_name_the_school_year_should_still_be_refused()
+        {
+            // Answering any trailing placeholder with the school year turns a path that cannot be served into
+            // one that looks valid and addresses the wrong route, and puts it past the refusal.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor(schoolYear: 2024)
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data/{tenant}")),
+                        EdFiApiUrlSegmentResolver.DataManagement));
+
+            exception.Message.ShouldContain("route placeholder");
+        }
+
+        [Test]
         public void A_segment_stated_on_the_connection_that_carries_a_route_placeholder_should_be_refused()
         {
             var exception = Should.Throw<InvalidConfigurationException>(
