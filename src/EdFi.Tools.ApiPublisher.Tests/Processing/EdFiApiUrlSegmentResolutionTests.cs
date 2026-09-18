@@ -33,7 +33,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     {
         private static readonly Uri ServerRoot = new("https://server/");
 
-        private static JObject DiscoveryDeclaring(params (string Name, string Url)[] urls)
+        private static DiscoveryDocument DiscoveryDeclaring(params (string Name, string Url)[] urls)
         {
             var declared = new JObject();
 
@@ -42,7 +42,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 declared[name] = url;
             }
 
-            return new JObject { ["urls"] = declared };
+            return new DiscoveryDocument(new JObject { ["urls"] = declared }, WasRead: true);
         }
 
         private static EdFiApiUrlSegmentResolver ResolverFor(Uri baseAddress = null, int? schoolYear = null) =>
@@ -213,18 +213,88 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 TestCorrelator.GetLogEventsFromCurrentContext()
                     .ShouldContain(e =>
-                        e.Level == LogEventLevel.Warning
+                        e.Level == LogEventLevel.Information
                         && e.MessageTemplate.Text.Contains("did not declare"));
             }
         }
 
         [Test]
-        public void An_unreadable_discovery_document_should_fall_back_to_the_conventional_path()
+        public void A_document_that_declares_nothing_should_fall_back_to_the_conventional_path()
         {
             var segment = ResolverFor()
-                .Resolve(statedSegment: null, new JObject(), EdFiApiUrlSegmentResolver.DataManagement);
+                .Resolve(
+                    statedSegment: null,
+                    new DiscoveryDocument(new JObject(), WasRead: true),
+                    EdFiApiUrlSegmentResolver.DataManagement);
 
             segment.ShouldBe(EdFiApiConstants.DataManagementApiSegment);
+        }
+
+        [Test]
+        public void A_document_that_could_not_be_read_should_be_reported_differently_from_one_that_said_nothing()
+        {
+            // An ODS/API that declares no change queries because the feature is off is ordinary, and saying so
+            // at Warning on every run teaches an operator to stop reading warnings. An API that could not be
+            // asked at all is not ordinary, and the two are indistinguishable from the contents alone.
+            TestHelpers.InitializeLogging();
+
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor().Resolve(
+                    statedSegment: null,
+                    new DiscoveryDocument(new JObject(), WasRead: true),
+                    EdFiApiUrlSegmentResolver.ChangeQueries);
+
+                var events = TestCorrelator.GetLogEventsFromCurrentContext().ToArray();
+
+                events.ShouldContain(e =>
+                    e.Level == LogEventLevel.Information
+                    && e.MessageTemplate.Text.Contains("did not declare"));
+                events.ShouldNotContain(e => e.Level == LogEventLevel.Warning);
+            }
+
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor().Resolve(
+                    statedSegment: null,
+                    DiscoveryDocument.Unread,
+                    EdFiApiUrlSegmentResolver.ChangeQueries);
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e =>
+                        e.Level == LogEventLevel.Warning
+                        && e.MessageTemplate.Text.Contains("could not be read"));
+            }
+        }
+
+        [Test]
+        public void A_path_declared_at_the_connection_URL_itself_should_keep_the_connection_prefix()
+        {
+            // An API that serves its resources at the same address as the connection. An empty segment would
+            // make the composed resource path absolute, which resets to the server root and drops the prefix.
+            var connection = new Uri("https://server/tenant1/");
+
+            var segment = ResolverFor(connection)
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("dataManagementApi", "https://server/tenant1/")),
+                    EdFiApiUrlSegmentResolver.DataManagement);
+
+            new Uri(connection, $"{segment}/ed-fi/students")
+                .ShouldBe(new Uri("https://server/tenant1/ed-fi/students"));
+        }
+
+        [Test]
+        public void A_segment_stated_on_the_connection_that_carries_a_route_placeholder_should_be_refused()
+        {
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor()
+                    .Resolve(
+                        statedSegment: "{tenant}/data",
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data")),
+                        EdFiApiUrlSegmentResolver.DataManagement));
+
+            exception.Message.ShouldContain("route placeholder");
         }
 
         [Test]

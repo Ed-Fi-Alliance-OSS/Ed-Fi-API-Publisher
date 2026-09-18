@@ -30,6 +30,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         public const string RouteQualifierGuidance =
             "An API that qualifies its routes by tenant resolves them only for an address that names one, so the URL for this connection has to include that prefix (for example 'https://server/tenant1/') rather than the server root. A path can also be set directly on the connection.";
 
+        /// <summary>
+        /// Gets the segment that addresses the connection's own URL. Returned in place of an empty string,
+        /// because call sites append a resource path that opens with a slash, and an empty segment would make
+        /// that path absolute and discard the prefix the connection URL carries.
+        /// </summary>
+        private const string ConnectionRootSegment = ".";
+
         public static readonly ApiUrlSegmentDefinition DataManagement =
             new(
                 DiscoveryUrlName: "dataManagementApi",
@@ -68,7 +75,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// </summary>
         public string Resolve(
             string statedSegment,
-            JObject discoveryDocument,
+            DiscoveryDocument discoveryDocument,
             ApiUrlSegmentDefinition definition
         )
         {
@@ -77,19 +84,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 string statedRelativeSegment = ToRelativeSegment(statedSegment, definition);
 
                 _logger.Information(
-                    "Using the {ConfigurationKeyName:l} stated for the {ConnectionName:l} connection: '{Segment:l}'.",
-                    definition.ConfigurationKeyName,
+                    "The {ConnectionName:l} connection states {ConfigurationPath:l}, so requests will use '{Segment:l}' relative to '{BaseAddress}'. Its Discovery document is not consulted for this path.",
                     _connectionName,
-                    statedRelativeSegment
+                    ConfigurationPathFor(definition),
+                    statedRelativeSegment,
+                    _baseAddress
                 );
 
                 return Finish(statedRelativeSegment, definition);
             }
 
-            if (
-                (discoveryDocument?["urls"] as JObject)?[definition.DiscoveryUrlName]?.ToString() is string declaredUrl
-                && !string.IsNullOrWhiteSpace(declaredUrl)
-            )
+            if (discoveryDocument.Declares(definition.DiscoveryUrlName) is string declaredUrl)
             {
                 string declaredSegment = ToRelativeSegment(declaredUrl, definition);
 
@@ -107,15 +112,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return Finish(declaredSegment, definition);
             }
 
-            // Reached whenever the document could not be read or does not carry this URL, which is ordinary
-            // rather than exceptional: an ODS/API publishes changeQueries only while the feature is enabled.
-            _logger.Warning(
-                "The {ConnectionName:l} API did not declare {DiscoveryUrlName:l} in its Discovery document, so the conventional '{ConventionalSegment:l}' will be used. If this API serves that part of its surface elsewhere, state the path on the connection as {ConfigurationKeyName:l}.",
-                _connectionName,
-                definition.DiscoveryUrlName,
-                definition.ConventionalSegment,
-                definition.ConfigurationKeyName
-            );
+            ReportConventionalSegment(discoveryDocument, definition);
 
             return Finish(Normalize(definition.ConventionalSegment), definition);
         }
@@ -138,12 +135,63 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         }
 
         /// <summary>
+        /// Says which conventional value is being used and why, distinguishing an API that answered without
+        /// naming this path from one that could not be asked at all. The first is ordinary, because an
+        /// ODS/API declares change queries only while that feature is enabled; the second is not.
+        /// </summary>
+        private void ReportConventionalSegment(
+            DiscoveryDocument discoveryDocument,
+            ApiUrlSegmentDefinition definition
+        )
+        {
+            if (discoveryDocument.WasRead)
+            {
+                _logger.Information(
+                    "The {ConnectionName:l} API did not declare {DiscoveryUrlName:l} in its Discovery document, so requests will use the conventional '{ConventionalSegment:l}'. If it serves that path elsewhere, set {ConfigurationPath:l}.",
+                    _connectionName,
+                    definition.DiscoveryUrlName,
+                    definition.ConventionalSegment,
+                    ConfigurationPathFor(definition)
+                );
+
+                return;
+            }
+
+            _logger.Warning(
+                "The {ConnectionName:l} API's Discovery document could not be read, so requests will use the conventional '{ConventionalSegment:l}' rather than the path it serves. Publishing continues. If this API does not serve that path, set {ConfigurationPath:l}.",
+                _connectionName,
+                definition.ConventionalSegment,
+                ConfigurationPathFor(definition)
+            );
+        }
+
+        /// <summary>
         /// Applies the connection's school year, then refuses anything still carrying a route placeholder.
         /// The year goes first so that an API which states the year as a placeholder is answered rather than
         /// rejected.
         /// </summary>
-        private string Finish(string segment, ApiUrlSegmentDefinition definition) =>
-            EnsureNoRoutePlaceholder(WithSchoolYearApplied(segment, definition), definition);
+        private string Finish(string segment, ApiUrlSegmentDefinition definition)
+        {
+            string resolved = EnsureNoRoutePlaceholder(WithSchoolYearApplied(segment, definition), definition);
+
+            return resolved.Length == 0 ? ConnectionRootSegment : resolved;
+        }
+
+        /// <summary>
+        /// Names the setting an operator would edit, as it is written in a configuration file and on the
+        /// command line, rather than the bare property name.
+        /// </summary>
+        private string ConfigurationPathFor(ApiUrlSegmentDefinition definition)
+        {
+            if (string.IsNullOrEmpty(_connectionName))
+            {
+                return definition.ConfigurationKeyName;
+            }
+
+            string commandLineRole = char.ToLowerInvariant(_connectionName[0]) + _connectionName[1..];
+
+            return $"Connections:{_connectionName}:{definition.ConfigurationKeyName} (--{commandLineRole}{definition.ConfigurationKeyName})";
+        }
 
         /// <summary>
         /// Expresses a URL declared by the API, or stated on the connection, as a path relative to the
@@ -160,7 +208,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!Uri.TryCreate(_baseAddress, declaredUrl, out var declaredUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection is '{declaredUrl}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {definition.ConfigurationKeyName} on the connection to the path its callers use."
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection is '{declaredUrl}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {ConfigurationPathFor(definition)} to the path its callers use."
                 );
             }
 
@@ -175,7 +223,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             )
             {
                 throw new InvalidConfigurationException(
-                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri}', which is not served by the host this connection addresses ('{_baseAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host. If this API is reached through a gateway and declares the address it is deployed at rather than the one its callers use, set {definition.ConfigurationKeyName} on the connection to the path those callers use."
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri}', which is not served by the host this connection addresses ('{_baseAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host. If this API is reached through a gateway and declares the address it is deployed at rather than the one its callers use, set {ConfigurationPathFor(definition)} to the path those callers use."
                 );
             }
 
@@ -256,4 +304,30 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         string ConventionalSegment,
         string ConfigurationKeyName
     );
+
+    /// <summary>
+    /// An API's Discovery document, together with whether it could be read at all. The two outcomes look the
+    /// same to a reader of its contents and are not the same thing to an operator: an API that answered
+    /// without naming a path is ordinary, while one that could not be asked means the address, or whatever
+    /// sits in front of it, is worth checking.
+    /// </summary>
+    public sealed record DiscoveryDocument(JObject Content, bool WasRead)
+    {
+        /// <summary>
+        /// Gets the document to use for an API that could not be asked.
+        /// </summary>
+        public static DiscoveryDocument Unread { get; } = new(new JObject(), WasRead: false);
+
+        /// <summary>
+        /// Returns the URL the document declares under <paramref name="urlName" />, or null when it declares
+        /// none. The <c>urls</c> member is read as an object rather than indexed directly, because a document
+        /// that is not an Ed-Fi Discovery document can carry anything there.
+        /// </summary>
+        public string Declares(string urlName)
+        {
+            string declaredUrl = (Content?["urls"] as JObject)?[urlName]?.ToString();
+
+            return string.IsNullOrWhiteSpace(declaredUrl) ? null : declaredUrl;
+        }
+    }
 }

@@ -24,10 +24,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClient));
 
         // Read once and shared by both segments, because one document states where both of them are served.
-        private readonly Lazy<JObject> _discoveryDocument;
+        // Kept so that anything else needing the API's own description of itself reads it rather than asking
+        // the API a second time.
+        private readonly DiscoveryDocument _discoveryDocument;
 
-        private readonly Lazy<string> _dataManagementApiSegment;
-        private readonly Lazy<string> _changeQueriesApiSegment;
+        private readonly string _dataManagementApiSegment;
+        private readonly string _changeQueriesApiSegment;
 
         public EdFiApiClient(
             string name,
@@ -48,24 +50,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             string apiUrl =
                 apiConnectionDetails.Url
                 ?? throw new InvalidOperationException("URL for API connection '{name}' was not assigned.");
-
-            _discoveryDocument = new Lazy<JObject>(ReadDiscoveryDocument);
-
-            _dataManagementApiSegment = new Lazy<string>(
-                () =>
-                    ResolveApiSegment(
-                        EdFiApiUrlSegmentResolver.DataManagement,
-                        ConnectionDetails.DataManagementUrlSegment
-                    )
-            );
-
-            _changeQueriesApiSegment = new Lazy<string>(
-                () =>
-                    ResolveApiSegment(
-                        EdFiApiUrlSegmentResolver.ChangeQueries,
-                        ConnectionDetails.ChangeQueriesUrlSegment
-                    )
-            );
 
             _httpClientHandler = httpClientHandler ?? new HttpClientHandler();
 
@@ -107,16 +91,33 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     // body-read deadlines derived from this changes.
                     Timeout = throttlingPolicy.RequestBudget
                 };
+
+                ApiPublisherProductInfo.ApplyTo(_httpClient);
+
+                // Resolved here rather than on first use, for the same reason the token is obtained here: a
+                // connection whose requests cannot be addressed should say so while it is being set up, not
+                // from inside a processing block once the source has already been streamed. It also keeps the
+                // blocking read off the publishing threads.
+                _discoveryDocument = ReadDiscoveryDocumentIfNeeded();
+
+                _dataManagementApiSegment = ResolveApiSegment(
+                    EdFiApiUrlSegmentResolver.DataManagement,
+                    ConnectionDetails.DataManagementUrlSegment
+                );
+
+                _changeQueriesApiSegment = ResolveApiSegment(
+                    EdFiApiUrlSegmentResolver.ChangeQueries,
+                    ConnectionDetails.ChangeQueriesUrlSegment
+                );
             }
             catch
             {
                 _bearerTokenManager?.Dispose();
+                _httpClient?.Dispose();
                 _httpClientHandler.Dispose();
 
                 throw;
             }
-
-            ApiPublisherProductInfo.ApplyTo(_httpClient);
         }
 
         /// <summary>
@@ -179,11 +180,40 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// that builds a request. It happens once per client, on first use, in the same way the bearer token
         /// is first obtained while the client is being constructed.
         /// </remarks>
-        private JObject ReadDiscoveryDocument()
+        /// <summary>
+        /// Reads the Discovery document, unless the connection already states every path that would be taken
+        /// from it. An API whose document cannot be reached is exactly the case the connection settings exist
+        /// for, so asking anyway would spend a round trip and report a failure that changes nothing.
+        /// </summary>
+        private DiscoveryDocument ReadDiscoveryDocumentIfNeeded()
         {
+            bool everyPathIsStated =
+                !string.IsNullOrWhiteSpace(ConnectionDetails.DataManagementUrlSegment)
+                && !string.IsNullOrWhiteSpace(ConnectionDetails.ChangeQueriesUrlSegment);
+
+            return everyPathIsStated ? DiscoveryDocument.Unread : ReadDiscoveryDocument();
+        }
+
+        /// <remarks>
+        /// Sent through the transport directly rather than through this client's request pipeline, the way the
+        /// token request is. The Discovery document is anonymous, so there is no reason to stamp a bearer token
+        /// onto the request for it; and reading it during construction must not spend a slot from the cap on
+        /// concurrent requests, count against the retry handlers, or leave the client's own
+        /// <see cref="HttpClient" /> started before its caller has finished configuring it.
+        /// </remarks>
+        private DiscoveryDocument ReadDiscoveryDocument()
+        {
+            using var discoveryRequestHttpClient = new HttpClient(_httpClientHandler, disposeHandler: false)
+            {
+                BaseAddress = _httpClient.BaseAddress,
+                Timeout = _httpClient.Timeout
+            };
+
+            ApiPublisherProductInfo.ApplyTo(discoveryRequestHttpClient);
+
             try
             {
-                using var response = _httpClient.GetAsync("").GetAwaiter().GetResult();
+                using var response = discoveryRequestHttpClient.GetAsync("").GetAwaiter().GetResult();
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -194,10 +224,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                         (int)response.StatusCode
                     );
 
-                    return new JObject();
+                    return DiscoveryDocument.Unread;
                 }
 
-                return JObject.Parse(response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+                return new DiscoveryDocument(
+                    JObject.Parse(response.Content.ReadAsStringAsync().GetAwaiter().GetResult()),
+                    WasRead: true
+                );
             }
             catch (Exception ex)
             {
@@ -210,7 +243,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     _httpClient.BaseAddress
                 );
 
-                return new JObject();
+                return DiscoveryDocument.Unread;
             }
         }
 
@@ -223,7 +256,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 _logger
             );
 
-            return resolver.Resolve(statedSegment, _discoveryDocument.Value, definition);
+            return resolver.Resolve(statedSegment, _discoveryDocument, definition);
         }
 
         public HttpClient HttpClient => _httpClient;
@@ -232,9 +265,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         public ApiConnectionDetails ConnectionDetails { get; }
 
-        public string DataManagementApiSegment => _dataManagementApiSegment.Value;
+        /// <summary>
+        /// Gets the API's Discovery document as it was read while this client was constructed.
+        /// </summary>
+        public DiscoveryDocument DiscoveryDocument => _discoveryDocument;
 
-        public string ChangeQueriesApiSegment => _changeQueriesApiSegment.Value;
+        public string DataManagementApiSegment => _dataManagementApiSegment;
+
+        public string ChangeQueriesApiSegment => _changeQueriesApiSegment;
 
         public void Dispose()
         {
