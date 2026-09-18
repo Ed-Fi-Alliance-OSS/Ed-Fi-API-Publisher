@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Newtonsoft.Json.Linq;
 using Serilog;
 
@@ -26,6 +27,10 @@ public static class EdFiApiClientProviderExtensions
     /// A <see cref="string"/> representing the absolute path of the requested URL,
     /// either retrieved from metadata or constructed from a fallback.
     /// </returns>
+    /// <exception cref="InvalidConfigurationException">
+    /// Thrown when the API declares this URL at an address that still carries a route placeholder, which the
+    /// operator resolves by addressing the connection at a qualified URL.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown if the specified <paramref name="urlName"/> is not found in the metadata
     /// and no fallback is defined for it.
@@ -53,10 +58,26 @@ public static class EdFiApiClientProviderExtensions
         if (versionMetadata?["urls"]?[urlName]?.ToString() is string metadataUri &&
             Uri.TryCreate(metadataUri, UriKind.Absolute, out var uri))
         {
-            return uri.AbsolutePath;
+            // Kept absolute, unlike the path segments, which are held relative to the connection URL. The
+            // difference is deliberate: this value is used as a request URI of its own, and a leading slash
+            // resolves against the authority root, where the declared path already carries whatever prefix the
+            // connection URL has. A segment is concatenated onto the connection URL instead, so an absolute
+            // path there would state that prefix twice.
+            string metadataPath = uri.AbsolutePath;
+
+            // Refused rather than requested, because a path still carrying a placeholder is not an address.
+            // Requesting it draws a 404 naming a URL with '%7B' in it, which reads as a defect in the tool
+            // rather than as an API that was asked for its URLs at the wrong address.
+            if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(metadataPath))
+            {
+                throw new InvalidConfigurationException(
+                    $"The {urlName} URL declared by the {edFiApiClient.Name} API is '{metadataUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance}");
+            }
+
+            return metadataPath;
         }
 
-        logger?.Warning("No valid dependencies URL found in metadata. Using default fallback.");
+        logger?.Warning("No valid {UrlName:l} URL found in metadata. Using default fallback.", urlName);
         switch (urlName)
         {
             case "dependencies":

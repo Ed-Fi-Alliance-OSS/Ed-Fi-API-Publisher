@@ -6,6 +6,8 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
@@ -19,8 +21,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private readonly HttpClient _httpClient;
         private readonly BearerTokenManager _bearerTokenManager;
 
-        private readonly Lazy<string> _dataManagementApiSegment;
-        private readonly Lazy<string> _changeQueriesApiSegment;
+        private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClient));
+
+        // Read once and shared by both segments, because one document states where both of them are served.
+        // Kept so that anything else needing the API's own description of itself reads it rather than asking
+        // the API a second time.
+        private readonly DiscoveryDocument _discoveryDocument;
+
+        private readonly string _dataManagementApiSegment;
+        private readonly string _changeQueriesApiSegment;
 
         public EdFiApiClient(
             string name,
@@ -41,20 +50,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             string apiUrl =
                 apiConnectionDetails.Url
                 ?? throw new InvalidOperationException("URL for API connection '{name}' was not assigned.");
-
-            _dataManagementApiSegment = new Lazy<string>(
-                () =>
-                    ConnectionDetails.SchoolYear is null
-                        ? EdFiApiConstants.DataManagementApiSegment
-                        : $"{EdFiApiConstants.DataManagementApiSegment}/{ConnectionDetails.SchoolYear}"
-            );
-
-            _changeQueriesApiSegment = new Lazy<string>(
-                () =>
-                    ConnectionDetails.SchoolYear is null
-                        ? EdFiApiConstants.ChangeQueriesApiSegment
-                        : $"{EdFiApiConstants.ChangeQueriesApiSegment}/{ConnectionDetails.SchoolYear}"
-            );
 
             _httpClientHandler = httpClientHandler ?? new HttpClientHandler();
 
@@ -96,16 +91,33 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     // body-read deadlines derived from this changes.
                     Timeout = throttlingPolicy.RequestBudget
                 };
+
+                ApiPublisherProductInfo.ApplyTo(_httpClient);
+
+                // Resolved here rather than on first use, for the same reason the token is obtained here: a
+                // connection whose requests cannot be addressed should say so while it is being set up, not
+                // from inside a processing block once the source has already been streamed. It also keeps the
+                // blocking read off the publishing threads.
+                _discoveryDocument = ReadDiscoveryDocument();
+
+                _dataManagementApiSegment = ResolveApiSegment(
+                    EdFiApiUrlSegmentResolver.DataManagement,
+                    ConnectionDetails.DataManagementUrlSegment
+                );
+
+                _changeQueriesApiSegment = ResolveApiSegment(
+                    EdFiApiUrlSegmentResolver.ChangeQueries,
+                    ConnectionDetails.ChangeQueriesUrlSegment
+                );
             }
             catch
             {
                 _bearerTokenManager?.Dispose();
+                _httpClient?.Dispose();
                 _httpClientHandler.Dispose();
 
                 throw;
             }
-
-            ApiPublisherProductInfo.ApplyTo(_httpClient);
         }
 
         /// <summary>
@@ -158,15 +170,88 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return pipeline;
         }
 
+        /// <summary>
+        /// Reads the API's Discovery document, the anonymous document at the root of the connection's URL in
+        /// which the API states where it serves each part of its surface. An API that cannot be asked, or that
+        /// answers with something unreadable, yields an empty document and so states nothing.
+        /// </summary>
+        /// <remarks>
+        /// Blocks, because the segments it feeds are read through synchronous properties by every call site
+        /// that builds a request. It happens once per client, on first use, in the same way the bearer token
+        /// is first obtained while the client is being constructed.
+        /// </remarks>
+        private DiscoveryDocument ReadDiscoveryDocument()
+        {
+            using var discoveryRequestHttpClient = new HttpClient(_httpClientHandler, disposeHandler: false)
+            {
+                BaseAddress = _httpClient.BaseAddress,
+                Timeout = _httpClient.Timeout
+            };
+
+            ApiPublisherProductInfo.ApplyTo(discoveryRequestHttpClient);
+
+            try
+            {
+                using var response = discoveryRequestHttpClient.GetAsync("").GetAwaiter().GetResult();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.Warning(
+                        "The {ConnectionName:l} API at '{BaseAddress}' answered {StatusCode} for its Discovery document, so the paths it serves cannot be read from it.",
+                        _name,
+                        _httpClient.BaseAddress,
+                        (int)response.StatusCode
+                    );
+
+                    return DiscoveryDocument.Unread;
+                }
+
+                return new DiscoveryDocument(
+                    JObject.Parse(response.Content.ReadAsStringAsync().GetAwaiter().GetResult()),
+                    WasRead: true
+                );
+            }
+            catch (Exception ex)
+            {
+                // Not fatal on its own. An ODS/API serves where the publisher has always assumed, and an API
+                // that serves elsewhere can be told outright on the connection.
+                _logger.Warning(
+                    ex,
+                    "The Discovery document for the {ConnectionName:l} API at '{BaseAddress}' could not be read.",
+                    _name,
+                    _httpClient.BaseAddress
+                );
+
+                return DiscoveryDocument.Unread;
+            }
+        }
+
+        private string ResolveApiSegment(ApiUrlSegmentDefinition definition, string statedSegment)
+        {
+            var resolver = new EdFiApiUrlSegmentResolver(
+                _httpClient.BaseAddress,
+                _name,
+                ConnectionDetails.SchoolYear,
+                _logger
+            );
+
+            return resolver.Resolve(statedSegment, _discoveryDocument, definition);
+        }
+
         public HttpClient HttpClient => _httpClient;
 
         public string Name => _name;
 
         public ApiConnectionDetails ConnectionDetails { get; }
 
-        public string DataManagementApiSegment => _dataManagementApiSegment.Value;
+        /// <summary>
+        /// Gets the API's Discovery document as it was read while this client was constructed.
+        /// </summary>
+        public DiscoveryDocument DiscoveryDocument => _discoveryDocument;
 
-        public string ChangeQueriesApiSegment => _changeQueriesApiSegment.Value;
+        public string DataManagementApiSegment => _dataManagementApiSegment;
+
+        public string ChangeQueriesApiSegment => _changeQueriesApiSegment;
 
         public void Dispose()
         {
