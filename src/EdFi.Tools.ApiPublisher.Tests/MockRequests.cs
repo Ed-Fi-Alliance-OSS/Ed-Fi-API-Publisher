@@ -291,7 +291,11 @@ namespace EdFi.Tools.ApiPublisher.Tests
                             urls = new
                             {
                                 dataManagementApi = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.DataManagementUrlSegment}/",
-                                changeQueries = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/"
+                                changeQueries = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/",
+
+                                // Declared so that the whole suite resolves the token endpoint the way a real
+                                // API is read, rather than falling back to the conventional path.
+                                oauth = $"{fakeRequestHandler.BaseUrl}/oauth/token"
                             }
                         }));
 

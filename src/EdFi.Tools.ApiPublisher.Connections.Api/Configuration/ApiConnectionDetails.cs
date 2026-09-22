@@ -62,12 +62,4 @@ public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnecti
     {
         return !IsFullyDefined() && !string.IsNullOrEmpty(Name);
     }
-
-    public bool IsOdsAuthService
-    {
-        get
-        {
-            return string.IsNullOrWhiteSpace(AuthUrl);
-        }
-    }
 }
