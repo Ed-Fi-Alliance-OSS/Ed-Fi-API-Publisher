@@ -5,6 +5,7 @@
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Connections.Api.Metadata.Versioning;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using EdFi.Tools.ApiPublisher.Tests.Extensions;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
@@ -492,6 +493,73 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             using var client = CreateClient(fake);
 
             client.DataManagementApiSegment.ShouldBe(EdFiApiConstants.DataManagementApiSegment);
+        }
+
+        private static EdFiApiVersionMetadataProviderBase VersionMetadataFor(EdFiApiClient client)
+        {
+            var provider = A.Fake<IEdFiApiClientProvider>();
+            A.CallTo(() => provider.GetApiClient()).Returns(client);
+
+            return new EdFiApiVersionMetadataProviderBase(client.Name, provider);
+        }
+
+        [Test]
+        public void An_api_that_answered_without_a_discovery_document_should_be_reported_as_configuration()
+        {
+            // The exit code is what a scheduled job acts on. Whatever is at that address is not serving a
+            // Discovery document, and a later run does not change that, so reporting an incomplete run
+            // would invite the job to keep rerunning a configuration fault.
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(FakeResponse.NotFound());
+
+            using var client = CreateClient(fake);
+
+            client.DiscoveryDocument.WasRead.ShouldBeFalse();
+            client.DiscoveryDocument.ApiAnswered.ShouldBeTrue();
+
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
+
+            exception.Message.ShouldContain("not with a Discovery document");
+            PublisherExitCode.ForFailure(exception).ShouldBe(PublisherExitCode.InvalidConfiguration);
+        }
+
+        [Test]
+        public void An_api_answering_with_something_that_is_not_json_should_be_reported_as_configuration()
+        {
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(FakeResponse.OK("<html><body>Gateway Timeout</body></html>"));
+
+            using var client = CreateClient(fake);
+
+            client.DiscoveryDocument.ApiAnswered.ShouldBeTrue();
+
+            Should.Throw<InvalidConfigurationException>(
+                () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void An_api_that_could_not_be_reached_should_stay_a_run_that_may_be_repeated()
+        {
+            // A restart or a transient network fault, which a later run may well resolve, so this one keeps
+            // the exit code that says so rather than being called a configuration fault.
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Throws(new HttpRequestException("connection refused"));
+
+            using var client = CreateClient(fake);
+
+            client.DiscoveryDocument.WasRead.ShouldBeFalse();
+            client.DiscoveryDocument.ApiAnswered.ShouldBeFalse();
+
+            var exception = Should.Throw<Exception>(
+                () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
+
+            exception.ShouldNotBeOfType<InvalidConfigurationException>();
+            exception.Message.ShouldContain("could not be reached");
+            PublisherExitCode.ForFailure(exception).ShouldBe(PublisherExitCode.ProcessingIncomplete);
         }
 
         [Test]

@@ -6,6 +6,7 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Serilog;
 
@@ -203,18 +204,35 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                         (int)response.StatusCode
                     );
 
-                    return DiscoveryDocument.Unread;
+                    // The API answered, so whatever is at that address is not serving a Discovery
+                    // document. Running again does not change that.
+                    return DiscoveryDocument.Unusable;
                 }
 
-                return new DiscoveryDocument(
-                    JObject.Parse(response.Content.ReadAsStringAsync().GetAwaiter().GetResult()),
-                    WasRead: true
-                );
+                string content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+                try
+                {
+                    return new DiscoveryDocument(JObject.Parse(content), WasRead: true);
+                }
+                catch (JsonException ex)
+                {
+                    // Also an answer, just not one a document can be read from: a gateway error page or a
+                    // sign-in redirect reaches here rather than an Ed-Fi API.
+                    _logger.Warning(
+                        ex,
+                        "The {ConnectionName:l} API at '{BaseAddress}' answered its Discovery document with something that is not JSON.",
+                        _name,
+                        _httpClient.BaseAddress
+                    );
+
+                    return DiscoveryDocument.Unusable;
+                }
             }
             catch (Exception ex)
             {
-                // Not fatal on its own. An ODS/API serves where the publisher has always assumed, and an API
-                // that serves elsewhere can be told outright on the connection.
+                // Reaching the API failed outright, which a restart or a transient network fault produces,
+                // so this stays the case a later run may resolve on its own.
                 _logger.Warning(
                     ex,
                     "The Discovery document for the {ConnectionName:l} API at '{BaseAddress}' could not be read.",

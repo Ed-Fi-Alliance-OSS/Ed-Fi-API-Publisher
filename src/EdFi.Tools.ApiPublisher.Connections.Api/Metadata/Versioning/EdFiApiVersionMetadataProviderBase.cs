@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Serilog;
@@ -41,8 +42,18 @@ public class EdFiApiVersionMetadataProviderBase
 
         if (!discoveryDocument.WasRead)
         {
+            // Told apart because the exit code is what a scheduled job acts on. An API that answered with
+            // something a document cannot be read from is not going to answer differently on a retry, so
+            // reporting that as an incomplete run invites a job to keep rerunning a configuration fault.
+            // Being unable to reach the API at all is the case a later run may well resolve.
+            if (discoveryDocument.ApiAnswered)
+            {
+                throw new InvalidConfigurationException(
+                    $"{_role} API at '{edFiApiClient.HttpClient.BaseAddress}' did not provide version information: it answered, but not with a Discovery document. The reason was reported while the connection was being set up. Check that this URL addresses an Ed-Fi API, and that whatever sits in front of it serves the document at its root.");
+            }
+
             throw new Exception(
-                $"{_role} API at '{edFiApiClient.HttpClient.BaseAddress}' did not provide version information, because its Discovery document could not be read. The reason was reported while the connection was being set up.");
+                $"{_role} API at '{edFiApiClient.HttpClient.BaseAddress}' did not provide version information, because it could not be reached. The reason was reported while the connection was being set up.");
         }
 
         // The document is remote content, so it is a property rather than part of the template. Interpolating

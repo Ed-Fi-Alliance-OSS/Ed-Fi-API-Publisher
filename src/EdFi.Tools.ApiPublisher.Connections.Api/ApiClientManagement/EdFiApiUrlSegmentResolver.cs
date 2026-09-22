@@ -382,12 +382,22 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     /// without naming a path is ordinary, while one that could not be asked means the address, or whatever
     /// sits in front of it, is worth checking.
     /// </summary>
-    public sealed record DiscoveryDocument(JObject Content, bool WasRead)
+    public sealed record DiscoveryDocument(JObject Content, bool WasRead, bool ApiAnswered = false)
     {
         /// <summary>
-        /// Gets the document to use for an API that could not be asked.
+        /// Gets the document to use for an API that could not be reached at all. Left as the plain
+        /// "unread" case because an API that cannot be reached may simply be restarting, which a later
+        /// run resolves on its own.
         /// </summary>
         public static DiscoveryDocument Unread { get; } = new(new JObject(), WasRead: false);
+
+        /// <summary>
+        /// Gets the document to use for an API that answered, but with something its Discovery document
+        /// cannot be read from. Whatever is at that address is not serving one, and running again changes
+        /// nothing about that.
+        /// </summary>
+        public static DiscoveryDocument Unusable { get; } =
+            new(new JObject(), WasRead: false, ApiAnswered: true);
 
         /// <summary>
         /// Returns the URL the document declares under <paramref name="urlName" />, or null when it declares
