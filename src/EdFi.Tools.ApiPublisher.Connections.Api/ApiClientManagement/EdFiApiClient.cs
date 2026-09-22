@@ -291,7 +291,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                         ex,
                         "The {ConnectionName:l} API at '{BaseAddress}' answered its Discovery document with something that is not JSON.",
                         _name,
-                        _httpClient.BaseAddress
+                        baseAddress
                     );
 
                     return DiscoveryDocument.Unusable;
