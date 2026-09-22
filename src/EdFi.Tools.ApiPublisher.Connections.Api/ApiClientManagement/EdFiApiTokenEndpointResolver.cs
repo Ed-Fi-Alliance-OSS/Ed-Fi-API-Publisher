@@ -135,8 +135,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     );
                 }
 
+                // The host is left for Serilog to quote rather than wrapped in quotes here. It comes from the
+                // API's own document, and rendering a remote string unquoted is how a log line gets forged.
                 _logger?.Information(
-                    "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint}', on a different host than the API itself; this connection's key and secret will be sent to '{TokenHost}'.",
+                    "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint}', on a different host than the API itself; this connection's key and secret will be sent to {TokenHost}.",
                     _connectionName,
                     declaredUri,
                     declaredUri.Authority
