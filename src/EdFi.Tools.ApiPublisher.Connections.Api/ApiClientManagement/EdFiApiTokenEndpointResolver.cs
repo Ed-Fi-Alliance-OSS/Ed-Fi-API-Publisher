@@ -6,7 +6,6 @@
 using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using Serilog;
-using System.Text;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
@@ -92,14 +91,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!Uri.TryCreate(statedAuthUrl, UriKind.Absolute, out var statedUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The authentication URL stated for the {_connectionName} connection is '{ForLog(statedAuthUrl)}', which is not an absolute URL. Set {ConfigurationPath()} to the full address of the token endpoint, including its scheme."
+                    $"The authentication URL stated for the {_connectionName} connection is '{EdFiApiUrlSegmentResolver.ForLog(statedAuthUrl)}', which is not an absolute URL. Set {ConfigurationPath()} to the full address of the token endpoint, including its scheme."
                 );
             }
 
             if (!IsWebScheme(statedUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The authentication URL stated for the {_connectionName} connection is '{ForLog(statedAuthUrl)}', which is not an HTTP or HTTPS address. Set {ConfigurationPath()} to the address of the token endpoint."
+                    $"The authentication URL stated for the {_connectionName} connection is '{EdFiApiUrlSegmentResolver.ForLog(statedAuthUrl)}', which is not an HTTP or HTTPS address. Set {ConfigurationPath()} to the address of the token endpoint."
                 );
             }
 
@@ -127,7 +126,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!Uri.TryCreate(_baseAddress, declaredUrl, out var declaredUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUrl)}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {ConfigurationPath()} to the address of its token endpoint."
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{EdFiApiUrlSegmentResolver.ForLog(declaredUrl)}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {ConfigurationPath()} to the address of its token endpoint."
                 );
             }
 
@@ -272,49 +271,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     UriComponents.AbsoluteUri & ~UriComponents.UserInfo,
                     UriFormat.UriEscaped
                 );
-
-        /// <summary>
-        /// Renders a value supplied by the API, or read from configuration, so that it cannot break out of the
-        /// line it is written on, and cannot flood the log.
-        /// </summary>
-        /// <remarks>
-        /// Quoting is not the defense it looks like: Serilog escapes a quotation mark inside a string scalar
-        /// but writes a newline straight through, and the console and file templates are fixed and public, so
-        /// a value carrying a line break forges a line indistinguishable from a real one. A value that has
-        /// been through <see cref="Uri" /> is written as its <see cref="Uri.AbsoluteUri" />, which
-        /// percent-encodes control characters and is why those are rendered with <c>:l</c>. A value that has
-        /// not been parsed is escaped here instead.
-        /// </remarks>
-        private static string ForLog(string value)
-        {
-            const int LongestRendered = 200;
-
-            if (string.IsNullOrEmpty(value))
-            {
-                return value;
-            }
-
-            var rendered = new StringBuilder(Math.Min(value.Length, LongestRendered) + 1);
-
-            foreach (char character in value.Length > LongestRendered ? value[..LongestRendered] : value)
-            {
-                if (char.IsControl(character))
-                {
-                    rendered.Append($"%{(int)character:X2}");
-                }
-                else
-                {
-                    rendered.Append(character);
-                }
-            }
-
-            if (value.Length > LongestRendered)
-            {
-                rendered.Append('…');
-            }
-
-            return rendered.ToString();
-        }
 
         private string ConfigurationPath()
         {
