@@ -78,7 +78,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // neither a token nor the pipeline that carries one.
                 _discoveryDocument = ReadDiscoveryDocument(baseAddress, throttlingPolicy.RequestBudget);
 
-                var tokenEndpointResolver = new EdFiApiTokenEndpointResolver(baseAddress, _name, _logger);
+                var tokenEndpointResolver = new EdFiApiTokenEndpointResolver(
+                    baseAddress,
+                    _name,
+                    _logger,
+                    serverCertificatesUnverified: ignoreSslErrors
+                );
 
                 var tokenEndpoint = tokenEndpointResolver.Resolve(
                     ConnectionDetails.AuthUrl,

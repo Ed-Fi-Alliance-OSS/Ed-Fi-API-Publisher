@@ -37,11 +37,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private readonly Uri _baseAddress;
         private readonly string _connectionName;
         private readonly ILogger _logger;
+        private readonly bool _serverCertificatesUnverified;
 
         /// <param name="baseAddress">The connection's URL. Normalized to end in a slash, because resolving a
         /// relative value against an address that does not drops its last path segment, which would move both
         /// the conventional endpoint and any endpoint declared relative to the API.</param>
-        public EdFiApiTokenEndpointResolver(Uri baseAddress, string connectionName, ILogger logger = null)
+        /// <param name="serverCertificatesUnverified">Whether this connection accepts any server certificate.
+        /// An endpoint on another host is followed over HTTPS because the certificate identifies the host it
+        /// reaches; where nothing checks that certificate, it identifies nothing.</param>
+        public EdFiApiTokenEndpointResolver(
+            Uri baseAddress,
+            string connectionName,
+            ILogger logger = null,
+            bool serverCertificatesUnverified = false
+        )
         {
             ArgumentNullException.ThrowIfNull(baseAddress);
 
@@ -49,6 +58,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             _connectionName = connectionName;
             _logger = logger ?? Log.ForContext(typeof(EdFiApiTokenEndpointResolver));
+            _serverCertificatesUnverified = serverCertificatesUnverified;
         }
 
         /// <summary>
@@ -161,6 +171,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 );
 
                 return declaredUri;
+            }
+
+            // Another host is reached over HTTPS because the certificate is what says the host is the one
+            // named. Where this connection accepts any certificate, nothing says that, so the one guarantee
+            // behind following an address the API chose is not there.
+            if (_serverCertificatesUnverified)
+            {
+                throw new InvalidConfigurationException(
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is not the address this connection reaches the API at, and this connection is set not to verify server certificates. An endpoint on another host is followed over HTTPS because its certificate identifies it; with verification off nothing does, and this connection's key and secret would be sent to an address the API named and nothing vouched for. Either leave certificate verification on, or set {ConfigurationPath()} to state the token endpoint for this connection outright."
+                );
             }
 
             // A token request carries the connection's key and secret, and this address was supplied by the
