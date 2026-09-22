@@ -8,6 +8,7 @@ using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json.Linq;
 using Serilog;
 using System.Globalization;
+using System.Text;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
@@ -101,10 +102,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // Information rather than Debug: routing now depends on what the API answers, so the path
                 // actually in use is the first thing an operator needs when every request comes back 404.
                 _logger.Information(
-                    "The {ConnectionName:l} API declares {DiscoveryUrlName:l} as {DeclaredUrl}; requests will use '{Segment:l}' relative to '{BaseAddress}'.",
+                    "The {ConnectionName:l} API declares {DiscoveryUrlName:l} as '{DeclaredUrl:l}'; requests will use '{Segment:l}' relative to '{BaseAddress}'.",
                     _connectionName,
                     definition.DiscoveryUrlName,
-                    declaredUrl,
+                    ForLog(declaredUrl),
                     declaredSegment,
                     _baseAddress
                 );
@@ -126,6 +127,48 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Both spellings are looked for because a placeholder survives a round trip through <see cref="Uri" />
         /// escaped, so searching for the braces alone would let the escaped form through.
         /// </remarks>
+        /// <summary>
+        /// Renders a value the API supplied so that it cannot break out of the line it is written on, and
+        /// cannot flood the log.
+        /// </summary>
+        /// <remarks>
+        /// Quoting is not the defense it looks like: Serilog escapes a quotation mark inside a string scalar
+        /// but writes a newline straight through, and the console and file templates are fixed and public, so
+        /// a declared value carrying a line break forges a line indistinguishable from a real one. A value
+        /// that has been through <see cref="Uri" /> is written as its <see cref="Uri.AbsoluteUri" />, which
+        /// percent-encodes control characters; one that has not is escaped here.
+        /// </remarks>
+        public static string ForLog(string value)
+        {
+            const int LongestRendered = 200;
+
+            if (string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            var rendered = new StringBuilder(Math.Min(value.Length, LongestRendered) + 1);
+
+            foreach (char character in value.Length > LongestRendered ? value[..LongestRendered] : value)
+            {
+                if (char.IsControl(character))
+                {
+                    rendered.Append($"%{(int)character:X2}");
+                }
+                else
+                {
+                    rendered.Append(character);
+                }
+            }
+
+            if (value.Length > LongestRendered)
+            {
+                rendered.Append("...");
+            }
+
+            return rendered.ToString();
+        }
+
         public static bool ContainsRoutePlaceholder(string path)
         {
             string[] placeholderMarkers = ["{", "}", "%7B", "%7D"];
@@ -208,7 +251,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!Uri.TryCreate(_baseAddress, declaredUrl, out var declaredUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection is '{declaredUrl}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {ConfigurationPathFor(definition)} to the path its callers use."
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection is '{ForLog(declaredUrl)}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {ConfigurationPathFor(definition)} to the path its callers use."
                 );
             }
 
@@ -223,7 +266,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             )
             {
                 throw new InvalidConfigurationException(
-                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri}', which is not served by the host this connection addresses ('{_baseAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host. If this API is reached through a gateway and declares the address it is deployed at rather than the one its callers use, set {ConfigurationPathFor(definition)} to the path those callers use."
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri.AbsoluteUri}', which is not served by the host this connection addresses ('{_baseAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host. If this API is reached through a gateway and declares the address it is deployed at rather than the one its callers use, set {ConfigurationPathFor(definition)} to the path those callers use."
                 );
             }
 
@@ -233,7 +276,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // it, so a resource would land inside the query string or the fragment instead of on the
                 // server.
                 throw new InvalidConfigurationException(
-                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri}', which carries a query string or a fragment. Only a path can be prefixed onto a resource. Set {ConfigurationPathFor(definition)} to the path on its own."
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri.AbsoluteUri}', which carries a query string or a fragment. Only a path can be prefixed onto a resource. Set {ConfigurationPathFor(definition)} to the path on its own."
                 );
             }
 

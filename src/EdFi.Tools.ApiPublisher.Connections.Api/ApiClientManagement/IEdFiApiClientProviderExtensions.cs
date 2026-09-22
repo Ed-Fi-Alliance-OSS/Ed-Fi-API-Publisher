@@ -71,7 +71,7 @@ public static class EdFiApiClientProviderExtensions
             if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(metadataPath))
             {
                 throw new InvalidConfigurationException(
-                    $"The {urlName} URL declared by the {edFiApiClient.Name} API is '{metadataUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance}");
+                    $"The {urlName} URL declared by the {edFiApiClient.Name} API is '{EdFiApiUrlSegmentResolver.ForLog(metadataUri)}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance}");
             }
 
             return metadataPath;

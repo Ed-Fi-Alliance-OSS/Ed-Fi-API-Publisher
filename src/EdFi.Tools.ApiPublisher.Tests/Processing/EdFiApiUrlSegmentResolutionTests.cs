@@ -59,6 +59,29 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             new(baseAddress ?? ServerRoot, "TestSource", schoolYear);
 
         [Test]
+        public void A_declared_path_should_not_be_able_to_forge_a_log_line()
+        {
+            // A value carrying a line break survives Uri.TryCreate and the authority comparison, and
+            // Serilog writes a newline straight through a quoted string scalar. The console and file
+            // templates are fixed and public, so that forges a line indistinguishable from a real one.
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor()
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data\r\n[FTL] Processing complete/v3/")),
+                        EdFiApiUrlSegmentResolver.DataManagement);
+
+                string rendered = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("declares"))
+                    .RenderMessage();
+
+                rendered.ShouldNotContain("\n");
+                rendered.ShouldNotContain("\r");
+            }
+        }
+
+        [Test]
         public void A_declared_trailing_slash_should_be_dropped()
         {
             // Call sites append a resource path that already opens with a slash, so a segment that kept its
