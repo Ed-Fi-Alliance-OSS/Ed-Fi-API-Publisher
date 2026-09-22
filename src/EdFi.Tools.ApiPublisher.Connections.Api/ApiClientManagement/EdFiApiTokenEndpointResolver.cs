@@ -4,8 +4,8 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Core.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
 using Serilog;
+using System.Text;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
@@ -75,14 +75,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!Uri.TryCreate(statedAuthUrl, UriKind.Absolute, out var statedUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The authentication URL stated for the {_connectionName} connection is '{statedAuthUrl}', which is not an absolute URL. Set {ConfigurationPath()} to the full address of the token endpoint, including its scheme."
+                    $"The authentication URL stated for the {_connectionName} connection is '{ForLog(statedAuthUrl)}', which is not an absolute URL. Set {ConfigurationPath()} to the full address of the token endpoint, including its scheme."
                 );
             }
 
             _logger?.Information(
-                "The {ConnectionName:l} API connection states its token endpoint as '{TokenEndpoint}'; its Discovery document is not consulted for one.",
+                "The {ConnectionName:l} API connection states its token endpoint as '{TokenEndpoint:l}'; its Discovery document is not consulted for one.",
                 _connectionName,
-                statedUri
+                statedUri.AbsoluteUri
             );
 
             return statedUri;
@@ -102,14 +102,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!Uri.TryCreate(_baseAddress, declaredUrl, out var declaredUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUrl}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {ConfigurationPath()} to the address of its token endpoint."
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUrl)}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {ConfigurationPath()} to the address of its token endpoint."
                 );
             }
 
             if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(declaredUri.ToString()))
             {
                 throw new InvalidConfigurationException(
-                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance}"
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance}"
                 );
             }
 
@@ -131,16 +131,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 if (!declaredUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidConfigurationException(
-                        $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri}', which is not the address this connection reaches the API at ('{_baseAddress}') and is not HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so it is only followed over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
+                        $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which is not the address this connection reaches the API at ('{_baseAddress}') and is not HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so it is only followed over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
                     );
                 }
 
-                // The host is left for Serilog to quote rather than wrapped in quotes here. It comes from the
-                // API's own document, and rendering a remote string unquoted is how a log line gets forged.
                 _logger?.Information(
-                    "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint}', on a different host than the API itself; this connection's key and secret will be sent to {TokenHost}.",
+                    "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}', on a different host than the API itself; this connection's key and secret will be sent to {TokenHost}.",
                     _connectionName,
-                    declaredUri,
+                    declaredUri.AbsoluteUri,
                     declaredUri.Authority
                 );
 
@@ -148,9 +146,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
 
             _logger?.Information(
-                "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint}'.",
+                "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}'.",
                 _connectionName,
-                declaredUri
+                declaredUri.AbsoluteUri
             );
 
             return declaredUri;
@@ -167,20 +165,63 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (discoveryDocument?.WasRead == true)
             {
                 _logger?.Information(
-                    "The {ConnectionName:l} API declares no {UrlName:l} URL, so its token will be requested from '{TokenEndpoint}'.",
+                    "The {ConnectionName:l} API declares no {UrlName:l} URL, so its token will be requested from '{TokenEndpoint:l}'.",
                     _connectionName,
                     DiscoveryUrlName,
-                    conventionalEndpoint
+                    conventionalEndpoint.AbsoluteUri
                 );
 
                 return;
             }
 
             _logger?.Warning(
-                "The Discovery document for the {ConnectionName:l} API could not be read, so its token will be requested from '{TokenEndpoint}', the path an Ed-Fi API conventionally serves it at.",
+                "The Discovery document for the {ConnectionName:l} API could not be read, so its token will be requested from '{TokenEndpoint:l}', the path an Ed-Fi API conventionally serves it at.",
                 _connectionName,
-                conventionalEndpoint
+                conventionalEndpoint.AbsoluteUri
             );
+        }
+
+        /// <summary>
+        /// Renders a value supplied by the API, or read from configuration, so that it cannot break out of the
+        /// line it is written on, and cannot flood the log.
+        /// </summary>
+        /// <remarks>
+        /// Quoting is not the defense it looks like: Serilog escapes a quotation mark inside a string scalar
+        /// but writes a newline straight through, and the console and file templates are fixed and public, so
+        /// a value carrying a line break forges a line indistinguishable from a real one. A value that has
+        /// been through <see cref="Uri" /> is written as its <see cref="Uri.AbsoluteUri" />, which
+        /// percent-encodes control characters and is why those are rendered with <c>:l</c>. A value that has
+        /// not been parsed is escaped here instead.
+        /// </remarks>
+        private static string ForLog(string value)
+        {
+            const int LongestRendered = 200;
+
+            if (string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            var rendered = new StringBuilder(Math.Min(value.Length, LongestRendered) + 1);
+
+            foreach (char character in value.Length > LongestRendered ? value[..LongestRendered] : value)
+            {
+                if (char.IsControl(character))
+                {
+                    rendered.Append($"%{(int)character:X2}");
+                }
+                else
+                {
+                    rendered.Append(character);
+                }
+            }
+
+            if (value.Length > LongestRendered)
+            {
+                rendered.Append('…');
+            }
+
+            return rendered.ToString();
         }
 
         private string ConfigurationPath()

@@ -8,8 +8,11 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using Serilog.Events;
+using Serilog.Sinks.TestCorrelator;
 using Shouldly;
 using System;
+using System.Linq;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -68,13 +71,16 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         public void A_declared_endpoint_should_keep_the_prefix_the_connection_url_carries()
         {
             // A DMS served beneath a path base declares that base in every URL it publishes.
+            // Deliberately not the conventional path under that prefix: asserting
+            // "https://server/api/oauth/token" would be asserting exactly what the fallback composes, so this
+            // would pass even if the declared value were never read.
             var endpoint = ResolverFor(new Uri("https://server/api/"))
                 .Resolve(
                     statedAuthUrl: null,
-                    DiscoveryDeclaring(("oauth", "https://server/api/oauth/token"))
+                    DiscoveryDeclaring(("oauth", "https://server/api/identity/connect/token"))
                 );
 
-            endpoint.ShouldBe(new Uri("https://server/api/oauth/token"));
+            endpoint.ShouldBe(new Uri("https://server/api/identity/connect/token"));
         }
 
         [Test]
@@ -206,14 +212,130 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_declared_endpoint_should_not_be_able_to_forge_a_log_line()
+        {
+            // A value carrying a line break survives Uri.TryCreate, the placeholder check and the authority
+            // comparison, and Uri.ToString() renders the break intact. The console and file templates are
+            // fixed and public, so that forges a line indistinguishable from a real one. Serilog quoting is
+            // not the defense: it escapes a quotation mark, not a newline.
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor()
+                    .Resolve(
+                        statedAuthUrl: null,
+                        DiscoveryDeclaring(("oauth", "https://server/oauth\r\n[FTL] Processing complete/token"))
+                    );
+
+                string rendered = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("declares its token endpoint"))
+                    .RenderMessage();
+
+                rendered.ShouldNotContain("\n");
+                rendered.ShouldNotContain("\r");
+                rendered.ShouldContain("%0D%0A");
+            }
+        }
+
+        [Test]
+        public void A_stated_endpoint_that_cannot_be_parsed_should_not_be_able_to_forge_a_log_line()
+        {
+            // This one never reaches Uri at all, so the escaping has to happen where the message is built.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor().Resolve("not a url\r\n[FTL] Processing complete", DiscoveryDocument.Unread)
+            );
+
+            exception.Message.ShouldNotContain("\n");
+            exception.Message.ShouldNotContain("\r");
+        }
+
+        [Test]
+        public void A_stated_endpoint_on_another_host_over_plain_http_should_be_used()
+        {
+            // This is the remedy the refusal message and the documentation both name. If the HTTPS rule were
+            // ever hoisted ahead of the stated branch, the documented escape would start refusing too.
+            var endpoint = ResolverFor()
+                .Resolve(
+                    "http://identity.example/connect/token",
+                    DiscoveryDeclaring(("oauth", "https://server/oauth/token"))
+                );
+
+            endpoint.ShouldBe(new Uri("http://identity.example/connect/token"));
+        }
+
+        [Test]
+        public void A_stated_endpoint_should_keep_the_path_it_was_given()
+        {
+            // Earlier versions applied a trailing slash before requesting the token, which against a server
+            // that distinguishes the two is a different request.
+            var endpoint = ResolverFor().Resolve("https://idp/connect/token", DiscoveryDocument.Unread);
+
+            endpoint.AbsoluteUri.ShouldBe("https://idp/connect/token");
+        }
+
+        [Test]
+        public void A_blank_stated_endpoint_should_be_treated_as_none()
+        {
+            var endpoint = ResolverFor()
+                .Resolve("   ", DiscoveryDeclaring(("oauth", "https://server/identity/connect/token")));
+
+            endpoint.ShouldBe(new Uri("https://server/identity/connect/token"));
+        }
+
+        [Test]
+        public void Credentials_leaving_the_own_host_of_the_api_should_be_reported()
+        {
+            // The only signal an operator gets that the key and secret are going somewhere the API nominated.
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor()
+                    .Resolve(
+                        statedAuthUrl: null,
+                        DiscoveryDeclaring(("oauth", "https://identity.example/connect/token"))
+                    );
+
+                var offHostNotice = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("different host"));
+
+                offHostNotice.Level.ShouldBe(LogEventLevel.Information);
+                offHostNotice.RenderMessage().ShouldContain("identity.example");
+            }
+        }
+
+        [Test]
+        public void A_document_that_could_not_be_read_should_be_reported_differently_from_one_that_said_nothing()
+        {
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor().Resolve(statedAuthUrl: null, DiscoveryDocument.Unread);
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e => e.Level == LogEventLevel.Warning);
+            }
+
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor()
+                    .Resolve(
+                        statedAuthUrl: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data/v3/"))
+                    );
+
+                var events = TestCorrelator.GetLogEventsFromCurrentContext().ToList();
+
+                events.ShouldContain(e => e.Level == LogEventLevel.Information);
+                events.ShouldNotContain(e => e.Level == LogEventLevel.Warning);
+            }
+        }
+
+        [Test]
         public void A_declared_endpoint_stated_relative_to_the_api_should_resolve_against_the_connection()
         {
             // The guidelines require an absolute URL. One stated relative names the same host either way, so
             // it is resolved rather than refused.
             var endpoint = ResolverFor(new Uri("https://server/api/"))
-                .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "/api/oauth/token")));
+                .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "/api/identity/connect/token")));
 
-            endpoint.ShouldBe(new Uri("https://server/api/oauth/token"));
+            endpoint.ShouldBe(new Uri("https://server/api/identity/connect/token"));
         }
     }
 }
