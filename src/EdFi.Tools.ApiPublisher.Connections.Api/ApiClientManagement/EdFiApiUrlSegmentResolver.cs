@@ -255,6 +255,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 );
             }
 
+            if (!string.Equals(declaredUri.Host, _baseAddress.Host, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidConfigurationException(
+                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri.AbsoluteUri}', which is not served by the host this connection addresses ('{_baseAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host. If this API is reached through a gateway and declares the address it is deployed at rather than the one its callers use, set {ConfigurationPathFor(definition)} to the path those callers use."
+                );
+            }
+
+            // Only the path is taken from the declaration, so a scheme or port that disagrees with the
+            // connection is worth saying out loud and is not worth refusing over. An ODS/API behind a proxy
+            // that terminates TLS, with forwarded headers off, declares http for itself at the very address
+            // its callers reach over https; refusing that would stop a deployment that works today.
             if (
                 Uri.Compare(
                     declaredUri,
@@ -265,9 +276,23 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 ) != 0
             )
             {
-                throw new InvalidConfigurationException(
-                    $"The {definition.DiscoveryUrlName} path for the {_connectionName} connection resolves to '{declaredUri.AbsoluteUri}', which is not served by the host this connection addresses ('{_baseAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host. If this API is reached through a gateway and declares the address it is deployed at rather than the one its callers use, set {ConfigurationPathFor(definition)} to the path those callers use."
+                _logger.Warning(
+                    "The {ConnectionName:l} API declares {DiscoveryUrlName:l} at '{DeclaredUrl:l}', which is the host this connection addresses but not over '{ConnectionScheme:l}'. Only the path is taken from it, and requests keep using '{BaseAddress}'. An API behind a proxy that terminates TLS commonly declares this way; correcting the scheme it is told to advertise fixes it for every caller.",
+                    _connectionName,
+                    definition.DiscoveryUrlName,
+                    declaredUri.AbsoluteUri,
+                    _baseAddress.Scheme,
+                    _baseAddress
                 );
+
+                // Restated at the connection's own authority before being made relative, because
+                // MakeRelativeUri answers with the absolute URL when the schemes differ, and an absolute
+                // segment is exactly what an HttpClient follows in place of its base address.
+                declaredUri = new UriBuilder(declaredUri)
+                {
+                    Scheme = _baseAddress.Scheme,
+                    Port = _baseAddress.IsDefaultPort ? -1 : _baseAddress.Port
+                }.Uri;
             }
 
             if (!string.IsNullOrEmpty(declaredUri.Query) || !string.IsNullOrEmpty(declaredUri.Fragment))

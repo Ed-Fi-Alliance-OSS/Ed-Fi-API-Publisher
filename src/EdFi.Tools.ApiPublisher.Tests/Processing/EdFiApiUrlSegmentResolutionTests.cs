@@ -98,6 +98,70 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_declaration_differing_only_in_scheme_should_be_used()
+        {
+            // An ODS/API behind a proxy that terminates TLS, with forwarded headers off, declares http for
+            // itself at the very address its callers reach over https. That deployment works today, because
+            // the path was assumed; refusing it here would stop it on upgrade.
+            var segment = ResolverFor(new Uri("https://server/"))
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("dataManagementApi", "http://server/data/v3/")),
+                    EdFiApiUrlSegmentResolver.DataManagement);
+
+            segment.ShouldBe("data/v3");
+        }
+
+        [Test]
+        public void A_declaration_differing_only_in_scheme_should_not_produce_an_absolute_segment()
+        {
+            // The reason the case above needs its own guard: MakeRelativeUri answers with the absolute URL
+            // when the schemes differ, and a segment that is absolute is what an HttpClient follows in place
+            // of its base address, which is the whole failure this resolver exists to prevent.
+            var segment = ResolverFor(new Uri("https://server/"))
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("dataManagementApi", "http://server/data/v3/")),
+                    EdFiApiUrlSegmentResolver.DataManagement);
+
+            Uri.TryCreate(segment, UriKind.Absolute, out _).ShouldBeFalse();
+            segment.ShouldNotContain("://");
+        }
+
+        [Test]
+        public void A_declaration_differing_only_in_port_should_be_used()
+        {
+            // A proxy exposing the API on one port while the API declares the port it listens on.
+            var segment = ResolverFor(new Uri("https://server/"))
+                .Resolve(
+                    statedSegment: null,
+                    DiscoveryDeclaring(("dataManagementApi", "https://server:8080/data/v3/")),
+                    EdFiApiUrlSegmentResolver.DataManagement);
+
+            segment.ShouldBe("data/v3");
+        }
+
+        [Test]
+        public void A_declaration_differing_only_in_scheme_should_be_reported()
+        {
+            // It is not refused, so the log is the only place an operator learns their API is advertising
+            // itself at an address its callers do not use.
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor(new Uri("https://server/"))
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "http://server/data/v3/")),
+                        EdFiApiUrlSegmentResolver.DataManagement);
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e =>
+                        e.Level == LogEventLevel.Warning
+                        && e.MessageTemplate.Text.Contains("not over"));
+            }
+        }
+
+        [Test]
         public void A_declaration_on_another_host_should_be_refused()
         {
             // The Discovery document is served by the remote API, and a connection's requests carry its
