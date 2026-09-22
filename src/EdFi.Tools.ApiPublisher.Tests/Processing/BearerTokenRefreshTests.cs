@@ -265,7 +265,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 "TestSource",
                 TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes: 28,
-                transportHandler);
+                transportHandler,
+                new Uri(TokenUrl));
 
             using var httpClient = new HttpClient(
                 new BearerTokenHandler(transportHandler, tokenManager, "TestSource"))
@@ -427,6 +428,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
                 new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                new Uri(TokenUrl),
                 timeProvider);
 
         private sealed class MutableFlag

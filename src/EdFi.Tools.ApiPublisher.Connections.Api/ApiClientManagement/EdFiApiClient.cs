@@ -78,6 +78,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // neither a token nor the pipeline that carries one.
                 _discoveryDocument = ReadDiscoveryDocument(baseAddress, throttlingPolicy.RequestBudget);
 
+                var tokenEndpointResolver = new EdFiApiTokenEndpointResolver(baseAddress, _name, _logger);
+
+                var tokenEndpoint = tokenEndpointResolver.Resolve(
+                    ConnectionDetails.AuthUrl,
+                    _discoveryDocument
+                );
+
                 // The token is obtained next, so a connection that cannot authenticate fails here rather than on
                 // the first request.
                 _bearerTokenManager = new BearerTokenManager(
@@ -85,6 +92,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     apiConnectionDetails,
                     bearerTokenRefreshMinutes,
                     _httpClientHandler,
+                    tokenEndpoint,
                     timeProvider
                 );
 
