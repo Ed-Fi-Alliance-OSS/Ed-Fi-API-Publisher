@@ -109,6 +109,41 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void An_endpoint_on_another_host_should_be_refused_when_certificates_are_not_verified()
+        {
+            // HTTPS is what makes another host followable, because the certificate says the host reached is
+            // the host named. With --ignoreSslErrors the handler accepts any certificate, so nothing says
+            // that, and the one guarantee behind following an address the API chose is gone.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () =>
+                    new EdFiApiTokenEndpointResolver(
+                            ServerRoot,
+                            "Source",
+                            serverCertificatesUnverified: true)
+                        .Resolve(
+                            statedAuthUrl: null,
+                            DiscoveryDeclaring(("oauth", "https://identity.example/connect/token"))
+                        )
+            );
+
+            exception.Message.ShouldContain("verify server certificates");
+            exception.Message.ShouldContain("--sourceAuthUrl");
+        }
+
+        [Test]
+        public void The_apis_own_address_should_still_be_used_when_certificates_are_not_verified()
+        {
+            // The refusal is about an address the API chose, not about the connection's own.
+            var endpoint = new EdFiApiTokenEndpointResolver(
+                    ServerRoot,
+                    "TestSource",
+                    serverCertificatesUnverified: true)
+                .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "https://server/identity/connect/token")));
+
+            endpoint.ShouldBe(new Uri("https://server/identity/connect/token"));
+        }
+
+        [Test]
         public void An_endpoint_declared_on_another_host_without_https_should_be_refused()
         {
             // A token request carries the connection's key and secret, and this address came from the API
