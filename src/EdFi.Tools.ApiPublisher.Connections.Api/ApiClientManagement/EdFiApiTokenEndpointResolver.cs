@@ -4,6 +4,7 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Tools.ApiPublisher.Core.Configuration;
+using EdFi.Tools.ApiPublisher.Core.Extensions;
 using Serilog;
 using System.Text;
 
@@ -24,22 +25,30 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     public class EdFiApiTokenEndpointResolver
     {
         /// <summary>
-        /// Gets the path an Ed-Fi API has always been assumed to serve its token endpoint at, relative to the
+        /// The path an Ed-Fi API has always been assumed to serve its token endpoint at, relative to the
         /// connection's URL. Used for an API that declares no OAuth URL, or that cannot be asked for one.
         /// </summary>
-        public const string ConventionalTokenPath = "oauth/token";
+        private const string ConventionalTokenPath = "oauth/token";
 
         private const string DiscoveryUrlName = "oauth";
+
+        private const string AuthUrlSettingName = "AuthUrl";
 
         private readonly Uri _baseAddress;
         private readonly string _connectionName;
         private readonly ILogger _logger;
 
+        /// <param name="baseAddress">The connection's URL. Normalized to end in a slash, because resolving a
+        /// relative value against an address that does not drops its last path segment, which would move both
+        /// the conventional endpoint and any endpoint declared relative to the API.</param>
         public EdFiApiTokenEndpointResolver(Uri baseAddress, string connectionName, ILogger logger = null)
         {
-            _baseAddress = baseAddress ?? throw new ArgumentNullException(nameof(baseAddress));
+            ArgumentNullException.ThrowIfNull(baseAddress);
+
+            _baseAddress = new Uri(baseAddress.AbsoluteUri.EnsureSuffixApplied("/"));
+
             _connectionName = connectionName;
-            _logger = logger ?? Log.ForContext<EdFiApiTokenEndpointResolver>();
+            _logger = logger ?? Log.ForContext(typeof(EdFiApiTokenEndpointResolver));
         }
 
         /// <summary>
@@ -58,13 +67,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return FromStatedAuthUrl(statedAuthUrl);
             }
 
-            string declaredUrl = discoveryDocument?.Declares(DiscoveryUrlName);
+            string declaredUrl = discoveryDocument.Declares(DiscoveryUrlName);
 
             if (declaredUrl is null)
             {
-                ReportConventionalEndpoint(discoveryDocument);
-
-                return new Uri(_baseAddress, ConventionalTokenPath);
+                return ConventionalEndpointReported(discoveryDocument);
             }
 
             return FromDeclaredUrl(declaredUrl);
@@ -79,11 +86,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 );
             }
 
-            _logger?.Information(
+            if (!IsWebScheme(statedUri))
+            {
+                throw new InvalidConfigurationException(
+                    $"The authentication URL stated for the {_connectionName} connection is '{ForLog(statedAuthUrl)}', which is not an HTTP or HTTPS address. Set {ConfigurationPath()} to the address of the token endpoint."
+                );
+            }
+
+            _logger.Information(
                 "The {ConnectionName:l} connection states {ConfigurationKey:l}, so its token will be requested from '{TokenEndpoint:l}' and its Discovery document is not consulted for one.",
                 _connectionName,
                 ConfigurationPath(),
-                statedUri.AbsoluteUri
+                ForLog(statedUri)
             );
 
             return statedUri;
@@ -110,7 +124,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(declaredUri.ToString()))
             {
                 throw new InvalidConfigurationException(
-                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance} For the token endpoint, set {ConfigurationPath()} to its full address."
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance} For the token endpoint, set {ConfigurationPath()} to its full address."
                 );
             }
 
@@ -140,10 +154,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             if (isConnectionsOwnAddress)
             {
-                _logger?.Information(
+                _logger.Information(
                     "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}'.",
                     _connectionName,
-                    declaredUri.AbsoluteUri
+                    ForLog(declaredUri)
                 );
 
                 return declaredUri;
@@ -157,8 +171,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             {
                 throw new InvalidConfigurationException(
                     isSameEndpointHost
-                        ? $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which is the host this connection addresses but over plain HTTP rather than the {_baseAddress.Scheme.ToUpperInvariant()} this connection uses. A token request carries this connection's key and secret, so it is not sent in the clear. An API behind a proxy that terminates TLS commonly declares HTTP for itself; correcting the scheme the proxy forwards fixes this for every caller. To override it for this connection alone, set {ConfigurationPath()}."
-                        : $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which is served by neither the address this connection reaches the API at ('{_baseAddress}') nor over HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so another host is only reached over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
+                        ? $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is the host this connection addresses but over plain HTTP rather than the {_baseAddress.Scheme.ToUpperInvariant()} this connection uses. A token request carries this connection's key and secret, so it is not sent in the clear. An API behind a proxy that terminates TLS commonly declares HTTP for itself; correcting the scheme the proxy forwards fixes this for every caller. To override it for this connection alone, set {ConfigurationPath()}."
+                        : $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is served by neither the address this connection reaches the API at ('{_baseAddress}') nor over HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so another host is only reached over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
                 );
             }
 
@@ -166,19 +180,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             {
                 // Same host and port, reached over HTTPS where the connection itself is not. Worth saying,
                 // but it is not the third-party case and should not be reported as one.
-                _logger?.Information(
+                _logger.Information(
                     "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}', on the host this connection addresses but over HTTPS.",
                     _connectionName,
-                    declaredUri.AbsoluteUri
+                    ForLog(declaredUri)
                 );
 
                 return declaredUri;
             }
 
-            _logger?.Information(
+            _logger.Information(
                 "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}', on a different host than the API itself; this connection's key and secret will be sent to {TokenHost}.",
                 _connectionName,
-                declaredUri.AbsoluteUri,
+                ForLog(declaredUri),
                 declaredUri.Authority
             );
 
@@ -189,29 +203,55 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Says that the conventional path is in use and why, distinguishing an API that answered without
         /// naming its token endpoint from one that could not be asked at all.
         /// </summary>
-        private void ReportConventionalEndpoint(DiscoveryDocument discoveryDocument)
+        private Uri ConventionalEndpointReported(DiscoveryDocument discoveryDocument)
         {
             var conventionalEndpoint = new Uri(_baseAddress, ConventionalTokenPath);
 
-            if (discoveryDocument?.WasRead == true)
+            if (discoveryDocument.WasRead)
             {
-                _logger?.Information(
+                _logger.Information(
                     "The {ConnectionName:l} API declares no {UrlName:l} URL, so its token will be requested from '{TokenEndpoint:l}'. If it serves its token endpoint elsewhere, set {ConfigurationKey:l}.",
                     _connectionName,
                     DiscoveryUrlName,
-                    conventionalEndpoint.AbsoluteUri,
+                    ForLog(conventionalEndpoint),
                     ConfigurationPath()
                 );
 
-                return;
+                return conventionalEndpoint;
             }
 
-            _logger?.Warning(
+            _logger.Warning(
                 "The Discovery document for the {ConnectionName:l} API could not be read, so its token will be requested from '{TokenEndpoint:l}', the path an Ed-Fi API conventionally serves it at. The publisher takes this API's version information from that same document, so the run will not get past the version check while it cannot be read.",
                 _connectionName,
-                conventionalEndpoint.AbsoluteUri
+                ForLog(conventionalEndpoint)
             );
+
+            return conventionalEndpoint;
         }
+
+        /// <summary>
+        /// Says whether an endpoint is one the publisher can actually send a token request to.
+        /// </summary>
+        private static bool IsWebScheme(Uri endpoint) =>
+            endpoint.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || endpoint.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Renders an endpoint for the log without the userinfo an operator may have put in it, since
+        /// <see cref="Uri.AbsoluteUri" /> carries that through and it is a credential of its own.
+        /// </summary>
+        /// <remarks>
+        /// It is left in the value that is used, because it is the address the operator or the API gave; it
+        /// simply has no business being written down. <see cref="System.Net.Http.HttpClient" /> does not act
+        /// on it in any case, since the publisher sets its own authorization header.
+        /// </remarks>
+        private static string ForLog(Uri endpoint) =>
+            string.IsNullOrEmpty(endpoint.UserInfo)
+                ? endpoint.AbsoluteUri
+                : endpoint.GetComponents(
+                    UriComponents.AbsoluteUri & ~UriComponents.UserInfo,
+                    UriFormat.UriEscaped
+                );
 
         /// <summary>
         /// Renders a value supplied by the API, or read from configuration, so that it cannot break out of the
@@ -260,12 +300,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (string.IsNullOrEmpty(_connectionName))
             {
-                return nameof(Configuration.ApiConnectionDetails.AuthUrl);
+                return AuthUrlSettingName;
             }
 
             string commandLineRole = char.ToLowerInvariant(_connectionName[0]) + _connectionName[1..];
 
-            return $"Connections:{_connectionName}:AuthUrl (--{commandLineRole}AuthUrl)";
+            return $"Connections:{_connectionName}:{AuthUrlSettingName} (--{commandLineRole}{AuthUrlSettingName})";
         }
     }
 }

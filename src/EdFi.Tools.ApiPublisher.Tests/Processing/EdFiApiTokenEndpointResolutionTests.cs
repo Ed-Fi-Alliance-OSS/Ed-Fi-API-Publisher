@@ -30,13 +30,13 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     [NonParallelizable]
     public class EdFiApiTokenEndpointResolutionTests
     {
+        private static readonly Uri ServerRoot = new("https://server/");
+
         [OneTimeSetUp]
         public void ConfigureLogging()
         {
             TestHelpers.InitializeLogging();
         }
-
-        private static readonly Uri ServerRoot = new("https://server/");
 
         private static DiscoveryDocument DiscoveryDeclaring(params (string Name, string Url)[] urls)
         {
@@ -292,6 +292,58 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var endpoint = ResolverFor().Resolve("https://idp/connect/token", DiscoveryDocument.Unread);
 
             endpoint.AbsoluteUri.ShouldBe("https://idp/connect/token");
+        }
+
+        [Test]
+        public void A_stated_endpoint_that_is_not_a_web_address_should_be_refused()
+        {
+            // Absolute is not enough: file:// and ftp:// parse, and then surface from inside HttpClient as a
+            // NotSupportedException that reads as a defect in the tool rather than as configuration, missing
+            // the exit code that tells an operator what to correct.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor().Resolve("ftp://identity.example/token", DiscoveryDocument.Unread)
+            );
+
+            exception.Message.ShouldContain("HTTP or HTTPS");
+            exception.Message.ShouldContain("--sourceAuthUrl".Replace("source", "testSource"));
+        }
+
+        [Test]
+        public void A_connection_url_without_a_trailing_slash_should_not_move_the_endpoint()
+        {
+            // Resolving a relative value against an address with no trailing slash drops its last path
+            // segment, so "https://server/api" would put the token endpoint at the server root. The one
+            // caller happens to normalize before constructing this; the resolver should not rely on that.
+            var conventional = new EdFiApiTokenEndpointResolver(new Uri("https://server/api"), "TestSource")
+                .Resolve(statedAuthUrl: null, DiscoveryDocument.Unread);
+
+            conventional.ShouldBe(new Uri("https://server/api/oauth/token"));
+
+            var declared = new EdFiApiTokenEndpointResolver(new Uri("https://server/api"), "TestSource")
+                .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "identity/connect/token")));
+
+            declared.ShouldBe(new Uri("https://server/api/identity/connect/token"));
+        }
+
+        [Test]
+        public void Userinfo_in_an_endpoint_should_not_be_written_to_the_log()
+        {
+            // An operator who puts credentials in the URL should not find them in the log, and this is the
+            // change that newly writes that URL down.
+            using (TestCorrelator.CreateContext())
+            {
+                var endpoint = ResolverFor().Resolve("https://user:secret@idp/token", DiscoveryDocument.Unread);
+
+                // The value itself is left as given; it is only kept out of the log.
+                endpoint.UserInfo.ShouldBe("user:secret");
+
+                string rendered = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("token will be requested"))
+                    .RenderMessage();
+
+                rendered.ShouldNotContain("secret");
+                rendered.ShouldContain("idp");
+            }
         }
 
         [Test]
