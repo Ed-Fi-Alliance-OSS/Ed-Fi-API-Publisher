@@ -144,15 +144,37 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
-        public void An_endpoint_declared_back_on_plain_http_at_the_same_host_should_be_refused()
+        public void An_endpoint_declared_over_plain_http_at_the_connections_own_host_should_be_refused()
         {
-            // Same host, but the scheme the connection reaches the API over is not the one the credentials
-            // would travel on.
-            Should.Throw<InvalidConfigurationException>(
+            // The host and port are the connection's own; only the scheme differs. The refusal has to say
+            // that, because an operator told their endpoint is on another host goes looking for one. This is
+            // what an API behind a TLS-terminating proxy declares when the proxy does not forward the scheme.
+            var exception = Should.Throw<InvalidConfigurationException>(
                 () =>
                     ResolverFor()
                         .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "http://server/oauth/token")))
             );
+
+            exception.Message.ShouldContain("the host this connection addresses");
+            exception.Message.ShouldContain("proxy");
+            exception.Message.ShouldNotContain("different host");
+        }
+
+        [Test]
+        public void An_endpoint_declared_over_https_at_the_connections_own_host_should_not_be_reported_as_another_host()
+        {
+            // A connection reached over plain HTTP whose API declares HTTPS for itself is not the
+            // third-party case and should not be announced as one.
+            using (TestCorrelator.CreateContext())
+            {
+                var endpoint = ResolverFor(new Uri("http://server/"))
+                    .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "https://server/identity/connect/token")));
+
+                endpoint.ShouldBe(new Uri("https://server/identity/connect/token"));
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldNotContain(e => e.MessageTemplate.Text.Contains("different host"));
+            }
         }
 
         [Test]

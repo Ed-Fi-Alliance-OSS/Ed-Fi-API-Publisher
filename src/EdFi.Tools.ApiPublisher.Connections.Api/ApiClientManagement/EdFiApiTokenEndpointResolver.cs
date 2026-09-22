@@ -80,8 +80,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             }
 
             _logger?.Information(
-                "The {ConnectionName:l} API connection states its token endpoint as '{TokenEndpoint:l}'; its Discovery document is not consulted for one.",
+                "The {ConnectionName:l} connection states {ConfigurationKey:l}, so its token will be requested from '{TokenEndpoint:l}' and its Discovery document is not consulted for one.",
                 _connectionName,
+                ConfigurationPath(),
                 statedUri.AbsoluteUri
             );
 
@@ -109,11 +110,26 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(declaredUri.ToString()))
             {
                 throw new InvalidConfigurationException(
-                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance}"
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which still carries a route placeholder. {EdFiApiUrlSegmentResolver.RouteQualifierGuidance} For the token endpoint, set {ConfigurationPath()} to its full address."
                 );
             }
 
-            bool isConnectionsOwnHost =
+            // Host and port are compared apart from the scheme, because the two differences are not the same
+            // situation and an operator reading about the wrong one goes looking for something that is not
+            // there. An API behind a proxy that terminates TLS without forwarding the original scheme
+            // declares http for itself at the very address its callers reach over https, which is a common
+            // deployment and nothing to do with another host.
+            // Not UriComponents.HostAndPort, which resolves each side's default port from its own scheme and
+            // so reports 80 against 443 for the very case this is here to recognize. Two default ports are
+            // treated as the same endpoint; two stated ports are not.
+            bool isSameEndpointHost =
+                string.Equals(declaredUri.Host, _baseAddress.Host, StringComparison.OrdinalIgnoreCase)
+                && (
+                    declaredUri.Port == _baseAddress.Port
+                    || (declaredUri.IsDefaultPort && _baseAddress.IsDefaultPort)
+                );
+
+            bool isConnectionsOwnAddress =
                 Uri.Compare(
                     declaredUri,
                     _baseAddress,
@@ -122,33 +138,48 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     StringComparison.OrdinalIgnoreCase
                 ) == 0;
 
-            if (!isConnectionsOwnHost)
+            if (isConnectionsOwnAddress)
             {
-                // A token request carries the connection's key and secret, and this address was supplied by
-                // the API rather than by the operator. Reaching somewhere other than exactly where this
-                // connection already sends its requests is allowed, and is the third-party case the
-                // guidelines describe, but not in the clear.
-                if (!declaredUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidConfigurationException(
-                        $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which is not the address this connection reaches the API at ('{_baseAddress}') and is not HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so it is only followed over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
-                    );
-                }
-
                 _logger?.Information(
-                    "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}', on a different host than the API itself; this connection's key and secret will be sent to {TokenHost}.",
+                    "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}'.",
                     _connectionName,
-                    declaredUri.AbsoluteUri,
-                    declaredUri.Authority
+                    declaredUri.AbsoluteUri
+                );
+
+                return declaredUri;
+            }
+
+            // A token request carries the connection's key and secret, and this address was supplied by the
+            // API rather than by the operator. Anywhere other than the address this connection already
+            // reaches the API at is allowed, and is the third-party case the guidelines describe, but not in
+            // the clear.
+            if (!declaredUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidConfigurationException(
+                    isSameEndpointHost
+                        ? $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which is the host this connection addresses but over plain HTTP rather than the {_baseAddress.Scheme.ToUpperInvariant()} this connection uses. A token request carries this connection's key and secret, so it is not sent in the clear. An API behind a proxy that terminates TLS commonly declares HTTP for itself; correcting the scheme the proxy forwards fixes this for every caller. To override it for this connection alone, set {ConfigurationPath()}."
+                        : $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{declaredUri.AbsoluteUri}', which is served by neither the address this connection reaches the API at ('{_baseAddress}') nor over HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so another host is only reached over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
+                );
+            }
+
+            if (isSameEndpointHost)
+            {
+                // Same host and port, reached over HTTPS where the connection itself is not. Worth saying,
+                // but it is not the third-party case and should not be reported as one.
+                _logger?.Information(
+                    "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}', on the host this connection addresses but over HTTPS.",
+                    _connectionName,
+                    declaredUri.AbsoluteUri
                 );
 
                 return declaredUri;
             }
 
             _logger?.Information(
-                "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}'.",
+                "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}', on a different host than the API itself; this connection's key and secret will be sent to {TokenHost}.",
                 _connectionName,
-                declaredUri.AbsoluteUri
+                declaredUri.AbsoluteUri,
+                declaredUri.Authority
             );
 
             return declaredUri;
@@ -165,17 +196,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (discoveryDocument?.WasRead == true)
             {
                 _logger?.Information(
-                    "The {ConnectionName:l} API declares no {UrlName:l} URL, so its token will be requested from '{TokenEndpoint:l}'.",
+                    "The {ConnectionName:l} API declares no {UrlName:l} URL, so its token will be requested from '{TokenEndpoint:l}'. If it serves its token endpoint elsewhere, set {ConfigurationKey:l}.",
                     _connectionName,
                     DiscoveryUrlName,
-                    conventionalEndpoint.AbsoluteUri
+                    conventionalEndpoint.AbsoluteUri,
+                    ConfigurationPath()
                 );
 
                 return;
             }
 
             _logger?.Warning(
-                "The Discovery document for the {ConnectionName:l} API could not be read, so its token will be requested from '{TokenEndpoint:l}', the path an Ed-Fi API conventionally serves it at.",
+                "The Discovery document for the {ConnectionName:l} API could not be read, so its token will be requested from '{TokenEndpoint:l}', the path an Ed-Fi API conventionally serves it at. The publisher takes this API's version information from that same document, so the run will not get past the version check while it cannot be read.",
                 _connectionName,
                 conventionalEndpoint.AbsoluteUri
             );
