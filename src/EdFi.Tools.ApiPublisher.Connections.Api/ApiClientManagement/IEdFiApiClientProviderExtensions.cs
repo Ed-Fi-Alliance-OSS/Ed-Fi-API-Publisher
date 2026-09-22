@@ -81,6 +81,19 @@ public static class EdFiApiClientProviderExtensions
         switch (urlName)
         {
             case "dependencies":
+                // The conventional location puts the data management path inside 'metadata/.../dependencies',
+                // which only composes while that path stays beneath the connection's own address. A segment
+                // that climbs out of it, which an API declaring its data management outside the connection's
+                // prefix produces, cancels the 'metadata' element instead of sitting inside it: a connection
+                // at '/edfi/' with a segment of '../other/data' composes
+                // 'https://server/edfi/other/data/dependencies', which names nothing. There is no telling
+                // where such an API keeps its metadata, so this is refused rather than guessed at.
+                if (ClimbsAboveTheConnection(edFiApiClient.DataManagementApiSegment))
+                {
+                    throw new InvalidConfigurationException(
+                        $"The {edFiApiClient.Name} API declares no {urlName} URL, and its data management path '{EdFiApiUrlSegmentResolver.ForLog(edFiApiClient.DataManagementApiSegment)}' is served above the address this connection uses, so the conventional location for {urlName} cannot be composed from it. Address the connection at the URL the API serves from, or have the API declare its {urlName} URL.");
+                }
+
                 return $"metadata/{edFiApiClient.DataManagementApiSegment}/dependencies";
 
             case "oauth":
@@ -92,4 +105,14 @@ public static class EdFiApiClientProviderExtensions
                 throw new InvalidOperationException(message);
         }
     }
+
+    /// <summary>
+    /// Says whether a resolved path segment addresses something above the connection's own URL, which is how
+    /// an API that serves outside the prefix the connection carries is expressed relative to it.
+    /// </summary>
+    private static bool ClimbsAboveTheConnection(string segment) =>
+        segment is not null
+        && segment
+            .Split('/')
+            .Any(element => element.Equals("..", StringComparison.Ordinal));
 }

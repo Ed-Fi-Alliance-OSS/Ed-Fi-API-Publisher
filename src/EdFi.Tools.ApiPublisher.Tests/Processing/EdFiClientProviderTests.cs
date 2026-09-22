@@ -11,6 +11,7 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using NUnit.Framework;
+using Shouldly;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -18,6 +19,44 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     public class EdFiClientProviderTests
     {
 
+
+        [Test]
+        public async Task RefusesDependenciesFallback_WhenDataManagementIsServedAboveTheConnection()
+        {
+            // An API that declares its data management outside the prefix the connection carries resolves to
+            // a segment that climbs out of it. Composed into the conventional location, the ".." cancels the
+            // "metadata" element rather than sitting inside it, so a connection at "/edfi/" with a segment of
+            // "../other/data" would request "https://server/edfi/other/data/dependencies", which names
+            // nothing. Measured before this guard existed.
+            var apiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails();
+            apiConnectionDetails.Url = MockRequests.SourceApiBaseUrl + "/edfi/";
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl + "/edfi")
+                .OAuthToken()
+                .ApiVersionMetadataUrls(
+                    apiVersion: "6.1",
+                    edfiVersion: "4.0.0",
+                    urls: new Dictionary<string, string>
+                    {
+                        // Declared on the same host, but above the address the connection uses, and with no
+                        // dependencies URL of its own, which is what reaches the fallback.
+                        { "dataManagementApi", MockRequests.SourceApiBaseUrl + "/other/data" }
+                    });
+
+            using var client = new EdFiApiClient(
+                "TestClient", apiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            client.DataManagementApiSegment.ShouldBe("../other/data");
+
+            var clientProvider = A.Fake<IEdFiApiClientProvider>();
+            A.CallTo(() => clientProvider.GetApiClient()).Returns(client);
+
+            var exception = await Should.ThrowAsync<InvalidConfigurationException>(
+                async () => await clientProvider.GetEdFiUrlFromMetadataOrDefaultAsync("dependencies"));
+
+            exception.Message.ShouldContain("served above the address this connection uses");
+        }
 
         [Test]
         public async Task ReturnsDependenciesUrl_WhenAvailableInMetadata()
