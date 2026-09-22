@@ -31,9 +31,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClient));
 
-        // Read once and shared by both segments, because one document states where both of them are served.
-        // Kept so that anything else needing the API's own description of itself reads it rather than asking
-        // the API a second time.
+        // Read once and shared by the token endpoint and both path segments, because one document states
+        // where all three are served. Kept so that anything else needing the API's own description of itself
+        // reads it rather than asking the API a second time.
         private readonly DiscoveryDocument _discoveryDocument;
 
         private readonly string _dataManagementApiSegment;
@@ -198,8 +198,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// </summary>
         /// <remarks>
         /// Blocks, because the segments it feeds are read through synchronous properties by every call site
-        /// that builds a request. It happens once per client, while that client is being constructed, in the
-        /// same way the bearer token is first obtained.
+        /// that builds a request. It happens once per client, while that client is constructed and before the
+        /// token is requested.
         /// <para>
         /// The address and the request budget are passed in rather than read from the client's own
         /// <see cref="HttpClient" />, because this runs before that client exists: the token endpoint is stated
