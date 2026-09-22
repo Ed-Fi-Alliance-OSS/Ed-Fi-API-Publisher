@@ -32,7 +32,7 @@ The host's process _should_ also perform the following steps:
 * Create an Application in the Admin app/database for the Ed-Fi API Publisher, naming it meaningfully for the use case.
 * Associate the Application with the "Ed-Fi API Publisher - Reader" claim set.
 * Create an API client (key and secret) in the Admin app/database for use by the Ed-Fi API Publisher.
-* Provide the key, secret and your API's base URL to the party responsible for configuring the Ed-Fi API Publisher's connections. The API's base URL includes everything up to, but not including, the _/data/v3_ portion.
+* Provide the key, secret and your API's base URL to the party responsible for configuring the Ed-Fi API Publisher's connections. The API's base URL is the address the API is reached at, the one that answers its Discovery document at its root. The publisher takes the paths it needs, including the one to data management resources, from that document rather than assuming any particular value, so the base URL is stated without reference to them.
 
 ## Target API
 
@@ -44,7 +44,7 @@ The host's process _should_ also perform the following steps:
 * Create an Application in the Admin app/database for the Ed-Fi API Publisher, naming it meaningfully for the use case.
 * Create an API client (key and secret) in the Admin app/database to be used by the Ed-Fi API Publisher to write data _on behalf of_ a particular source API.
 * Associate the Application with the "Ed-Fi API Publisher - Writer" claim set.
-* Provide the key, secret and your API's base URL to the party responsible for configuring the Ed-Fi API Publisher's connections. The API's base URL includes everything up to, but not including, the _/data/v3_ portion.
+* Provide the key, secret and your API's base URL to the party responsible for configuring the Ed-Fi API Publisher's connections. The API's base URL is the address the API is reached at, the one that answers its Discovery document at its root. The publisher takes the paths it needs, including the one to data management resources, from that document rather than assuming any particular value, so the base URL is stated without reference to them.
 
 # Profiles
 
