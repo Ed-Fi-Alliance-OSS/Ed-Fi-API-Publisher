@@ -82,7 +82,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (!string.IsNullOrWhiteSpace(statedSegment))
             {
-                string statedRelativeSegment = ToRelativeSegment(statedSegment, definition);
+                // Finished before it is announced, because Finish applies the connection's school year and
+                // refuses a path still carrying a placeholder. Logging first would report a path the run does
+                // not use, and would announce one that is about to be refused.
+                string statedRelativeSegment = Finish(ToRelativeSegment(statedSegment, definition), definition);
 
                 _logger.Information(
                     "The {ConnectionName:l} connection states {ConfigurationPath:l}, so requests will use '{Segment:l}' relative to '{BaseAddress}'. Its Discovery document is not consulted for this path.",
@@ -92,12 +95,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     _baseAddress
                 );
 
-                return Finish(statedRelativeSegment, definition);
+                return statedRelativeSegment;
             }
 
             if (discoveryDocument.Declares(definition.DiscoveryUrlName) is string declaredUrl)
             {
-                string declaredSegment = ToRelativeSegment(declaredUrl, definition);
+                string declaredSegment = Finish(ToRelativeSegment(declaredUrl, definition), definition);
 
                 // Information rather than Debug: routing now depends on what the API answers, so the path
                 // actually in use is the first thing an operator needs when every request comes back 404.
@@ -110,7 +113,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     _baseAddress
                 );
 
-                return Finish(declaredSegment, definition);
+                return declaredSegment;
             }
 
             ReportConventionalSegment(discoveryDocument, definition);

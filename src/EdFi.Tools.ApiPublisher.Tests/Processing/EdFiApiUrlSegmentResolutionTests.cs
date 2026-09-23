@@ -163,6 +163,29 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void The_reported_path_should_be_the_one_requests_use()
+        {
+            // The school year is applied after the segment is resolved, so reporting the intermediate value
+            // told an operator debugging a 404 that requests use a path they do not.
+            using (TestCorrelator.CreateContext())
+            {
+                var segment = ResolverFor(schoolYear: 2024)
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data/v3/")),
+                        EdFiApiUrlSegmentResolver.DataManagement);
+
+                segment.ShouldBe("data/v3/2024");
+
+                string reported = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("requests will use"))
+                    .RenderMessage();
+
+                reported.ShouldContain("data/v3/2024");
+            }
+        }
+
+        [Test]
         public void A_declaration_on_another_host_should_be_refused()
         {
             // The Discovery document is served by the remote API, and a connection's requests carry its

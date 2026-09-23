@@ -32,6 +32,10 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
     {
         private const string DmsStyleSegment = "data";
 
+        // Change queries needs its own non-conventional path, or the run exercises
+        // "changeQueries/v1", which is exactly what the fallback composes.
+        private const string DmsStyleChangeQueriesSegment = "changes";
+
         [TestFixture]
         public class When_both_APIs_declare_a_path_that_is_not_the_conventional_one : TestFixtureAsyncBase
         {
@@ -46,14 +50,18 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
                 // Both servers serve, and declare, data management under "data" the way a DMS does.
                 _fakeSourceRequestHandler = TestHelpers
-                    .GetFakeBaselineSourceApiRequestHandler(dataManagementUrlSegment: DmsStyleSegment)
+                    .GetFakeBaselineSourceApiRequestHandler(
+                        dataManagementUrlSegment: DmsStyleSegment,
+                        changeQueriesUrlSegment: DmsStyleChangeQueriesSegment)
                     .AvailableChangeVersions(1100)
                     .ResourceCount(responseTotalCountHeader: 1)
                     .GetResourceData($"{DmsStyleSegment}{TestHelpers.AnyResourcePattern}", suppliedSourceResources)
                     .GetResourceData($"{DmsStyleSegment}{TestHelpers.AnyResourcePattern}/deletes", Array.Empty<object>());
 
                 _fakeTargetRequestHandler = TestHelpers
-                    .GetFakeBaselineTargetApiRequestHandler(dataManagementUrlSegment: DmsStyleSegment);
+                    .GetFakeBaselineTargetApiRequestHandler(
+                        dataManagementUrlSegment: DmsStyleSegment,
+                        changeQueriesUrlSegment: DmsStyleChangeQueriesSegment);
 
                 _fakeTargetRequestHandler.EveryDataManagementPostReturns200Ok();
 
@@ -98,6 +106,28 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         A<string>.That.Contains($"/{DmsStyleSegment}/ed-fi/"),
                         A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
+            }
+
+            [Test]
+            public void Should_publish_without_error()
+            {
+                // Until the POST mock followed the fixture's own segment, nothing here could tell a
+                // successful write from a request that simply went unanswered.
+                ActualException.ShouldBeNull();
+            }
+
+            [Test]
+            public void Should_read_change_versions_through_the_declared_path()
+            {
+                A.CallTo(() => _fakeSourceRequestHandler.Get(
+                        $"{MockRequests.SourceApiBaseUrl}/{DmsStyleChangeQueriesSegment}/availableChangeVersions",
+                        A<HttpRequestMessage>.Ignored))
+                    .MustHaveHappened();
+
+                A.CallTo(() => _fakeSourceRequestHandler.Get(
+                        $"{MockRequests.SourceApiBaseUrl}/{EdFiApiConstants.ChangeQueriesApiSegment}/availableChangeVersions",
+                        A<HttpRequestMessage>.Ignored))
+                    .MustNotHaveHappened();
             }
 
             [Test]
@@ -206,6 +236,12 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                         A<string>.That.Contains($"/{StatedSegment}/ed-fi/"),
                         A<HttpRequestMessage>.Ignored))
                     .MustHaveHappened();
+            }
+
+            [Test]
+            public void Should_publish_without_error()
+            {
+                ActualException.ShouldBeNull();
             }
 
             [Test]
