@@ -18,6 +18,7 @@ using Shouldly;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
@@ -595,6 +596,48 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
             A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
                 .Returns(FakeResponse.OK("<html><body>Gateway Timeout</body></html>"));
+
+            using var client = CreateClient(fake);
+
+            client.DiscoveryDocument.ApiAnswered.ShouldBeTrue();
+
+            Should.Throw<InvalidConfigurationException>(
+                () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
+        }
+
+        [TestCase(503)]
+        [TestCase(502)]
+        [TestCase(504)]
+        [TestCase(429)]
+        [TestCase(408)]
+        public void A_status_a_later_run_could_get_past_should_stay_a_run_that_may_be_repeated(int statusCode)
+        {
+            // A gateway in front of an API that is restarting answers 503, and a saturated one answers 429.
+            // Reporting those as configuration would have a scheduled job keep rerunning what it reads as a
+            // fault it cannot fix, or stop rerunning what it could.
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(new HttpResponseMessage((HttpStatusCode)statusCode));
+
+            using var client = CreateClient(fake);
+
+            client.DiscoveryDocument.ApiAnswered.ShouldBeFalse();
+
+            var exception = Should.Throw<Exception>(
+                () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
+
+            exception.ShouldNotBeOfType<InvalidConfigurationException>();
+            PublisherExitCode.ForFailure(exception).ShouldBe(PublisherExitCode.ProcessingIncomplete);
+        }
+
+        [TestCase(404)]
+        [TestCase(401)]
+        [TestCase(400)]
+        public void A_status_that_will_not_change_should_be_reported_as_configuration(int statusCode)
+        {
+            var fake = TestHelpers.GetFakeBaselineSourceApiRequestHandler();
+            A.CallTo(() => fake.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .Returns(new HttpResponseMessage((HttpStatusCode)statusCode));
 
             using var client = CreateClient(fake);
 

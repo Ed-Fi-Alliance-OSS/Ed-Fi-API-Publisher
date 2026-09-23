@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json;
+using System.Net;
 using Newtonsoft.Json.Linq;
 using Serilog;
 
@@ -204,9 +205,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                         (int)response.StatusCode
                     );
 
-                    // The API answered, so whatever is at that address is not serving a Discovery
-                    // document. Running again does not change that.
-                    return DiscoveryDocument.Unusable;
+                    // An answer is not the same as a final answer. A gateway in front of an API that is
+                    // restarting says 503, a saturated one says 429, and a later run gets the document, so
+                    // those keep the outcome that says the run may be repeated. Anything else at that
+                    // address is not serving a Discovery document and will not tomorrow either.
+                    return MayAnswerDifferentlyLater(response.StatusCode)
+                        ? DiscoveryDocument.Unread
+                        : DiscoveryDocument.Unusable;
                 }
 
                 string content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -243,6 +248,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return DiscoveryDocument.Unread;
             }
         }
+
+        /// <summary>
+        /// Says whether a status the API answered with could be answered differently by a later run, which
+        /// decides whether the run reports a configuration fault or one that may be repeated.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately wider than <c>HttpStatusCodeExtensions.IsPotentiallyTransientFailure</c>, which
+        /// answers a different question, namely whether to retry one request inside this run. That one is
+        /// left alone because the request retry policy is built on it.
+        /// </remarks>
+        private static bool MayAnswerDifferentlyLater(HttpStatusCode statusCode) =>
+            (int)statusCode >= 500
+            || statusCode == HttpStatusCode.RequestTimeout
+            || statusCode == HttpStatusCode.TooManyRequests;
 
         private string ResolveApiSegment(ApiUrlSegmentDefinition definition, string statedSegment)
         {
