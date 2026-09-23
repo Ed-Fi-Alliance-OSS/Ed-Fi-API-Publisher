@@ -16,16 +16,18 @@ public class ApiConnectionDetails : SourceConnectionDetailsBase, ISourceConnecti
     public int? SchoolYear { get; set; }
 
     /// <summary>
-    /// Gets or sets the path to the data management API, relative to <see cref="Url" />, for an API whose
-    /// Discovery document cannot be read or does not state where it serves. Left unassigned, the path is
-    /// taken from the Discovery document.
+    /// Gets or sets the path to the data management API, relative to <see cref="Url" />, for an API that declares
+    /// a path its callers cannot use, or that declares none. An API serving no Discovery document at all is
+    /// not covered, since the publisher takes version information from that same document. Left unassigned,
+    /// the path is taken from the Discovery document.
     /// </summary>
     public string DataManagementUrlSegment { get; set; }
 
     /// <summary>
-    /// Gets or sets the path to the change queries API, relative to <see cref="Url" />, for an API whose
-    /// Discovery document cannot be read or does not state where it serves. Left unassigned, the path is
-    /// taken from the Discovery document.
+    /// Gets or sets the path to the change queries API, relative to <see cref="Url" />, for an API that declares
+    /// a path its callers cannot use, or that declares none. An API serving no Discovery document at all is
+    /// not covered, since the publisher takes version information from that same document. Left unassigned,
+    /// the path is taken from the Discovery document.
     /// </summary>
     public string ChangeQueriesUrlSegment { get; set; }
 

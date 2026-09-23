@@ -186,6 +186,43 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_stated_path_should_be_read_as_relative_even_with_a_leading_slash()
+        {
+            // Documented as relative to the connection URL. Resolved as given, a leading slash addresses the
+            // authority root and silently discards the prefix the connection carries.
+            var segment = ResolverFor(new Uri("https://server/tenant1/"))
+                .Resolve(
+                    statedSegment: "/data/v3",
+                    DiscoveryDocument.Unread,
+                    EdFiApiUrlSegmentResolver.DataManagement);
+
+            segment.ShouldBe("data/v3");
+        }
+
+        [Test]
+        public void A_path_served_above_the_connection_should_be_reported()
+        {
+            // Not refused: the host is the connection's own, and an operator may have addressed a tenant
+            // while the API serves beneath the root. But it is the one case where requests, and the
+            // credentials on them, leave the prefix the operator named.
+            using (TestCorrelator.CreateContext())
+            {
+                var segment = ResolverFor(new Uri("https://gw/tenantA/"))
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://gw/other-app/data")),
+                        EdFiApiUrlSegmentResolver.DataManagement);
+
+                segment.ShouldBe("../other-app/data");
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .ShouldContain(e =>
+                        e.Level == LogEventLevel.Warning
+                        && e.MessageTemplate.Text.Contains("served above the address this connection states"));
+            }
+        }
+
+        [Test]
         public void A_declaration_on_another_host_should_be_refused()
         {
             // The Discovery document is served by the remote API, and a connection's requests carry its

@@ -7,6 +7,7 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json.Linq;
 using Serilog;
+using Serilog.Events;
 using System.Globalization;
 using System.Text;
 
@@ -85,7 +86,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // Finished before it is announced, because Finish applies the connection's school year and
                 // refuses a path still carrying a placeholder. Logging first would report a path the run does
                 // not use, and would announce one that is about to be refused.
-                string statedRelativeSegment = Finish(ToRelativeSegment(statedSegment, definition), definition);
+                // Documented as relative to the connection URL, so a leading slash is dropped rather than
+                // resolved against the authority root, where it would silently discard the prefix the
+                // connection carries.
+                string statedRelativeSegment = Finish(
+                    ToRelativeSegment(statedSegment.TrimStart('/'), definition),
+                    definition
+                );
 
                 _logger.Information(
                     "The {ConnectionName:l} connection states {ConfigurationPath:l}, so requests will use '{Segment:l}' relative to '{BaseAddress}'. Its Discovery document is not consulted for this path.",
@@ -121,15 +128,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return Finish(Normalize(definition.ConventionalSegment), definition);
         }
 
-        /// <summary>
-        /// Reports whether a path taken from a Discovery document still carries an unresolved route
-        /// placeholder, such as the <c>{tenant}</c> an API answers with when it is asked for its URLs at an
-        /// address that names no tenant.
-        /// </summary>
-        /// <remarks>
-        /// Both spellings are looked for because a placeholder survives a round trip through <see cref="Uri" />
-        /// escaped, so searching for the braces alone would let the escaped form through.
-        /// </remarks>
         /// <summary>
         /// Renders a value the API supplied so that it cannot break out of the line it is written on, and
         /// cannot flood the log.
@@ -172,6 +170,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return rendered.ToString();
         }
 
+        /// <summary>
+        /// Reports whether a path taken from a Discovery document still carries an unresolved route
+        /// placeholder, such as the <c>{tenant}</c> an API answers with when it is asked for its URLs at an
+        /// address that names no tenant.
+        /// </summary>
+        /// <remarks>
+        /// Both spellings are looked for because a placeholder survives a round trip through <see cref="Uri" />
+        /// escaped, so searching for the braces alone would let the escaped form through.
+        /// </remarks>
         public static bool ContainsRoutePlaceholder(string path)
         {
             string[] placeholderMarkers = ["{", "}", "%7B", "%7D"];
@@ -181,9 +188,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         }
 
         /// <summary>
-        /// Says which conventional value is being used and why, distinguishing an API that answered without
-        /// naming this path from one that could not be asked at all. The first is ordinary, because an
-        /// ODS/API declares change queries only while that feature is enabled; the second is not.
+        /// Says which conventional value is in use and why. A target connection is told about change
+        /// queries at Debug rather than Information, because a target never reads them and the advice to
+        /// state a path it will not use is noise on every run.
         /// </summary>
         private void ReportConventionalSegment(
             DiscoveryDocument discoveryDocument,
@@ -192,7 +199,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (discoveryDocument.WasRead)
             {
-                _logger.Information(
+                // A target never reads change queries, so an ODS/API with the feature disabled would have
+                // every target run advised to state a path that run will not use.
+                var level = IsUnusedHere(definition) ? LogEventLevel.Debug : LogEventLevel.Information;
+
+                _logger.Write(
+                    level,
                     "The {ConnectionName:l} API did not declare {DiscoveryUrlName:l} in its Discovery document, so requests will use the conventional '{ConventionalSegment:l}'. If it serves that path elsewhere, set {ConfigurationPath:l}.",
                     _connectionName,
                     definition.DiscoveryUrlName,
@@ -218,6 +230,21 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// </summary>
         private string Finish(string segment, ApiUrlSegmentDefinition definition)
         {
+            // A segment that climbs out of the connection's own prefix addresses a sibling path, which
+            // behind a shared gateway is another application. It is not refused, because the host is the
+            // connection's own and the operator may have addressed a tenant while the API serves beneath
+            // the root, but it is the one case where requests leave the prefix the operator named.
+            if (segment is not null && segment.Split('/').Any(element => element == ".."))
+            {
+                _logger.Warning(
+                    "The {ConnectionName:l} {DiscoveryUrlName:l} path resolves to '{Segment:l}', which is served above the address this connection states ('{BaseAddress}'). Requests, and the credentials on them, will leave that prefix.",
+                    _connectionName,
+                    definition.DiscoveryUrlName,
+                    segment,
+                    _baseAddress
+                );
+            }
+
             string resolved = EnsureNoRoutePlaceholder(WithSchoolYearApplied(segment, definition), definition);
 
             return resolved.Length == 0 ? ConnectionRootSegment : resolved;
@@ -227,6 +254,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Names the setting an operator would edit, as it is written in a configuration file and on the
         /// command line, rather than the bare property name.
         /// </summary>
+        /// <summary>
+        /// Says whether this path plays no part in what this connection does, which is the case for change
+        /// queries on a target: a target is written to, never read for changes.
+        /// </summary>
+        private bool IsUnusedHere(ApiUrlSegmentDefinition definition) =>
+            definition.DiscoveryUrlName == ChangeQueries.DiscoveryUrlName
+            && string.Equals(_connectionName, "Target", StringComparison.OrdinalIgnoreCase);
+
         private string ConfigurationPathFor(ApiUrlSegmentDefinition definition)
         {
             if (string.IsNullOrEmpty(_connectionName))
