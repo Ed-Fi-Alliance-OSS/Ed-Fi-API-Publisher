@@ -21,6 +21,65 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
 
         [Test]
+        public async Task RefusesADependenciesUrlThatWouldSendTheTokenToAnotherHost()
+        {
+            // Measured: Uri("https://api.example//evil.test/deps").AbsolutePath is "//evil.test/deps", and an
+            // HttpClient resolves that against its base address as https://evil.test/deps, a network-path
+            // reference rather than a path. BearerTokenHandler stamps the connection's token on it.
+            var apiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails();
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .OAuthToken()
+                .ApiVersionMetadataUrls(
+                    apiVersion: "6.1",
+                    edfiVersion: "4.0.0",
+                    urls: new Dictionary<string, string>
+                    {
+                        { "dependencies", $"{MockRequests.SourceApiBaseUrl}//evil.test/test-dependencies-path" }
+                    });
+
+            using var client = new EdFiApiClient(
+                "TestClient", apiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            var clientProvider = A.Fake<IEdFiApiClientProvider>();
+            A.CallTo(() => clientProvider.GetApiClient()).Returns(client);
+
+            var exception = await Should.ThrowAsync<InvalidConfigurationException>(
+                async () => await clientProvider.GetEdFiUrlFromMetadataOrDefaultAsync("dependencies"));
+
+            exception.Message.ShouldContain("evil.test");
+        }
+
+        [Test]
+        public async Task RefusesADependenciesUrlOnAnotherHostOutright()
+        {
+            var apiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails();
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .OAuthToken()
+                .ApiVersionMetadataUrls(
+                    apiVersion: "6.1",
+                    edfiVersion: "4.0.0",
+                    urls: new Dictionary<string, string>
+                    {
+                        { "dependencies", "https://elsewhere.example/test-dependencies-path" }
+                    });
+
+            using var client = new EdFiApiClient(
+                "TestClient", apiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            var clientProvider = A.Fake<IEdFiApiClientProvider>();
+            A.CallTo(() => clientProvider.GetApiClient()).Returns(client);
+
+            var exception = await Should.ThrowAsync<InvalidConfigurationException>(
+                async () => await clientProvider.GetEdFiUrlFromMetadataOrDefaultAsync("dependencies"));
+
+            exception.Message.ShouldContain("not served by the host this connection addresses");
+        }
+
+        [Test]
         public async Task RefusesDependenciesFallback_WhenDataManagementIsServedAboveTheConnection()
         {
             // An API that declares its data management outside the prefix the connection carries resolves to

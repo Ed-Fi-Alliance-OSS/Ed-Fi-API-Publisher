@@ -58,12 +58,36 @@ public static class EdFiApiClientProviderExtensions
         if (versionMetadata?["urls"]?[urlName]?.ToString() is string metadataUri &&
             Uri.TryCreate(metadataUri, UriKind.Absolute, out var uri))
         {
+            // The same rule the path segments follow, and for the same reason: this value comes from the
+            // remote document, and the request built from it is sent on the authenticated client, so a value
+            // naming another host would carry this connection's bearer token there.
+            var connectionAddress = edFiApiClient.HttpClient.BaseAddress;
+
+            if (
+                connectionAddress is not null
+                && !string.Equals(uri.Host, connectionAddress.Host, StringComparison.OrdinalIgnoreCase)
+            )
+            {
+                throw new InvalidConfigurationException(
+                    $"The {urlName} URL declared by the {edFiApiClient.Name} API is '{EdFiApiUrlSegmentResolver.ForLog(metadataUri)}', which is not served by the host this connection addresses ('{connectionAddress}'). A connection's requests carry its credentials, so they are only ever sent to its own host.");
+            }
+
             // Kept absolute, unlike the path segments, which are held relative to the connection URL. The
             // difference is deliberate: this value is used as a request URI of its own, and a leading slash
             // resolves against the authority root, where the declared path already carries whatever prefix the
             // connection URL has. A segment is concatenated onto the connection URL instead, so an absolute
             // path there would state that prefix twice.
             string metadataPath = uri.AbsolutePath;
+
+            // A path opening with two slashes is a network-path reference, not a path: an HttpClient reads
+            // '//evil.test/deps' as a host and leaves the connection's address entirely, which is how a
+            // declared URL of 'https://api//evil.test/deps' would send the bearer token elsewhere. The host
+            // check above already refuses the declaration, so this is the second line rather than the first.
+            if (metadataPath.StartsWith("//", StringComparison.Ordinal))
+            {
+                throw new InvalidConfigurationException(
+                    $"The {urlName} URL declared by the {edFiApiClient.Name} API is '{EdFiApiUrlSegmentResolver.ForLog(metadataUri)}', whose path opens with '//'. That is read as another host rather than as a path on this one.");
+            }
 
             // Refused rather than requested, because a path still carrying a placeholder is not an address.
             // Requesting it draws a 404 naming a URL with '%7B' in it, which reads as a defect in the tool
