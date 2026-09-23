@@ -61,6 +61,28 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             new(baseAddress ?? ServerRoot, "TestSource", schoolYear);
 
         [Test]
+        public void A_declared_path_should_not_be_able_to_move_a_log_line_without_a_control_character()
+        {
+            // U+2028 and U+2029 are line and paragraph separators that char.IsControl does not report, and
+            // the bidi overrides can make a logged address display as a different one.
+            using (TestCorrelator.CreateContext())
+            {
+                Should.Throw<InvalidConfigurationException>(
+                    () => ResolverFor()
+                        .Resolve(
+                            statedSegment: null,
+                            DiscoveryDeclaring(("dataManagementApi", "https://elsewhere.example/\u2028\u202Ecollect")),
+                            EdFiApiUrlSegmentResolver.DataManagement));
+            }
+
+            string rendered = EdFiApiUrlSegmentResolver.ForLog("a\u2028b\u202Ec");
+
+            rendered.ShouldNotContain("\u2028");
+            rendered.ShouldNotContain("\u202E");
+            rendered.ShouldContain(@"\u2028");
+        }
+
+        [Test]
         public void A_declared_path_should_not_be_able_to_forge_a_log_line()
         {
             // A value carrying a line break survives Uri.TryCreate and the authority comparison, and

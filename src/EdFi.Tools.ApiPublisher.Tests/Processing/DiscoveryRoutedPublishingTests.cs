@@ -37,6 +37,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private const string DmsStyleChangeQueriesSegment = "changes";
 
         [TestFixture]
+        [NonParallelizable]
         public class When_both_APIs_declare_a_path_that_is_not_the_conventional_one : TestFixtureAsyncBase
         {
             private ChangeProcessor _changeProcessor;
@@ -148,6 +149,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [TestFixture]
+        [NonParallelizable]
         public class When_a_connection_states_a_path_the_API_does_not_declare : TestFixtureAsyncBase
         {
             private const string StatedSegment = "gateway/data";

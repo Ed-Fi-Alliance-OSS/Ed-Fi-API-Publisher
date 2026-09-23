@@ -152,9 +152,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             foreach (char character in value.Length > LongestRendered ? value[..LongestRendered] : value)
             {
-                if (char.IsControl(character))
+                if (char.IsControl(character) || IsLineOrDirectionMarker(character))
                 {
-                    rendered.Append($"%{(int)character:X2}");
+                    // Percent form for the ASCII controls, which reads like the escaping AbsoluteUri
+                    // already applies to them. Anything above that gets the \uXXXX form instead, because
+                    // "%2028" would read as a space followed by "28" rather than as one character.
+                    rendered.Append(
+                        character < 0x100 ? $"%{(int)character:X2}" : $@"\u{(int)character:X4}"
+                    );
                 }
                 else
                 {
@@ -179,6 +184,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Both spellings are looked for because a placeholder survives a round trip through <see cref="Uri" />
         /// escaped, so searching for the braces alone would let the escaped form through.
         /// </remarks>
+        /// <summary>
+        /// Says whether a character moves the line or its reading direction without being a control
+        /// character: the Unicode line and paragraph separators, and the bidirectional overrides that can
+        /// make a logged address display as a different one.
+        /// </summary>
+        private static bool IsLineOrDirectionMarker(char character) =>
+            character is '\u2028' or '\u2029'
+                or '\u202A' or '\u202B' or '\u202C' or '\u202D' or '\u202E'
+                or '\u2066' or '\u2067' or '\u2068' or '\u2069';
+
         public static bool ContainsRoutePlaceholder(string path)
         {
             string[] placeholderMarkers = ["{", "}", "%7B", "%7D"];

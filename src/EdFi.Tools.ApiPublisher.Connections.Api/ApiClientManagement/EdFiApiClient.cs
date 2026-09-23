@@ -179,8 +179,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// </summary>
         /// <remarks>
         /// Blocks, because the segments it feeds are read through synchronous properties by every call site
-        /// that builds a request. It happens once per client, on first use, in the same way the bearer token
-        /// is first obtained while the client is being constructed.
+        /// that builds a request. It happens once per client, while that client is being constructed, in the
+        /// same way the bearer token is first obtained.
         /// </remarks>
         private DiscoveryDocument ReadDiscoveryDocument()
         {
