@@ -179,20 +179,43 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
-        public void An_endpoint_declared_over_plain_http_at_the_connections_own_host_should_be_refused()
+        public void An_endpoint_declared_over_plain_http_at_the_connections_own_host_should_be_used_over_https()
         {
-            // The host and port are the connection's own; only the scheme differs. The refusal has to say
-            // that, because an operator told their endpoint is on another host goes looking for one. This is
-            // what an API behind a TLS-terminating proxy declares when the proxy does not forward the scheme.
-            var exception = Should.Throw<InvalidConfigurationException>(
-                () =>
-                    ResolverFor()
-                        .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "http://server/oauth/token")))
-            );
+            // An ODS/API behind a proxy that terminates TLS, with forwarded headers off, declares http for
+            // itself at the very address its callers reach over https. That deployment works today, and the
+            // token is the first request a run makes, so refusing it would stop the run before anything else.
+            // The connection's https is kept, so a declaration cannot move credentials onto plain HTTP.
+            var endpoint = ResolverFor()
+                .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "http://server/oauth/token")));
 
-            exception.Message.ShouldContain("the host this connection addresses");
-            exception.Message.ShouldContain("proxy");
-            exception.Message.ShouldNotContain("different host");
+            endpoint.ShouldBe(new Uri("https://server/oauth/token"));
+        }
+
+        [Test]
+        public void An_endpoint_declared_over_https_should_not_be_downgraded_to_the_connections_http()
+        {
+            // The mirror image: taking the connection's scheme unconditionally would move a token request
+            // that the API offers over HTTPS onto plain HTTP.
+            var endpoint = ResolverFor(new Uri("http://server/"))
+                .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "https://server/oauth/token")));
+
+            endpoint.ShouldBe(new Uri("https://server/oauth/token"));
+        }
+
+        [Test]
+        public void A_scheme_disagreement_at_the_connections_own_host_should_be_reported()
+        {
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor()
+                    .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "http://server/oauth/token")));
+
+                var notice = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("not the scheme it uses"));
+
+                notice.Level.ShouldBe(LogEventLevel.Warning);
+                notice.RenderMessage().ShouldContain("proxy");
+            }
         }
 
         [Test]
@@ -208,7 +231,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 endpoint.ShouldBe(new Uri("https://server/identity/connect/token"));
 
                 TestCorrelator.GetLogEventsFromCurrentContext()
-                    .ShouldNotContain(e => e.MessageTemplate.Text.Contains("different host"));
+                    .ShouldNotContain(e => e.MessageTemplate.Text.Contains("on a different host"));
             }
         }
 

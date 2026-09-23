@@ -152,16 +152,39 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     || (declaredUri.IsDefaultPort && _baseAddress.IsDefaultPort)
                 );
 
-            bool isConnectionsOwnAddress =
-                Uri.Compare(
-                    declaredUri,
-                    _baseAddress,
-                    UriComponents.SchemeAndServer,
-                    UriFormat.UriEscaped,
-                    StringComparison.OrdinalIgnoreCase
-                ) == 0;
+            // An API behind a proxy that terminates TLS, with forwarded headers off, declares http for itself
+            // at the very address its callers reach over https. That is the connection's own endpoint said
+            // differently, not a third party, and refusing it would stop a deployment that works today. The
+            // connection's scheme is kept rather than the declared one, so credentials do not travel in the
+            // clear because a document said they could.
+            if (isSameEndpointHost && !IsConnectionsOwnAddress(declaredUri))
+            {
+                // The same endpoint said two ways, which is what an API behind a proxy that terminates TLS
+                // produces when it is not told to advertise the forwarded scheme. Refusing it would stop a
+                // deployment that works today. The safer of the two schemes is kept, so a declaration cannot
+                // move credentials onto plain HTTP and a connection reached over HTTP does not discard an
+                // API that offers HTTPS for its token.
+                string safestScheme =
+                    declaredUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                    || _baseAddress.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                        ? Uri.UriSchemeHttps
+                        : _baseAddress.Scheme;
 
-            if (isConnectionsOwnAddress)
+                _logger.Warning(
+                    "The {ConnectionName:l} API declares its token endpoint at '{TokenEndpoint:l}', which is the host this connection addresses but not the scheme it uses. The token will be requested over '{TokenScheme:l}', the safer of the two. An API behind a proxy that terminates TLS commonly declares this way; correcting the scheme it is told to advertise fixes it for every caller.",
+                    _connectionName,
+                    ForLog(declaredUri),
+                    safestScheme
+                );
+
+                declaredUri = new UriBuilder(declaredUri)
+                {
+                    Scheme = safestScheme,
+                    Port = declaredUri.IsDefaultPort ? -1 : declaredUri.Port
+                }.Uri;
+            }
+
+            if (IsConnectionsOwnAddress(declaredUri))
             {
                 _logger.Information(
                     "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}'.",
@@ -247,6 +270,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             return conventionalEndpoint;
         }
+
+        /// <summary>
+        /// Says whether an endpoint is the very address this connection reaches the API at, scheme included.
+        /// </summary>
+        private bool IsConnectionsOwnAddress(Uri endpoint) =>
+            Uri.Compare(
+                endpoint,
+                _baseAddress,
+                UriComponents.SchemeAndServer,
+                UriFormat.UriEscaped,
+                StringComparison.OrdinalIgnoreCase
+            ) == 0;
 
         /// <summary>
         /// Says whether an endpoint is one the publisher can actually send a token request to.
