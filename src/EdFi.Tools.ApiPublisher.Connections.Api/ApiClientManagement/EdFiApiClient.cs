@@ -7,9 +7,9 @@ using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
 using Newtonsoft.Json;
-using System.Net;
 using Newtonsoft.Json.Linq;
 using Serilog;
+using System.Net;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {

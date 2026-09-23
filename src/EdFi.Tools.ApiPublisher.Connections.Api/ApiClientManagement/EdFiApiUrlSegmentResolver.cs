@@ -176,15 +176,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         }
 
         /// <summary>
-        /// Reports whether a path taken from a Discovery document still carries an unresolved route
-        /// placeholder, such as the <c>{tenant}</c> an API answers with when it is asked for its URLs at an
-        /// address that names no tenant.
-        /// </summary>
-        /// <remarks>
-        /// Both spellings are looked for because a placeholder survives a round trip through <see cref="Uri" />
-        /// escaped, so searching for the braces alone would let the escaped form through.
-        /// </remarks>
-        /// <summary>
         /// Says whether a character moves the line or its reading direction without being a control
         /// character: the Unicode line and paragraph separators, and the bidirectional overrides that can
         /// make a logged address display as a different one.
@@ -194,6 +185,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 or '\u202A' or '\u202B' or '\u202C' or '\u202D' or '\u202E'
                 or '\u2066' or '\u2067' or '\u2068' or '\u2069';
 
+        /// <summary>
+        /// Reports whether a path taken from a Discovery document still carries an unresolved route
+        /// placeholder, such as the <c>{tenant}</c> an API answers with when it is asked for its URLs at an
+        /// address that names no tenant.
+        /// </summary>
+        /// <remarks>
+        /// Both spellings are looked for because a placeholder survives a round trip through <see cref="Uri" />
+        /// escaped, so searching for the braces alone would let the escaped form through.
+        /// </remarks>
         public static bool ContainsRoutePlaceholder(string path)
         {
             string[] placeholderMarkers = ["{", "}", "%7B", "%7D"];
@@ -266,10 +266,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         }
 
         /// <summary>
-        /// Names the setting an operator would edit, as it is written in a configuration file and on the
-        /// command line, rather than the bare property name.
-        /// </summary>
-        /// <summary>
         /// Says whether this path plays no part in what this connection does, which is the case for change
         /// queries on a target: a target is written to, never read for changes.
         /// </summary>
@@ -277,6 +273,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             definition.DiscoveryUrlName == ChangeQueries.DiscoveryUrlName
             && string.Equals(_connectionName, "Target", StringComparison.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Names the setting an operator would edit, as it is written in a configuration file and on the
+        /// command line, rather than the bare property name.
+        /// </summary>
         private string ConfigurationPathFor(ApiUrlSegmentDefinition definition)
         {
             if (string.IsNullOrEmpty(_connectionName))
@@ -455,12 +455,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     );
 
     /// <summary>
-    /// An API's Discovery document, together with whether it could be read at all. The two outcomes look the
-    /// same to a reader of its contents and are not the same thing to an operator: an API that answered
-    /// without naming a path is ordinary, while one that could not be asked means the address, or whatever
-    /// sits in front of it, is worth checking.
-    /// </summary>
-    /// <summary>
     /// What came of asking an API for its Discovery document. The distinction between the two failures is
     /// what decides whether a run is reported as a configuration fault or as one that may be repeated.
     /// </summary>
@@ -476,6 +470,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         NotADocument
     }
 
+    /// <summary>
+    /// An API's Discovery document, together with what came of asking for it. The outcomes look the same to
+    /// a reader of its contents and are not the same thing to an operator: an API that answered without
+    /// naming a path is ordinary, while one that could not be asked means the address, or whatever sits in
+    /// front of it, is worth checking.
+    /// </summary>
     public sealed record DiscoveryDocument
     {
         private DiscoveryDocument(JObject content, DiscoveryOutcome outcome)
