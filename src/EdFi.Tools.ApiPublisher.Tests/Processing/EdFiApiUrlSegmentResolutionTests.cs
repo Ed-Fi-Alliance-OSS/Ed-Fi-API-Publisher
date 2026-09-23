@@ -245,6 +245,46 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_target_told_about_change_queries_should_be_told_at_Debug()
+        {
+            // A target is written to and never read for changes, so advising every run to state a path it
+            // will not use is noise. An ODS/API with the Change Queries feature disabled declares none, so
+            // this is the ordinary case for such a target rather than a rare one.
+            using (TestCorrelator.CreateContext())
+            {
+                new EdFiApiUrlSegmentResolver(ServerRoot, "Target")
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data/v3/")),
+                        EdFiApiUrlSegmentResolver.ChangeQueries);
+
+                var notice = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("did not declare"));
+
+                notice.Level.ShouldBe(LogEventLevel.Debug);
+            }
+        }
+
+        [Test]
+        public void A_source_told_about_change_queries_should_still_be_told_at_Information()
+        {
+            // The same message matters on a source, which does read change queries.
+            using (TestCorrelator.CreateContext())
+            {
+                new EdFiApiUrlSegmentResolver(ServerRoot, "Source")
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data/v3/")),
+                        EdFiApiUrlSegmentResolver.ChangeQueries);
+
+                var notice = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("did not declare"));
+
+                notice.Level.ShouldBe(LogEventLevel.Information);
+            }
+        }
+
+        [Test]
         public void A_declaration_on_another_host_should_be_refused()
         {
             // The Discovery document is served by the remote API, and a connection's requests carry its
