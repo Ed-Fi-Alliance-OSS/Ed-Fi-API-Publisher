@@ -218,7 +218,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
                 try
                 {
-                    return new DiscoveryDocument(JObject.Parse(content), WasRead: true);
+                    return DiscoveryDocument.Read(JObject.Parse(content));
                 }
                 catch (JsonException ex)
                 {

@@ -54,7 +54,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 declared[name] = url;
             }
 
-            return new DiscoveryDocument(new JObject { ["urls"] = declared }, WasRead: true);
+            return DiscoveryDocument.Read(new JObject { ["urls"] = declared });
         }
 
         private static EdFiApiUrlSegmentResolver ResolverFor(Uri baseAddress = null, int? schoolYear = null) =>
@@ -347,7 +347,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var segment = ResolverFor()
                 .Resolve(
                     statedSegment: null,
-                    new DiscoveryDocument(new JObject(), WasRead: true),
+                    DiscoveryDocument.Read(new JObject()),
                     EdFiApiUrlSegmentResolver.DataManagement);
 
             segment.ShouldBe(EdFiApiConstants.DataManagementApiSegment);
@@ -363,7 +363,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             {
                 ResolverFor().Resolve(
                     statedSegment: null,
-                    new DiscoveryDocument(new JObject(), WasRead: true),
+                    DiscoveryDocument.Read(new JObject()),
                     EdFiApiUrlSegmentResolver.ChangeQueries);
 
                 var events = TestCorrelator.GetLogEventsFromCurrentContext().ToArray();
@@ -604,7 +604,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             using var client = CreateClient(fake);
 
             client.DiscoveryDocument.WasRead.ShouldBeFalse();
-            client.DiscoveryDocument.ApiAnswered.ShouldBeTrue();
+            client.DiscoveryDocument.Outcome.ShouldBe(DiscoveryOutcome.NotADocument);
 
             var exception = Should.Throw<InvalidConfigurationException>(
                 () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
@@ -622,7 +622,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             using var client = CreateClient(fake);
 
-            client.DiscoveryDocument.ApiAnswered.ShouldBeTrue();
+            client.DiscoveryDocument.Outcome.ShouldBe(DiscoveryOutcome.NotADocument);
 
             Should.Throw<InvalidConfigurationException>(
                 () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
@@ -644,7 +644,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             using var client = CreateClient(fake);
 
-            client.DiscoveryDocument.ApiAnswered.ShouldBeFalse();
+            client.DiscoveryDocument.Outcome.ShouldBe(DiscoveryOutcome.Unreachable);
 
             var exception = Should.Throw<Exception>(
                 () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
@@ -664,7 +664,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             using var client = CreateClient(fake);
 
-            client.DiscoveryDocument.ApiAnswered.ShouldBeTrue();
+            client.DiscoveryDocument.Outcome.ShouldBe(DiscoveryOutcome.NotADocument);
 
             Should.Throw<InvalidConfigurationException>(
                 () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());
@@ -682,7 +682,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             using var client = CreateClient(fake);
 
             client.DiscoveryDocument.WasRead.ShouldBeFalse();
-            client.DiscoveryDocument.ApiAnswered.ShouldBeFalse();
+            client.DiscoveryDocument.Outcome.ShouldBe(DiscoveryOutcome.Unreachable);
 
             var exception = Should.Throw<Exception>(
                 () => VersionMetadataFor(client).GetVersionMetadata().GetAwaiter().GetResult());

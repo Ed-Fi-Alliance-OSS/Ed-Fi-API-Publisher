@@ -46,7 +46,7 @@ public class EdFiApiVersionMetadataProviderBase
             // something a document cannot be read from is not going to answer differently on a retry, so
             // reporting that as an incomplete run invites a job to keep rerunning a configuration fault.
             // Being unable to reach the API at all is the case a later run may well resolve.
-            if (discoveryDocument.ApiAnswered)
+            if (discoveryDocument.Outcome == DiscoveryOutcome.NotADocument)
             {
                 throw new InvalidConfigurationException(
                     $"{_role} API at '{edFiApiClient.HttpClient.BaseAddress}' did not provide version information: it answered, but not with a Discovery document. The reason was reported while the connection was being set up. Check that this URL addresses an Ed-Fi API, and that whatever sits in front of it serves the document at its root.");

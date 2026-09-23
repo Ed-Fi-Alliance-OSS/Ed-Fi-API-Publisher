@@ -410,14 +410,55 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
     /// without naming a path is ordinary, while one that could not be asked means the address, or whatever
     /// sits in front of it, is worth checking.
     /// </summary>
-    public sealed record DiscoveryDocument(JObject Content, bool WasRead, bool ApiAnswered = false)
+    /// <summary>
+    /// What came of asking an API for its Discovery document. The distinction between the two failures is
+    /// what decides whether a run is reported as a configuration fault or as one that may be repeated.
+    /// </summary>
+    public enum DiscoveryOutcome
     {
+        /// <summary>The API answered with a document.</summary>
+        Read,
+
+        /// <summary>The API could not be reached, or answered with a status a later run could get past.</summary>
+        Unreachable,
+
+        /// <summary>The API answered, but with something a Discovery document cannot be read from.</summary>
+        NotADocument
+    }
+
+    public sealed record DiscoveryDocument
+    {
+        private DiscoveryDocument(JObject content, DiscoveryOutcome outcome)
+        {
+            Content = content;
+            Outcome = outcome;
+        }
+
         /// <summary>
-        /// Gets the document to use for an API that could not be reached at all. Left as the plain
-        /// "unread" case because an API that cannot be reached may simply be restarting, which a later
-        /// run resolves on its own.
+        /// Gets what came of asking the API for its Discovery document. Three outcomes, one value: a pair
+        /// of booleans could say both that a document was read and that the API never answered.
         /// </summary>
-        public static DiscoveryDocument Unread { get; } = new(new JObject(), WasRead: false);
+        public DiscoveryOutcome Outcome { get; }
+
+        public JObject Content { get; }
+
+        /// <summary>
+        /// Gets whether the document is there to be read from, which is what every caller asks first.
+        /// </summary>
+        public bool WasRead => Outcome == DiscoveryOutcome.Read;
+
+        /// <summary>
+        /// Returns the document an API answered with.
+        /// </summary>
+        public static DiscoveryDocument Read(JObject content) =>
+            new(content, DiscoveryOutcome.Read);
+
+        /// <summary>
+        /// Gets the document to use for an API that could not be reached at all, or that answered with a
+        /// status a later run could get past. Such a run may simply be repeated.
+        /// </summary>
+        public static DiscoveryDocument Unread { get; } =
+            new(new JObject(), DiscoveryOutcome.Unreachable);
 
         /// <summary>
         /// Gets the document to use for an API that answered, but with something its Discovery document
@@ -425,7 +466,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// nothing about that.
         /// </summary>
         public static DiscoveryDocument Unusable { get; } =
-            new(new JObject(), WasRead: false, ApiAnswered: true);
+            new(new JObject(), DiscoveryOutcome.NotADocument);
 
         /// <summary>
         /// Returns the URL the document declares under <paramref name="urlName" />, or null when it declares
