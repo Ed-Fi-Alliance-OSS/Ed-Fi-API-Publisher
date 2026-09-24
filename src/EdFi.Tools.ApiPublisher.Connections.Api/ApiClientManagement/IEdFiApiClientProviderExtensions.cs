@@ -112,7 +112,7 @@ public static class EdFiApiClientProviderExtensions
                 // at '/edfi/' with a segment of '../other/data' composes
                 // 'https://server/edfi/other/data/dependencies', which names nothing. There is no telling
                 // where such an API keeps its metadata, so this is refused rather than guessed at.
-                if (ClimbsAboveTheConnection(edFiApiClient.DataManagementApiSegment))
+                if (EdFiApiUrlSegmentResolver.ClimbsAboveConnection(edFiApiClient.DataManagementApiSegment))
                 {
                     throw new InvalidConfigurationException(
                         $"The {edFiApiClient.Name} API declares no {urlName} URL, and its data management path '{EdFiApiUrlSegmentResolver.ForLog(edFiApiClient.DataManagementApiSegment)}' is served above the address this connection uses, so the conventional location for {urlName} cannot be composed from it. Address the connection at the URL the API serves from, or have the API declare its {urlName} URL.");
@@ -130,13 +130,4 @@ public static class EdFiApiClientProviderExtensions
         }
     }
 
-    /// <summary>
-    /// Says whether a resolved path segment addresses something above the connection's own URL, which is how
-    /// an API that serves outside the prefix the connection carries is expressed relative to it.
-    /// </summary>
-    private static bool ClimbsAboveTheConnection(string segment) =>
-        segment is not null
-        && segment
-            .Split('/')
-            .Any(element => element.Equals("..", StringComparison.Ordinal));
 }

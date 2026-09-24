@@ -343,6 +343,47 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_declared_path_climbing_out_through_an_encoded_separator_should_be_warned_about()
+        {
+            // The literal form has always been reported. The encoded one was not, because the check split
+            // the raw value on '/', which leaves '..%2fadmin' as a single element. A proxy that decodes and
+            // then normalises reads it as a climb, so the two forms reach the same place by different roads
+            // and only one of them left a trace.
+            using (TestCorrelator.CreateContext())
+            {
+                new EdFiApiUrlSegmentResolver(new Uri("https://server/tenantA/"), "TestSource")
+                    .Resolve(
+                        statedSegment: "..%2fadmin/data",
+                        discoveryDocument: DiscoveryDeclaring(),
+                        EdFiApiUrlSegmentResolver.DataManagement);
+
+                var warning = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("served above the address"));
+
+                warning.Level.ShouldBe(LogEventLevel.Warning);
+            }
+        }
+
+        [Test]
+        public void An_ordinary_declared_path_should_not_be_reported_as_climbing_out()
+        {
+            // The negative control. Unescaping before the split is what makes the encoded form visible, and
+            // it must not turn an ordinary path into a climb.
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor()
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data/v3/")),
+                        EdFiApiUrlSegmentResolver.DataManagement);
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Any(e => e.MessageTemplate.Text.Contains("served above the address"))
+                    .ShouldBeFalse();
+            }
+        }
+
+        [Test]
         public void A_declared_year_with_no_school_year_stated_should_be_warned_about()
         {
             // ODS/API 5.x and 6.x answer a year-specific deployment's unqualified address with the calendar

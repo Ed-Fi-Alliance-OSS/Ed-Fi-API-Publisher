@@ -194,6 +194,26 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Both spellings are looked for because a placeholder survives a round trip through <see cref="Uri" />
         /// escaped, so searching for the braces alone would let the escaped form through.
         /// </remarks>
+        // Both separators, because a path that has been unescaped can carry either, and a proxy that
+        // normalises reads them the same way.
+        private static readonly char[] PathSeparators = ['/', '\\'];
+
+        /// <summary>
+        /// Says whether a resolved path addresses something above the connection's own URL, which is how a
+        /// path served outside the prefix the connection carries is expressed relative to it.
+        /// </summary>
+        /// <remarks>
+        /// The path is unescaped before it is split, and both separators are looked for, because splitting
+        /// the raw value on a literal '/' is exactly what an encoded separator defeats: '..%2fadmin' is one
+        /// element to a naive split, and a proxy that decodes and then normalises reads it as two. Nothing an
+        /// Ed-Fi API legitimately declares carries an encoded separator, so unescaping first costs nothing.
+        /// </remarks>
+        public static bool ClimbsAboveConnection(string segment) =>
+            segment is not null
+            && Uri.UnescapeDataString(segment)
+                .Split(PathSeparators)
+                .Any(element => element.Equals("..", StringComparison.Ordinal));
+
         public static bool ContainsRoutePlaceholder(string path)
         {
             string[] placeholderMarkers = ["{", "}", "%7B", "%7D"];
@@ -249,7 +269,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             // behind a shared gateway is another application. It is not refused, because the host is the
             // connection's own and the operator may have addressed a tenant while the API serves beneath
             // the root, but it is the one case where requests leave the prefix the operator named.
-            if (segment is not null && segment.Split('/').Any(element => element == ".."))
+            if (ClimbsAboveConnection(segment))
             {
                 _logger.Warning(
                     "The {ConnectionName:l} {DiscoveryUrlName:l} path resolves to '{Segment:l}', which is served above the address this connection states ('{BaseAddress}'). Requests, and the credentials on them, will leave that prefix.",
