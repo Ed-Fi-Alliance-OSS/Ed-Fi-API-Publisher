@@ -343,6 +343,50 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_declared_year_with_no_school_year_stated_should_be_warned_about()
+        {
+            // ODS/API 5.x and 6.x answer a year-specific deployment's unqualified address with the calendar
+            // year. Following it is right, because before paths were read this deployment could not be
+            // published to at all, but the year then changes on its own at the turn of the year.
+            using (TestCorrelator.CreateContext())
+            {
+                var segment = ResolverFor(schoolYear: null)
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data/v3/2026")),
+                        EdFiApiUrlSegmentResolver.DataManagement);
+
+                segment.ShouldBe("data/v3/2026");
+
+                var warning = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("states no school year"));
+
+                warning.Level.ShouldBe(LogEventLevel.Warning);
+                warning.RenderMessage().ShouldContain("2026");
+                warning.RenderMessage().ShouldContain("SchoolYear");
+            }
+        }
+
+        [Test]
+        public void A_declared_path_without_a_year_should_not_be_warned_about()
+        {
+            // The negative control. Every connection that states no school year reaches this code, so a
+            // check that fires on an ordinary path would warn on almost every run.
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor(schoolYear: null)
+                    .Resolve(
+                        statedSegment: null,
+                        DiscoveryDeclaring(("dataManagementApi", "https://server/data/v3/")),
+                        EdFiApiUrlSegmentResolver.DataManagement);
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Any(e => e.MessageTemplate.Text.Contains("states no school year"))
+                    .ShouldBeFalse();
+            }
+        }
+
+        [Test]
         public void A_declared_school_year_placeholder_should_be_answered_rather_than_refused()
         {
             // Some ODS/API versions state the year position as an unresolved token. The connection names the

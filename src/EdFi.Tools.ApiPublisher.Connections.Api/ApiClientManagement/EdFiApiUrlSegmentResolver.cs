@@ -277,16 +277,23 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// Names the setting an operator would edit, as it is written in a configuration file and on the
         /// command line, rather than the bare property name.
         /// </summary>
-        private string ConfigurationPathFor(ApiUrlSegmentDefinition definition)
+        private string ConfigurationPathFor(ApiUrlSegmentDefinition definition) =>
+            ConfigurationPathFor(definition.ConfigurationKeyName);
+
+        /// <summary>
+        /// Names a setting on this connection the same way, for settings that are not one of the path
+        /// segments, such as the school year.
+        /// </summary>
+        private string ConfigurationPathFor(string configurationKeyName)
         {
             if (string.IsNullOrEmpty(_connectionName))
             {
-                return definition.ConfigurationKeyName;
+                return configurationKeyName;
             }
 
             string commandLineRole = char.ToLowerInvariant(_connectionName[0]) + _connectionName[1..];
 
-            return $"Connections:{_connectionName}:{definition.ConfigurationKeyName} (--{commandLineRole}{definition.ConfigurationKeyName})";
+            return $"Connections:{_connectionName}:{configurationKeyName} (--{commandLineRole}{configurationKeyName})";
         }
 
         /// <summary>
@@ -375,6 +382,23 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (_schoolYear is null)
             {
+                // A year-specific ODS/API asked at its unqualified address answers with the year it is
+                // serving now, which is the calendar year. Following that silently means the run writes to
+                // whichever year's data happens to match today, and moves to a different one on 1 January.
+                // It is not refused, because before paths were read from the document this deployment could
+                // not be published to at all, and refusing would take that back.
+                if (segment.Split('/')[^1] is string trailing && IsSchoolYear(trailing))
+                {
+                    _logger.Warning(
+                        "The {ConnectionName:l} {DiscoveryUrlName:l} path is '{Segment:l}', which addresses school year {DeclaredSchoolYear:l}, and this connection states no school year. A year-specific ODS/API reports the year it is serving now, so the year in use can change on its own. Set {ConfigurationPath:l} to state the year this run should address.",
+                        _connectionName,
+                        definition.DiscoveryUrlName,
+                        segment,
+                        trailing,
+                        ConfigurationPathFor("SchoolYear")
+                    );
+                }
+
                 return segment;
             }
 
