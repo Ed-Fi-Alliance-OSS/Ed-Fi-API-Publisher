@@ -15,6 +15,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
     public class EdFiApiClient : IDisposable
     {
+        // One extra attempt, far enough apart to outlast a container that is still coming up, close enough
+        // that a run against a genuinely dead root is not held open.
+        private const int DiscoveryReadRetries = 1;
+
+        private static readonly TimeSpan DiscoveryReadRetryDelay = TimeSpan.FromSeconds(2);
+
         private readonly string _name;
 
         // The transport is shared by the request pipeline and by the token manager, and owned here: it is created or
@@ -182,7 +188,41 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// that builds a request. It happens once per client, while that client is being constructed, in the
         /// same way the bearer token is first obtained.
         /// </remarks>
+        /// <remarks>
+        /// The request is anonymous. The version check it replaces carried this connection's bearer token,
+        /// but the token endpoint is itself named in the document being read, so asking for one first would
+        /// be circular. Every Ed-Fi API serves its Discovery document anonymously; a gateway configured to
+        /// demand a token on the connection's root has to exempt it.
+        /// </remarks>
         private DiscoveryDocument ReadDiscoveryDocument()
+        {
+            // A status a later run could get past is worth one more try now, rather than ending a run over a
+            // gateway that is a moment away from being ready. Bounded deliberately: this blocks client
+            // construction, and a root that keeps answering 503 is not something waiting here will fix.
+            for (int attempt = 1; attempt <= DiscoveryReadRetries + 1; attempt++)
+            {
+                var document = AttemptDiscoveryDocumentRead();
+
+                if (document.Outcome != DiscoveryOutcome.Unreachable || attempt > DiscoveryReadRetries)
+                {
+                    return document;
+                }
+
+                _logger.Information(
+                    "Reading the Discovery document for the {ConnectionName:l} API did not succeed; trying again in {Delay} (attempt {Attempt} of {Total}).",
+                    _name,
+                    DiscoveryReadRetryDelay,
+                    attempt + 1,
+                    DiscoveryReadRetries + 1
+                );
+
+                Thread.Sleep(DiscoveryReadRetryDelay);
+            }
+
+            return DiscoveryDocument.Unread;
+        }
+
+        private DiscoveryDocument AttemptDiscoveryDocumentRead()
         {
             using var discoveryRequestHttpClient = new HttpClient(_httpClientHandler, disposeHandler: false)
             {
