@@ -265,7 +265,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 "TestSource",
                 TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes: 28,
-                transportHandler);
+                transportHandler,
+                new Uri(TokenUrl));
 
             using var httpClient = new HttpClient(
                 new BearerTokenHandler(transportHandler, tokenManager, "TestSource"))
@@ -411,6 +412,58 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             return fakeRequestHandler;
         }
 
+        [Test]
+        public void A_failed_token_request_should_not_write_the_endpoint_userinfo_down()
+        {
+            // An endpoint may carry userinfo, whether an operator stated it or an API declared it. The
+            // resolver keeps it out of its own line, but the failure log and the exception here are what
+            // reach an operator and whatever collects their logs. The request keeps the address as given;
+            // HttpClient does not act on the userinfo in any case.
+            const string Secret = "s3cr3t-value";
+
+            var withUserInfo = new UriBuilder(TokenUrl)
+            {
+                UserName = "user",
+                Password = Secret
+            }.Uri;
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            A.CallTo(() => fakeRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
+                .Returns(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
+            TestHelpers.InitializeLogging();
+
+            using (TestCorrelator.CreateContext())
+            {
+                // The initial token is taken while the manager is constructed, so a 401 surfaces from there.
+                var thrown = Assert.Throws<EdFiApiAuthenticationException>(
+                    (TestDelegate)(() => new BearerTokenManager(
+                        "TestSource",
+                        TestHelpers.GetSourceApiConnectionDetails(),
+                        bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
+                        new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                        withUserInfo)));
+
+                Assert.That(thrown.ToString(), Does.Not.Contain(Secret));
+                Assert.That(thrown.ToString(), Does.Contain("oauth/token"));
+
+                var written = TestCorrelator.GetLogEventsFromCurrentContext().ToArray();
+
+                Assert.That(
+                    written.Any(e => e.MessageTemplate.Text.Contains("Authentication of")),
+                    Is.True,
+                    "the failure was never reported, so this test proves nothing");
+
+                foreach (var entry in written)
+                {
+                    Assert.That(entry.RenderMessage(), Does.Not.Contain(Secret));
+                    Assert.That(entry.Exception?.ToString() ?? string.Empty, Does.Not.Contain(Secret));
+                }
+            }
+        }
+
         private static int CountTokenRequests(IFakeHttpRequestHandler fakeRequestHandler) =>
             Fake.GetCalls(fakeRequestHandler).Count(call => call.Method.Name == "Post");
 
@@ -427,6 +480,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
                 new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                new Uri(TokenUrl),
                 timeProvider);
 
         private sealed class MutableFlag

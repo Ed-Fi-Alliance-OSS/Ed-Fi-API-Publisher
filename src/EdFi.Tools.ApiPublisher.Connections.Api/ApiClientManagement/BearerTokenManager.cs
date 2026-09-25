@@ -48,6 +48,13 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private readonly TimeProvider _timeProvider;
 
         private readonly HttpClient _tokenRequestHttpClient;
+        private readonly Uri _tokenEndpoint;
+
+        // The endpoint as it is written down, which is not the endpoint the request is made to: an address
+        // taken from a Discovery document, or stated on the connection, may carry userinfo, and the failure
+        // log and the exception below are what reach an operator and whatever collects their logs. The
+        // request itself keeps the address exactly as it was given.
+        private readonly string _tokenEndpointForLog;
         private readonly ITimer _refreshTimer;
         private readonly TimeSpan _configuredRefreshInterval;
         private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
@@ -74,6 +81,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         /// <param name="httpClientHandler">The transport the token requests are sent through. It stays owned by the
         /// caller, which shares it with the API client's own request pipeline.</param>
+        /// <param name="tokenEndpoint">The absolute URL to request the token from, as resolved by
+        /// <see cref="EdFiApiTokenEndpointResolver" /> from the connection and the API's Discovery document.</param>
         /// <param name="timeProvider">The clock the refresh timer, the retry delays and the token expiry are measured
         /// against. Defaults to the system clock.</param>
         public BearerTokenManager(
@@ -81,6 +90,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             ApiConnectionDetails connectionDetails,
             int bearerTokenRefreshMinutes,
             HttpClientHandler httpClientHandler,
+            Uri tokenEndpoint,
             TimeProvider timeProvider = null
         )
         {
@@ -94,21 +104,16 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             _configuredRefreshInterval = TimeSpan.FromMinutes(bearerTokenRefreshMinutes);
             _refreshIntervalTicks = _configuredRefreshInterval.Ticks;
 
-            string tokenEndpointUrl =
-                connectionDetails.AuthUrl
-                ?? connectionDetails.Url
-                ?? throw new InvalidOperationException(
-                    $"Neither an authentication URL nor an API URL was assigned for API connection '{name}'."
-                );
+            _tokenEndpoint = tokenEndpoint ?? throw new ArgumentNullException(nameof(tokenEndpoint));
+            _tokenEndpointForLog = EdFiApiTokenEndpointResolver.ForLog(_tokenEndpoint);
 
             // Built on the transport handler itself, so a token request never passes through the handler that
             // recovers from a rejected token. It is also what keeps the "Snapshot-Identifier" header off these
             // requests. The transport is not disposed with this client, because the API client that supplied it
-            // routes its own requests through it as well and disposes it once both are done with it.
-            _tokenRequestHttpClient = new HttpClient(httpClientHandler, disposeHandler: false)
-            {
-                BaseAddress = new Uri(tokenEndpointUrl.EnsureSuffixApplied("/"))
-            };
+            // routes its own requests through it as well and disposes it once both are done with it. It carries
+            // no base address, because the endpoint is already absolute: it can name a host of its own, which is
+            // how an API served separately from its identity provider is reached.
+            _tokenRequestHttpClient = new HttpClient(httpClientHandler, disposeHandler: false);
 
             ApiPublisherProductInfo.ApplyTo(_tokenRequestHttpClient);
 
@@ -477,10 +482,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 );
             }
 
-            using var authRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                _connectionDetails.IsOdsAuthService ? "oauth/token" : string.Empty
-            );
+            using var authRequest = new HttpRequestMessage(HttpMethod.Post, _tokenEndpoint);
 
             string encodedKeyAndSecret = Base64Encode($"{key}:{_connectionDetails.Secret}");
 
@@ -501,19 +503,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 if (string.IsNullOrEmpty(scope))
                 {
                     _logger.Debug(
-                        "Sending token request for {Name} API client to '{Method} {Uri}'...",
+                        "Sending token request for {Name} API client to '{Method} {Uri:l}'...",
                         _displayName,
                         authRequest.Method,
-                        authRequest.RequestUri
+                        _tokenEndpointForLog
                     );
                 }
                 else
                 {
                     _logger.Debug(
-                        "Sending token request for {Name} API client to '{Method} {Uri}' with scope '{Scope}'...",
+                        "Sending token request for {Name} API client to '{Method} {Uri:l}' with scope '{Scope}'...",
                         _displayName,
                         authRequest.Method,
-                        authRequest.RequestUri,
+                        _tokenEndpointForLog,
                         scope
                     );
                 }
@@ -529,9 +531,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!authResponseMessage.IsSuccessStatusCode)
             {
                 _logger.Error(
-                    "Authentication of {Name} API client against '{Uri}' failed. {Method} request returned status {StatusCode}:\r{Content}",
+                    "Authentication of {Name} API client against '{Uri:l}' failed. {Method} request returned status {StatusCode}:\r{Content}",
                     _displayName,
-                    authRequest.RequestUri,
+                    _tokenEndpointForLog,
                     authRequest.Method,
                     authResponseMessage.StatusCode,
                     Truncate(authResponseContent)
@@ -540,7 +542,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // The status belongs in the message as well as in the log entry above, because this is the message
                 // that travels up to the operator when the run ends.
                 throw new EdFiApiAuthenticationException(
-                    $"Authentication failed for {_displayName} API client: the token request to '{authRequest.RequestUri}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}."
+                    $"Authentication failed for {_displayName} API client: the token request to '{_tokenEndpointForLog}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}."
                 );
             }
 

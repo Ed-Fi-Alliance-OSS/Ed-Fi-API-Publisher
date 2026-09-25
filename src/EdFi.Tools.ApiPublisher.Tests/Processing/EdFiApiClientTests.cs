@@ -3,6 +3,8 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -88,6 +90,60 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public async Task A_token_should_be_requested_from_the_endpoint_the_api_declares()
+        {
+            // Arrange
+            // The declared endpoint is deliberately not the conventional path, so that composing that path
+            // rather than reading the Discovery document would show up here.
+            const string DeclaredTokenUrl = MockRequests.SourceApiBaseUrl + "/identity/connect/token";
+
+            var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails();
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .ApiVersionMetadataUrls(
+                    "5.2",
+                    "3.3.0-a",
+                    new Dictionary<string, string>
+                    {
+                        ["dataManagementApi"] = MockRequests.SourceApiBaseUrl + "/data/v3/",
+                        ["changeQueries"] = MockRequests.SourceApiBaseUrl + "/changeQueries/v1/",
+                        ["oauth"] = DeclaredTokenUrl
+                    });
+
+            A.CallTo(() => fakeRequestHandler.Post(DeclaredTokenUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => FakeResponse.OK(new { access_token = MockRequests.OdsApiToken }));
+
+            string appliedAuthorizationHeader = null;
+
+            A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(
+                    (string url, HttpRequestMessage request) =>
+                    {
+                        appliedAuthorizationHeader = request.Headers.Authorization?.ToString();
+
+                        return FakeResponse.OK(new { });
+                    });
+
+            TestHelpers.InitializeLogging();
+
+            using var client = new EdFiApiClient(
+                "TestClient", sourceApiConnectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            // Act
+            await client.HttpClient.GetAsync(ResourceRelativeUrl);
+
+            // Assert
+            Assert.That(appliedAuthorizationHeader, Is.EqualTo($"Bearer {MockRequests.OdsApiToken}"));
+
+            A.CallTo(
+                    () => fakeRequestHandler.Post(
+                        $"{MockRequests.SourceApiBaseUrl}/oauth/token",
+                        A<HttpRequestMessage>.Ignored))
+                .MustNotHaveHappened();
+        }
+
+        [Test]
         public async Task Requests_identify_the_publisher_and_its_runtime_in_the_user_agent()
         {
             var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails();
@@ -140,7 +196,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             TestHelpers.InitializeLogging();
 
             using var tokenManager = new BearerTokenManager(
-                "TestClient", apiConnectionDetails, 60, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+                "TestClient",
+                apiConnectionDetails,
+                60,
+                new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                new Uri(apiConnectionDetails.AuthUrl));
 
             // Assert
             Assert.That(tokenManager.CurrentBearerToken, Is.EqualTo(MockRequests.AuthServiceToken));

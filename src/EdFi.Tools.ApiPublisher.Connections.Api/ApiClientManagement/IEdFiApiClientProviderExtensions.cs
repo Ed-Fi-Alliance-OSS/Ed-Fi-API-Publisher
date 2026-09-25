@@ -19,7 +19,7 @@ public static class EdFiApiClientProviderExtensions
     /// or returns a predefined fallback URL if the metadata is unavailable or does not contain the specified key.
     /// </summary>
     /// <param name="edFiApiClientProvider">The Ed-Fi API client provider used to fetch version metadata.</param>
-    /// <param name="urlName">The name of the URL to retrieve (e.g., "dependencies", "oauth").</param>
+    /// <param name="urlName">The name of the URL to retrieve (e.g., "dependencies").</param>
     /// <param name="logger">
     /// Optional logger instance for capturing warnings or errors that occur during metadata retrieval or fallback resolution.
     /// </param>
@@ -119,9 +119,6 @@ public static class EdFiApiClientProviderExtensions
                 }
 
                 return $"metadata/{edFiApiClient.DataManagementApiSegment}/dependencies";
-
-            case "oauth":
-                return $"oauth/token";
 
             default:
                 string message = $"No fallback is defined for urlName '{urlName}'. Cannot resolve URI.";
