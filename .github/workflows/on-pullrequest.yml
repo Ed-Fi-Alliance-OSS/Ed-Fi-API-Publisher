@@ -11,6 +11,7 @@ on:
     paths:
       - "**/*.cs"
       - "**/*.csproj"
+      - "src/Directory.Packages.props"
       - ".github/**/*.yml"
   workflow_dispatch:
 
