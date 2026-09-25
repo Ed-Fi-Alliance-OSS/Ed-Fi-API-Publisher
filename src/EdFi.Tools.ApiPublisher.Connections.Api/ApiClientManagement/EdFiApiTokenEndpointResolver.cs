@@ -299,7 +299,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// simply has no business being written down. <see cref="System.Net.Http.HttpClient" /> does not act
         /// on it in any case, since the publisher sets its own authorization header.
         /// </remarks>
-        private static string ForLog(Uri endpoint) =>
+        public static string ForLog(Uri endpoint) =>
             string.IsNullOrEmpty(endpoint.UserInfo)
                 ? endpoint.AbsoluteUri
                 : endpoint.GetComponents(
