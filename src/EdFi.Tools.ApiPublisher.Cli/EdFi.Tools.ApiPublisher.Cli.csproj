@@ -9,7 +9,6 @@
   <ItemGroup>
     <PackageReference Include="Autofac.Extensions.DependencyInjection" />
     <PackageReference Include="AWSSDK.CloudWatchLogs" />
-    <PackageReference Include="AWSSDK.Core" />
     <PackageReference Include="Serilog.Enrichers.Thread" />
     <PackageReference Include="Serilog.Settings.Configuration" />
     <PackageReference Include="Serilog.Sinks.AwsCloudWatch" />
