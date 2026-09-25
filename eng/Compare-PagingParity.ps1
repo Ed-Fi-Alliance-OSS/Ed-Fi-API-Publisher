@@ -15,6 +15,8 @@
     Where the two SQLite files and the report land (default: .\parity-<timestamp>).
 .PARAMETER ExtraArgs
     Additional publisher arguments applied to both runs (e.g. '--include=/ed-fi/students', '--ignoreIsolation=true').
+    Run the script from a PowerShell session; when launched with "pwsh -File" from another shell, array arguments
+    are not parsed as arrays and the publisher receives them as one comma-joined value.
 .EXAMPLE
     .\eng\Compare-PagingParity.ps1 -PublisherPath .\src\EdFi.Tools.ApiPublisher.Cli\bin\Debug\net10.0\EdFiApiPublisher.exe `
         -SourceUrl http://localhost:8001 -SourceKey minimalKey -SourceSecret minimalSecret -ExtraArgs '--ignoreIsolation=true','--includeDescriptors=true'
@@ -86,11 +88,42 @@ function Invoke-Publisher([string] $TargetFile, [bool] $DisableCursorPaging, [st
 
     Write-Host "Running publisher (disableCursorPaging=$DisableCursorPaging) -> $TargetFile"
     $log = Join-Path $OutputFolder $LogName
+    $errorLog = [IO.Path]::ChangeExtension($log, '.err.log')
+    $memoryCsv = [IO.Path]::ChangeExtension($log, '.memory.csv')
 
-    if ($PublisherPath -like '*.dll') { & dotnet $PublisherPath @args *>&1 | Tee-Object -FilePath $log | Out-Null }
-    else { & $PublisherPath @args *>&1 | Tee-Object -FilePath $log | Out-Null }
+    # The publisher runs as a child process so its working set can be sampled while it works: the peak is
+    # what the paging-mode comparison needs (APIPUB-141). The process reports its own peak on exit; the
+    # one-second samples next to the log show how the working set moved during the run.
+    if ($PublisherPath -like '*.dll') { $exe = 'dotnet'; $argumentList = @($PublisherPath) + $args }
+    else { $exe = $PublisherPath; $argumentList = $args }
 
-    if ($LASTEXITCODE -ne 0) { throw "Publisher exited with $LASTEXITCODE (see $log)" }
+    $stopwatch = [Diagnostics.Stopwatch]::StartNew()
+    $process = Start-Process -FilePath $exe -ArgumentList $argumentList -PassThru -NoNewWindow `
+        -RedirectStandardOutput $log -RedirectStandardError $errorLog
+    'elapsed_s,working_set_mb' | Set-Content $memoryCsv
+    $sampledPeakBytes = 0L
+    while (-not $process.HasExited) {
+        $process.Refresh()
+        $workingSet = [long] $process.WorkingSet64
+        if ($workingSet -gt $sampledPeakBytes) { $sampledPeakBytes = $workingSet }
+        Add-Content $memoryCsv ('{0:F0},{1:F1}' -f $stopwatch.Elapsed.TotalSeconds, ($workingSet / 1MB))
+        Start-Sleep -Milliseconds 1000
+    }
+    $process.WaitForExit()
+    $stopwatch.Stop()
+    $peakBytes = [math]::Max([long] $process.PeakWorkingSet64, $sampledPeakBytes)
+
+    # A non-zero exit code means the run lost or skipped something (APIPUB-120); the items that did land are still
+    # compared, because a resource the source refuses to both runs (e.g. a 403) is not a paging difference, while
+    # a page lost to one run shows up in the report as a mismatch.
+    if ($process.ExitCode -ne 0) { Write-Warning "Publisher exited with $($process.ExitCode) (see $log); the diff below covers what was published." }
+
+    return [pscustomobject]@{
+        Seconds          = $stopwatch.Elapsed.TotalSeconds
+        PeakWorkingSetMB = [math]::Round($peakBytes / 1MB, 1)
+        ExitCode         = $process.ExitCode
+        Log              = $log
+    }
 }
 
 function Get-ItemIds([string] $DbFile) {
@@ -108,8 +141,8 @@ function Get-ItemIds([string] $DbFile) {
 $cursorDb = Join-Path $OutputFolder 'cursor.sqlite'
 $offsetDb = Join-Path $OutputFolder 'offset.sqlite'
 
-$cursorTime = Measure-Command { Invoke-Publisher $cursorDb $false 'cursor.log' }
-$offsetTime = Measure-Command { Invoke-Publisher $offsetDb $true  'offset.log' }
+$cursorRun = Invoke-Publisher $cursorDb $false 'cursor.log'
+$offsetRun = Invoke-Publisher $offsetDb $true  'offset.log'
 
 $cursor = Get-ItemIds $cursorDb
 $offset = Get-ItemIds $offsetDb
@@ -160,7 +193,9 @@ $report | Format-Table -AutoSize | Out-String | Write-Host
 $report | Export-Csv -NoTypeInformation -Path (Join-Path $OutputFolder 'parity-report.csv')
 
 Write-Host ("Items compared: cursor {0:N0}, offset {1:N0}" -f $cursorTotal, $offsetTotal)
-Write-Host ("Wall clock: cursor {0:N1}s, offset {1:N1}s" -f $cursorTime.TotalSeconds, $offsetTime.TotalSeconds)
+Write-Host ("Wall clock: cursor {0:N1}s, offset {1:N1}s" -f $cursorRun.Seconds, $offsetRun.Seconds)
+Write-Host ("Peak working set: cursor {0:N1} MB, offset {1:N1} MB (one-second samples next to each log as *.memory.csv)" -f $cursorRun.PeakWorkingSetMB, $offsetRun.PeakWorkingSetMB)
+Write-Host ("Publisher exit codes: cursor {0}, offset {1}" -f $cursorRun.ExitCode, $offsetRun.ExitCode)
 Write-Host "Report: $(Join-Path $OutputFolder 'parity-report.csv')"
 
 if ($mismatches -gt 0) { Write-Error "$mismatches resource(s) differ between cursor and offset paging."; exit 1 }
