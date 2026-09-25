@@ -54,6 +54,36 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             new(baseAddress ?? ServerRoot, "TestSource");
 
         [Test]
+        public void A_declared_endpoint_on_a_scheme_that_is_not_web_should_be_refused()
+        {
+            // The host and port comparison treats a default port as a default port whatever the scheme is,
+            // so ftp's 21 and https' 443 both read as "default" and the two compare as the same endpoint.
+            // Without a scheme check first, this is quietly rewritten to HTTPS instead of being reported.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor()
+                    .Resolve(
+                        statedAuthUrl: null,
+                        DiscoveryDeclaring(("oauth", "ftp://server/token"))));
+
+            exception.Message.ShouldContain("not an HTTP or HTTPS address");
+        }
+
+        [Test]
+        public void A_declared_endpoint_on_the_same_host_over_http_should_still_be_reconciled()
+        {
+            // The negative control for the check above. Refusing every scheme that is not the connection's
+            // own would take back the proxy case this branch exists for, so an HTTP declaration against an
+            // HTTPS connection has to keep resolving rather than throw.
+            var endpoint = ResolverFor()
+                .Resolve(
+                    statedAuthUrl: null,
+                    DiscoveryDeclaring(("oauth", "http://server/token")));
+
+            endpoint.Scheme.ShouldBe("https");
+            endpoint.AbsoluteUri.ShouldBe("https://server/token");
+        }
+
+        [Test]
         public void A_declared_endpoint_should_be_used_as_declared()
         {
             // Deliberately not the conventional path, so that falling back rather than reading the document
