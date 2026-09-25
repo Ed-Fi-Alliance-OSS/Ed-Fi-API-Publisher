@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Amazon.Extensions.Configuration.SystemsManager" />
+    <PackageReference Include="AWSSDK.Core" VersionOverride="4.0.102.7" />
     <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" />
     <PackageReference Include="AWSSDK.SimpleSystemsManagement" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
