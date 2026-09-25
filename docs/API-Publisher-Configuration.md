@@ -136,7 +136,7 @@ The path in use for each connection is reported in the log as the run starts.
 The same document states where the API serves its token endpoint, and each connection's bearer token is requested from what it declares there.
 
 - The authentication URL stated on the connection wins, and the Discovery document is not consulted for one.
-- Otherwise the `oauth` URL the API declares is used, exactly as declared.
+- Otherwise the `oauth` URL the API declares is used. Its path, host and port are taken as declared. Where it names the same host and port as the connection but a different scheme, which an API behind a proxy that terminates TLS produces, the safer of the two schemes is used and the disagreement is reported as a warning, so a declaration cannot move a token request onto plain HTTP and a connection reached over HTTP does not discard an API that offers HTTPS.
 - Where neither is available, `oauth/token` relative to the connection URL is used.
 - A declared endpoint may name a host of its own, because an API is permitted to have its identity provider served elsewhere. A token request carries the connection's key and secret, so an endpoint that names anything other than the address the connection already reaches the API at is followed only over HTTPS, and the host it names is reported in the log. To send credentials to such a host over plain HTTP, state the endpoint on the connection instead.
 - An endpoint on another host is refused outright where the connection is set not to verify server certificates (`IgnoreSSLErrors`), because HTTPS is what identifies the host being reached and nothing is checking it. State the endpoint on the connection if it is genuinely served there.
