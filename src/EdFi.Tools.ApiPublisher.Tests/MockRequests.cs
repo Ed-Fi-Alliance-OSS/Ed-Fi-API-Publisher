@@ -265,6 +265,10 @@ namespace EdFi.Tools.ApiPublisher.Tests
             return fakeRequestHandler;
         }
 
+        /// <summary>
+        /// Answers the Discovery document the way an ODS/API does, declaring where it serves the data
+        /// management and change queries APIs as absolute URLs with a trailing slash.
+        /// </summary>
         public static IFakeHttpRequestHandler ApiVersionMetadata(
             this IFakeHttpRequestHandler fakeRequestHandler,
             string apiVersion = "5.2",
@@ -283,6 +287,11 @@ namespace EdFi.Tools.ApiPublisher.Tests
                                     name = "Ed-Fi",
                                     version = edfiVersion
                                 }
+                            },
+                            urls = new
+                            {
+                                dataManagementApi = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.DataManagementUrlSegment}/",
+                                changeQueries = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/"
                             }
                         }));
 

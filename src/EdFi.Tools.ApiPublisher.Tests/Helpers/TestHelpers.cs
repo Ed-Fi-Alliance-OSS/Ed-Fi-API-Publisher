@@ -418,7 +418,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Helpers
     {
         public static void EveryDataManagementPostReturns200Ok(this IFakeHttpRequestHandler fakeHttpRequestHandler)
         {
-            fakeHttpRequestHandler.PostResource($"{EdFiApiConstants.DataManagementApiSegment}{TestHelpers.AnyResourcePattern}", HttpStatusCode.OK);
+            // Built from the handler's own segment rather than the conventional constant, so a fixture
+            // publishing through a path the fallback would never produce is actually answered. With the
+            // constant, such a fixture's POSTs matched nothing and every assertion could say only that a
+            // request was attempted.
+            fakeHttpRequestHandler.PostResource($"{fakeHttpRequestHandler.DataManagementUrlSegment}{TestHelpers.AnyResourcePattern}", HttpStatusCode.OK);
         }
     }
 }
