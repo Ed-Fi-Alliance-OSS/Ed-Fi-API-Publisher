@@ -130,6 +130,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 );
             }
 
+            // Refused before the host and scheme are weighed, because those two treat a default port as a
+            // default port whatever the scheme is: 'ftp://server/token' against a connection on
+            // 'https://server/' compares as the same endpoint said differently, and would be quietly
+            // rewritten to HTTPS rather than reported. A token endpoint is an HTTP address or it is nothing.
+            if (!IsWebScheme(declaredUri))
+            {
+                throw new InvalidConfigurationException(
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is not an HTTP or HTTPS address. Set {ConfigurationPath()} to the address of its token endpoint."
+                );
+            }
+
             if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(declaredUri.ToString()))
             {
                 throw new InvalidConfigurationException(
