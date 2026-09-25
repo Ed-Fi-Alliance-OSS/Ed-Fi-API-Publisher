@@ -49,6 +49,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         private readonly HttpClient _tokenRequestHttpClient;
         private readonly Uri _tokenEndpoint;
+
+        // The endpoint as it is written down, which is not the endpoint the request is made to: an address
+        // taken from a Discovery document, or stated on the connection, may carry userinfo, and the failure
+        // log and the exception below are what reach an operator and whatever collects their logs. The
+        // request itself keeps the address exactly as it was given.
+        private readonly string _tokenEndpointForLog;
         private readonly ITimer _refreshTimer;
         private readonly TimeSpan _configuredRefreshInterval;
         private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
@@ -99,6 +105,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             _refreshIntervalTicks = _configuredRefreshInterval.Ticks;
 
             _tokenEndpoint = tokenEndpoint ?? throw new ArgumentNullException(nameof(tokenEndpoint));
+            _tokenEndpointForLog = EdFiApiTokenEndpointResolver.ForLog(_tokenEndpoint);
 
             // Built on the transport handler itself, so a token request never passes through the handler that
             // recovers from a rejected token. It is also what keeps the "Snapshot-Identifier" header off these
@@ -496,19 +503,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 if (string.IsNullOrEmpty(scope))
                 {
                     _logger.Debug(
-                        "Sending token request for {Name} API client to '{Method} {Uri}'...",
+                        "Sending token request for {Name} API client to '{Method} {Uri:l}'...",
                         _displayName,
                         authRequest.Method,
-                        authRequest.RequestUri
+                        _tokenEndpointForLog
                     );
                 }
                 else
                 {
                     _logger.Debug(
-                        "Sending token request for {Name} API client to '{Method} {Uri}' with scope '{Scope}'...",
+                        "Sending token request for {Name} API client to '{Method} {Uri:l}' with scope '{Scope}'...",
                         _displayName,
                         authRequest.Method,
-                        authRequest.RequestUri,
+                        _tokenEndpointForLog,
                         scope
                     );
                 }
@@ -524,9 +531,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!authResponseMessage.IsSuccessStatusCode)
             {
                 _logger.Error(
-                    "Authentication of {Name} API client against '{Uri}' failed. {Method} request returned status {StatusCode}:\r{Content}",
+                    "Authentication of {Name} API client against '{Uri:l}' failed. {Method} request returned status {StatusCode}:\r{Content}",
                     _displayName,
-                    authRequest.RequestUri,
+                    _tokenEndpointForLog,
                     authRequest.Method,
                     authResponseMessage.StatusCode,
                     Truncate(authResponseContent)
@@ -535,7 +542,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // The status belongs in the message as well as in the log entry above, because this is the message
                 // that travels up to the operator when the run ends.
                 throw new EdFiApiAuthenticationException(
-                    $"Authentication failed for {_displayName} API client: the token request to '{authRequest.RequestUri}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}."
+                    $"Authentication failed for {_displayName} API client: the token request to '{_tokenEndpointForLog}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}."
                 );
             }
 
