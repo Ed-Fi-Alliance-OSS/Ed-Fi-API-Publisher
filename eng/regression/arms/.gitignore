@@ -1,0 +1,2 @@
+# Container log mounts for the arms (LOGS_FOLDER in each .env)
+.logs/

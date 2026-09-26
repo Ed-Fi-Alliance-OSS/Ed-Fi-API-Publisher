@@ -1,0 +1,13 @@
+{
+  "id": "a4010000-0000-4000-8000-000000000401",
+  "name": "regression harness: 401 on matching data requests (item 4)",
+  "priority": 1,
+  "request": {
+    "urlPattern": "__URL_PATTERN__"
+  },
+  "response": {
+    "status": 401,
+    "headers": { "Content-Type": "application/json", "WWW-Authenticate": "Bearer error=\"invalid_token\"" },
+    "jsonBody": { "message": "Injected unauthorized response from the regression harness (401-window)." }
+  }
+}
