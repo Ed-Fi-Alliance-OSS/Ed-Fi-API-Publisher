@@ -181,14 +181,38 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                         ? Uri.UriSchemeHttps
                         : _baseAddress.Scheme;
 
-                _logger.Warning(
-                    "The {ConnectionName:l} API declares its token endpoint at '{TokenEndpoint:l}', which is the host this connection addresses but not the scheme it uses. The token will be requested over '{TokenScheme:l}', the safer of the two. An API behind a proxy that terminates TLS commonly declares this way; correcting the scheme it is told to advertise fixes it for every caller.",
-                    _connectionName,
-                    ForLog(declaredUri),
-                    safestScheme
+                // Only one direction is the proxy's doing. An API declaring HTTP where the connection is
+                // HTTPS is the misconfigured advertisement, and correcting it helps every caller. The
+                // mirror, an HTTPS declaration on a plain-HTTP connection, is not the API's fault at all:
+                // the connection URL is the plain side, and the API is offering the better of the two.
+                // Sending that operator to look for a proxy setting sends them to the wrong place.
+                bool declarationWasDowngraded = !declaredUri.Scheme.Equals(
+                    Uri.UriSchemeHttps,
+                    StringComparison.OrdinalIgnoreCase
                 );
 
-                declaredUri = new UriBuilder(declaredUri)
+                if (declarationWasDowngraded)
+                {
+                    _logger.Warning(
+                        "The {ConnectionName:l} API declares its token endpoint at '{TokenEndpoint:l}', which is the host this connection addresses but over plain HTTP. The token will be requested over '{TokenScheme:l}' instead. An API behind a proxy that terminates TLS commonly declares this way; correcting the scheme it is told to advertise fixes it for every caller.",
+                        _connectionName,
+                        ForLog(declaredUri),
+                        safestScheme
+                    );
+                }
+                else
+                {
+                    _logger.Information(
+                        "The {ConnectionName:l} API declares its token endpoint at '{TokenEndpoint:l}', on the host this connection addresses and over HTTPS where the connection itself is not. The token is requested over HTTPS.",
+                        _connectionName,
+                        ForLog(declaredUri)
+                    );
+                }
+
+                // #8: the endpoint the run settles on is reported here, from inside the branch that knows
+                // both the declaration and the outcome. Falling through to the lines below would announce
+                // the rewritten URL as the one the API declared, which it did not.
+                return new UriBuilder(declaredUri)
                 {
                     Scheme = safestScheme,
                     Port = declaredUri.IsDefaultPort ? -1 : declaredUri.Port
@@ -209,10 +233,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             // Another host is reached over HTTPS because the certificate is what says the host is the one
             // named. Where this connection accepts any certificate, nothing says that, so the one guarantee
             // behind following an address the API chose is not there.
+            // Only an endpoint on another host reaches here: the connection's own address, and its own host
+            // and port said over another scheme, have both already been settled and returned above.
             if (_serverCertificatesUnverified)
             {
                 throw new InvalidConfigurationException(
-                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is not the address this connection reaches the API at, and this connection is set not to verify server certificates. An endpoint on another host is followed over HTTPS because its certificate identifies it; with verification off nothing does, and this connection's key and secret would be sent to an address the API named and nothing vouched for. Either leave certificate verification on, or set {ConfigurationPath()} to state the token endpoint for this connection outright."
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is not the address this connection reaches the API at, and this run is set not to verify server certificates (`Options:IgnoreSSLErrors`, `--ignoreSslErrors`, which applies to both connections). An endpoint on another host is followed over HTTPS because its certificate identifies it; with verification off nothing does, and this connection's key and secret would be sent to an address the API named and nothing vouched for. Either turn `--ignoreSslErrors` off, or set {ConfigurationPath()} to state the token endpoint for this connection outright."
                 );
             }
 
@@ -222,10 +248,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             // the clear.
             if (!declaredUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             {
+                // Only the off-host case reaches here. A declaration on the connection's own host and port
+                // has already been settled and returned by the reconciliation above, whichever scheme it
+                // named, so there is no same-host wording to choose between.
                 throw new InvalidConfigurationException(
-                    isSameEndpointHost
-                        ? $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is the host this connection addresses but over plain HTTP rather than the {_baseAddress.Scheme.ToUpperInvariant()} this connection uses. A token request carries this connection's key and secret, so it is not sent in the clear. An API behind a proxy that terminates TLS commonly declares HTTP for itself; correcting the scheme the proxy forwards fixes this for every caller. To override it for this connection alone, set {ConfigurationPath()}."
-                        : $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is served by neither the address this connection reaches the API at ('{ForLog(_baseAddress)}') nor over HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so another host is only reached over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is served by neither the address this connection reaches the API at ('{ForLog(_baseAddress)}') nor over HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so another host is only reached over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
                 );
             }
 

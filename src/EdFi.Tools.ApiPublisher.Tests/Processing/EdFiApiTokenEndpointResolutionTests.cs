@@ -233,6 +233,60 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void The_certificate_rule_should_not_refuse_the_connections_own_host_over_another_scheme()
+        {
+            // The refusal is about an endpoint on another host, which is followed on the strength of its
+            // certificate. The connection's own host and port said over a different scheme is not that, and
+            // it was being caught anyway: since --ignoreSslErrors is run-wide, a target with a self-signed
+            // certificate turned it on for a plain-HTTP source and stopped a run that worked.
+            var endpoint = new EdFiApiTokenEndpointResolver(
+                    new Uri("http://ods:8080/"),
+                    "TestSource",
+                    null,
+                    serverCertificatesUnverified: true)
+                .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "https://ods:8080/oauth/token")));
+
+            endpoint.ShouldBe(new Uri("https://ods:8080/oauth/token"));
+        }
+
+        [Test]
+        public void A_declaration_on_the_same_host_at_another_port_should_be_treated_as_another_host()
+        {
+            // The port half of the host comparison had no test in either direction: dropping it entirely
+            // left the suite green, and an endpoint at another port would then be announced as the
+            // connection's own address, losing the one line that says where credentials are going.
+            using (TestCorrelator.CreateContext())
+            {
+                var endpoint = ResolverFor(new Uri("https://server/"))
+                    .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "https://server:8443/oauth/token")));
+
+                endpoint.ShouldBe(new Uri("https://server:8443/oauth/token"));
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Any(e => e.MessageTemplate.Text.Contains("key and secret will be sent to"))
+                    .ShouldBeTrue();
+            }
+        }
+
+        [Test]
+        public void A_declaration_at_the_connections_own_explicit_port_should_be_its_own_address()
+        {
+            // The other direction. An explicit port that matches is the connection's own address, and must
+            // not be reported as a third party just because the port is written out.
+            using (TestCorrelator.CreateContext())
+            {
+                var endpoint = ResolverFor(new Uri("https://server:8443/"))
+                    .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "https://server:8443/oauth/token")));
+
+                endpoint.ShouldBe(new Uri("https://server:8443/oauth/token"));
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Any(e => e.MessageTemplate.Text.Contains("key and secret will be sent to"))
+                    .ShouldBeFalse();
+            }
+        }
+
+        [Test]
         public void A_scheme_disagreement_at_the_connections_own_host_should_be_reported()
         {
             using (TestCorrelator.CreateContext())
@@ -241,10 +295,49 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "http://server/oauth/token")));
 
                 var notice = TestCorrelator.GetLogEventsFromCurrentContext()
-                    .Single(e => e.MessageTemplate.Text.Contains("not the scheme it uses"));
+                    .Single(e => e.MessageTemplate.Text.Contains("over plain HTTP"));
 
                 notice.Level.ShouldBe(LogEventLevel.Warning);
                 notice.RenderMessage().ShouldContain("proxy");
+            }
+        }
+
+        [Test]
+        public void An_api_offering_https_to_a_plain_http_connection_should_not_be_blamed_for_a_proxy()
+        {
+            // The mirror of the test above, and the reason the two are told apart. Here the connection URL
+            // is the plain-HTTP side and the API is offering the better of the two schemes. Sending that
+            // operator to correct what a proxy advertises sends them to something that is not the problem.
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor(new Uri("http://server/"))
+                    .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "https://server/oauth/token")));
+
+                var written = TestCorrelator.GetLogEventsFromCurrentContext().ToArray();
+
+                written.Any(e => e.RenderMessage().Contains("proxy")).ShouldBeFalse();
+
+                var notice = written.Single(e => e.MessageTemplate.Text.Contains("over HTTPS where the connection"));
+
+                notice.Level.ShouldBe(LogEventLevel.Information);
+            }
+        }
+
+        [Test]
+        public void A_reconciled_endpoint_should_not_be_reported_as_the_one_the_api_declared()
+        {
+            // The run settles on a URL the API never named. Announcing that as what the API "declares"
+            // gives an operator grepping for the declaration two different answers, one of them invented.
+            using (TestCorrelator.CreateContext())
+            {
+                ResolverFor()
+                    .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "http://server/oauth/token")));
+
+                TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Any(e =>
+                        e.MessageTemplate.Text.Contains("declares its token endpoint as")
+                        && e.RenderMessage().Contains("https://server/oauth/token"))
+                    .ShouldBeFalse();
             }
         }
 
