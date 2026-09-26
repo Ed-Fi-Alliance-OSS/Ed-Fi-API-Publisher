@@ -438,13 +438,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             using (TestCorrelator.CreateContext())
             {
                 // The initial token is taken while the manager is constructed, so a 401 surfaces from there.
-                var thrown = Assert.Throws<EdFiApiAuthenticationException>(
-                    (TestDelegate)(() => new BearerTokenManager(
-                        "TestSource",
-                        TestHelpers.GetSourceApiConnectionDetails(),
-                        bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
-                        new HttpClientHandlerFakeBridge(fakeRequestHandler),
-                        withUserInfo)));
+                Action buildManager = () => new BearerTokenManager(
+                    "TestSource",
+                    TestHelpers.GetSourceApiConnectionDetails(),
+                    bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
+                    new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                    withUserInfo);
+
+                var thrown = Assert.Throws<EdFiApiAuthenticationException>(buildManager);
 
                 Assert.That(thrown.ToString(), Does.Not.Contain(Secret));
                 Assert.That(thrown.ToString(), Does.Contain("oauth/token"));
