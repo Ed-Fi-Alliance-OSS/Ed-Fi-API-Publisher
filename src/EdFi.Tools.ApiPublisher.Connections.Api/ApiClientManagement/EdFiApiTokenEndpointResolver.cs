@@ -91,14 +91,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!Uri.TryCreate(statedAuthUrl, UriKind.Absolute, out var statedUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The authentication URL stated for the {_connectionName} connection is '{EdFiApiUrlSegmentResolver.ForLog(statedAuthUrl)}', which is not an absolute URL. Set {ConfigurationPath()} to the full address of the token endpoint, including its scheme."
+                    $"The authentication URL stated for the {_connectionName} connection is '{ForLog(statedAuthUrl)}', which is not an absolute URL. Set {ConfigurationPath()} to the full address of the token endpoint, including its scheme."
                 );
             }
 
             if (!IsWebScheme(statedUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The authentication URL stated for the {_connectionName} connection is '{EdFiApiUrlSegmentResolver.ForLog(statedAuthUrl)}', which is not an HTTP or HTTPS address. Set {ConfigurationPath()} to the address of the token endpoint."
+                    $"The authentication URL stated for the {_connectionName} connection is '{ForLog(statedAuthUrl)}', which is not an HTTP or HTTPS address. Set {ConfigurationPath()} to the address of the token endpoint."
                 );
             }
 
@@ -126,7 +126,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!Uri.TryCreate(_baseAddress, declaredUrl, out var declaredUri))
             {
                 throw new InvalidConfigurationException(
-                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{EdFiApiUrlSegmentResolver.ForLog(declaredUrl)}', which is neither a URL nor a path that can be resolved against the connection URL '{_baseAddress}'. Set {ConfigurationPath()} to the address of its token endpoint."
+                    $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUrl)}', which is neither a URL nor a path that can be resolved against the connection URL '{ForLog(_baseAddress)}'. Set {ConfigurationPath()} to the address of its token endpoint."
                 );
             }
 
@@ -225,7 +225,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 throw new InvalidConfigurationException(
                     isSameEndpointHost
                         ? $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is the host this connection addresses but over plain HTTP rather than the {_baseAddress.Scheme.ToUpperInvariant()} this connection uses. A token request carries this connection's key and secret, so it is not sent in the clear. An API behind a proxy that terminates TLS commonly declares HTTP for itself; correcting the scheme the proxy forwards fixes this for every caller. To override it for this connection alone, set {ConfigurationPath()}."
-                        : $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is served by neither the address this connection reaches the API at ('{_baseAddress}') nor over HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so another host is only reached over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
+                        : $"The {DiscoveryUrlName} URL declared by the {_connectionName} API is '{ForLog(declaredUri)}', which is served by neither the address this connection reaches the API at ('{ForLog(_baseAddress)}') nor over HTTPS. A token request carries this connection's key and secret, and this address came from the API rather than from configuration, so another host is only reached over HTTPS. Set {ConfigurationPath()} to state the token endpoint for this connection outright."
                 );
             }
 
@@ -310,6 +310,40 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// simply has no business being written down. <see cref="System.Net.Http.HttpClient" /> does not act
         /// on it in any case, since the publisher sets its own authorization header.
         /// </remarks>
+        /// <summary>
+        /// Renders a value that has not been through <see cref="Uri" />, or that parsed into something this
+        /// class is about to refuse, with anything standing where credentials stand removed first.
+        /// </summary>
+        /// <remarks>
+        /// Two shapes reach here and both carry a secret. One has an authority, as in
+        /// 'https://user:secret@idp/token'. The other has none: 'user:secret@idp/token' is an absolute URI
+        /// to <see cref="Uri" />, whose scheme is 'user', which is what an operator produces by leaving the
+        /// scheme off a URL that carries credentials. Both are refused, and what is written down travels in
+        /// the exception that ends the run, which is the part a scheduled job keeps.
+        /// </remarks>
+        private static string ForLog(string value)
+        {
+            if (value is null)
+            {
+                return EdFiApiUrlSegmentResolver.ForLog(value);
+            }
+
+            int authorityStart = value.IndexOf("//", StringComparison.Ordinal);
+            int scanFrom = authorityStart < 0 ? 0 : authorityStart + 2;
+            int pathStart = value.IndexOf('/', scanFrom);
+            int credentialsEnd = value.IndexOf('@', scanFrom);
+
+            // An '@' inside the path is part of the path, not a credential.
+            bool carriesCredentials =
+                credentialsEnd > scanFrom && (pathStart < 0 || credentialsEnd < pathStart);
+
+            string rendered = carriesCredentials
+                ? string.Concat(value.AsSpan(0, scanFrom), "***@", value.AsSpan(credentialsEnd + 1))
+                : value;
+
+            return EdFiApiUrlSegmentResolver.ForLog(rendered);
+        }
+
         public static string ForLog(Uri endpoint) =>
             string.IsNullOrEmpty(endpoint.UserInfo)
                 ? endpoint.AbsoluteUri

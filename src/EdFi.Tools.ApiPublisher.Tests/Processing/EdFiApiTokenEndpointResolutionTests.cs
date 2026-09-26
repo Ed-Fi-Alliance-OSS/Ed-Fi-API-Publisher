@@ -414,6 +414,35 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        [TestCase("ftp://user:s3cr3t@idp/token", TestName = "with an authority")]
+        [TestCase("user:s3cr3t@idp/token", TestName = "with the user as the scheme")]
+        public void A_refused_stated_endpoint_should_not_carry_its_credentials_into_the_message(string stated)
+        {
+            // The success path already kept userinfo out of the log. A refusal did not, and a refusal is
+            // the likelier place for credentials to appear: leaving the scheme off a URL that carries them
+            // is what produces the second case here, which Uri accepts as absolute with 'user' as its
+            // scheme. What gets written travels in the exception that ends the run.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor().Resolve(stated, DiscoveryDocument.Unread));
+
+            exception.Message.ShouldNotContain("s3cr3t");
+            exception.Message.ShouldContain("idp");
+        }
+
+        [Test]
+        public void A_connection_url_carrying_credentials_should_not_be_written_into_a_refusal()
+        {
+            // The same rule for the other value these messages name. An operator who put credentials in the
+            // connection URL has them written down by the message built to keep them out.
+            // An off-host endpoint over plain HTTP is refused, and that message names the connection URL.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => new EdFiApiTokenEndpointResolver(new Uri("https://user:s3cr3t@server/"), "TestSource")
+                    .Resolve(statedAuthUrl: null, DiscoveryDeclaring(("oauth", "http://elsewhere/token"))));
+
+            exception.Message.ShouldNotContain("s3cr3t");
+        }
+
+        [Test]
         public void Userinfo_in_an_endpoint_should_not_be_written_to_the_log()
         {
             // An operator who puts credentials in the URL should not find them in the log, and this is the
