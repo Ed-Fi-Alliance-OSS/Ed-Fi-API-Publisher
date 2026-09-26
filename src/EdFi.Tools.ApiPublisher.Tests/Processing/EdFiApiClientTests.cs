@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
+using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using NUnit.Framework;
@@ -55,6 +56,85 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             // The token is obtained from the API's own base URL and reaches the API on the request itself, applied
             // by the request pipeline
             Assert.That(appliedAuthorizationHeader, Is.EqualTo($"Bearer {MockRequests.OdsApiToken}"));
+        }
+
+        [Test]
+        public async Task A_stated_authentication_url_should_reach_the_resolver_from_the_connection()
+        {
+            // Resolution moved out of BearerTokenManager, which used to read AuthUrl itself and had a test
+            // that proved it. Nothing replaced that: passing null instead of the connection's AuthUrl here
+            // leaves the whole suite green while --sourceAuthUrl and --targetAuthUrl quietly stop working.
+            const string StatedUrl = MockRequests.SourceApiBaseUrl + "/identity/connect/token";
+            const string DeclaredUrl = MockRequests.SourceApiBaseUrl + "/declared/token";
+
+            var connectionDetails = TestHelpers.GetSourceApiConnectionDetails();
+            connectionDetails.AuthUrl = StatedUrl;
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .ApiVersionMetadataUrls(
+                    "5.2",
+                    "3.3.0-a",
+                    new Dictionary<string, string>
+                    {
+                        ["dataManagementApi"] = MockRequests.SourceApiBaseUrl + "/data/v3/",
+                        ["changeQueries"] = MockRequests.SourceApiBaseUrl + "/changeQueries/v1/",
+                        ["oauth"] = DeclaredUrl
+                    });
+
+            A.CallTo(() => fakeRequestHandler.Post(StatedUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => FakeResponse.OK(new { access_token = MockRequests.OdsApiToken }));
+
+            A.CallTo(() => fakeRequestHandler.Get(ResourceUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => FakeResponse.OK(new { }));
+
+            TestHelpers.InitializeLogging();
+
+            using var client = new EdFiApiClient(
+                "TestClient", connectionDetails, 60, false, new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            await client.HttpClient.GetAsync(ResourceRelativeUrl);
+
+            // The stated URL wins over the declared one, which is the precedence the connection setting buys.
+            A.CallTo(() => fakeRequestHandler.Post(StatedUrl, A<HttpRequestMessage>.Ignored))
+                .MustHaveHappened();
+
+            A.CallTo(() => fakeRequestHandler.Post(DeclaredUrl, A<HttpRequestMessage>.Ignored))
+                .MustNotHaveHappened();
+        }
+
+        [Test]
+        public void The_certificate_rule_should_reach_the_resolver_from_the_client()
+        {
+            // ignoreSslErrors is the stated basis for refusing an endpoint the API nominated on another
+            // host. Roughly thirty tests build a client with it on, but every one of them declares oauth at
+            // the connection's own address, where the resolver returns before the rule is consulted. Hard
+            // coding the flag to false fails none of them.
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .ApiVersionMetadataUrls(
+                    "5.2",
+                    "3.3.0-a",
+                    new Dictionary<string, string>
+                    {
+                        ["dataManagementApi"] = MockRequests.SourceApiBaseUrl + "/data/v3/",
+                        ["changeQueries"] = MockRequests.SourceApiBaseUrl + "/changeQueries/v1/",
+                        ["oauth"] = "https://identity.elsewhere/token"
+                    });
+
+            TestHelpers.InitializeLogging();
+
+            // Bound through an Action so the call is not ambiguous with the obsolete TestDelegate overload.
+            Action buildClient = () => new EdFiApiClient(
+                "TestClient",
+                TestHelpers.GetSourceApiConnectionDetails(),
+                60,
+                ignoreSslErrors: true,
+                new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            var thrown = Assert.Throws<InvalidConfigurationException>(buildClient);
+
+            Assert.That(thrown.Message, Does.Contain("--ignoreSslErrors"));
         }
 
         [Test]
