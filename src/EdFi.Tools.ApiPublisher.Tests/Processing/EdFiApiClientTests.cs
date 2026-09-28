@@ -56,6 +56,38 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void The_Discovery_document_should_be_read_once_for_a_client()
+        {
+            // The stated efficiency of reading paths from the document rests on this: one read per client,
+            // shared by the version check and the dependency metadata. Nothing asserted it, so a read that
+            // happened per segment, or a retry that fired on success, would pass every other test here.
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .SetDataManagementUrlSegment("data/v3")
+                .SetChangeQueriesUrlSegment("changeQueries/v1")
+                .OAuthToken()
+                .ApiVersionMetadata();
+
+            TestHelpers.InitializeLogging();
+
+            using var client = new EdFiApiClient(
+                "TestClient",
+                TestHelpers.GetSourceApiConnectionDetails(),
+                60,
+                false,
+                new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            // Both segments are read, so a per-segment read would show up as more than one call.
+            _ = client.DataManagementApiSegment;
+            _ = client.ChangeQueriesApiSegment;
+
+            A.CallTo(() => fakeRequestHandler.Get(
+                    $"{MockRequests.SourceApiBaseUrl}/",
+                    A<HttpRequestMessage>.Ignored))
+                .MustHaveHappenedOnceExactly();
+        }
+
+        [Test]
         public async Task Requests_identify_the_publisher_and_its_runtime_in_the_user_agent()
         {
             var sourceApiConnectionDetails = TestHelpers.GetSourceApiConnectionDetails();

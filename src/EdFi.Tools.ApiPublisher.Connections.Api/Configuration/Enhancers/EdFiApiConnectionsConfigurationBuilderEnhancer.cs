@@ -123,6 +123,20 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Configuration.Enhancers
                         namedApiConnectionDetails.Scope);
                 }
 
+                if (!string.IsNullOrEmpty(namedApiConnectionDetails.DataManagementUrlSegment))
+                {
+                    yield return new KeyValuePair<string, string>(
+                        $"Connections:{connectionRole}:DataManagementUrlSegment",
+                        namedApiConnectionDetails.DataManagementUrlSegment);
+                }
+
+                if (!string.IsNullOrEmpty(namedApiConnectionDetails.ChangeQueriesUrlSegment))
+                {
+                    yield return new KeyValuePair<string, string>(
+                        $"Connections:{connectionRole}:ChangeQueriesUrlSegment",
+                        namedApiConnectionDetails.ChangeQueriesUrlSegment);
+                }
+
                 if (namedApiConnectionDetails.IgnoreIsolation.HasValue)
                 {
                     yield return new KeyValuePair<string, string>(

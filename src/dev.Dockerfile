@@ -9,6 +9,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine@sha256:620e765fe18186c08399f7aa978
 WORKDIR /source
 
 COPY ./.editorconfig .editorconfig
+COPY ./Directory.Packages.props Directory.Packages.props
 COPY ./EdFi.Tools.ApiPublisher.Cli/ EdFi.Tools.ApiPublisher.Cli/
 COPY ./EdFi.Tools.ApiPublisher.ConfigurationStore.Aws/ EdFi.Tools.ApiPublisher.ConfigurationStore.Aws/
 COPY ./EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext/ EdFi.Tools.ApiPublisher.ConfigurationStore.Plaintext/
@@ -53,7 +54,7 @@ COPY ./Docker/logging.template.json /app/logging.template.json
 COPY ./Docker/plainTextNamedConnections.template.json /app/plainTextNamedConnections.template.json
 COPY ./Docker/run.sh /app/run.sh
 
-RUN apk --no-cache add --upgrade unzip=~6 dos2unix=~7 bash=~5 openssl=~3.5 gettext=~1 icu=~78 curl=~8 && \
+RUN apk --no-cache add --upgrade dos2unix=~7 bash=~5 openssl=~3.5 gettext=~1 icu=~78 curl=~8 && \
     dos2unix /app/*.json && \
     dos2unix /app/*.sh && \
     chmod 700 /app/*.sh -- ** && \

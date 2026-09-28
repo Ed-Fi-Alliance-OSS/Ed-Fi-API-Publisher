@@ -24,12 +24,17 @@ namespace EdFi.Tools.ApiPublisher.Core.Processing
         public const string PartitionsPathSuffix = "/partitions";
 
         /// <summary>
-        /// Gets the path segment to the data management API, including the version.
+        /// Gets the path segment an ODS/API conventionally serves its data management resources at. This is
+        /// what to assume when an API does not say where it serves, and not the path a connection uses: that
+        /// is read from the API's own Discovery document, and is a different value for a DMS. Compose a
+        /// request from <see cref="EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement.EdFiApiClient" />
+        /// rather than from this.
         /// </summary>
         public const string DataManagementApiSegment = "data/v3";
 
         /// <summary>
-        /// Gets the path segment to the change queries feature of the API, including the version.
+        /// Gets the path segment an ODS/API conventionally serves change queries at, assumed only when the API
+        /// does not say where it serves them. See the remark on <see cref="DataManagementApiSegment" />.
         /// </summary>
         public const string ChangeQueriesApiSegment = "changeQueries/v1";
 

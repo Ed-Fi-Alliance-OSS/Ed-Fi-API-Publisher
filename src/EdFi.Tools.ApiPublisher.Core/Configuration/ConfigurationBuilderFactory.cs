@@ -35,6 +35,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--sourceSecret"] = "Connections:Source:Secret",
                     ["--sourceScope"] = "Connections:Source:Scope",
                     ["--sourceSchoolYear"] = "Connections:Source:SchoolYear",
+                    ["--sourceDataManagementUrlSegment"] = "Connections:Source:DataManagementUrlSegment",
+                    ["--sourceChangeQueriesUrlSegment"] = "Connections:Source:ChangeQueriesUrlSegment",
                     ["--lastChangeVersionProcessed"] = "Connections:Source:LastChangeVersionProcessed",
 
                     // Temporary argument -- until Ed-Fi ODS API corrects issues with Profiles enforcement
@@ -51,6 +53,8 @@ namespace EdFi.Tools.ApiPublisher.Core.Configuration
                     ["--targetSecret"] = "Connections:Target:Secret",
                     ["--targetScope"] = "Connections:Target:Scope",
                     ["--targetSchoolYear"] = "Connections:Target:SchoolYear",
+                    ["--targetDataManagementUrlSegment"] = "Connections:Target:DataManagementUrlSegment",
+                    ["--targetChangeQueriesUrlSegment"] = "Connections:Target:ChangeQueriesUrlSegment",
 
                     // Temporary argument -- until Ed-Fi ODS API corrects issues with Profiles enforcement
                     ["--targetProfileName"] = "Connections:Target:ProfileName",

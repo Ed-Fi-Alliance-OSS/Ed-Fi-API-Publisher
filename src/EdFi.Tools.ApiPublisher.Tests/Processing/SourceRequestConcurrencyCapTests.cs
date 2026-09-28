@@ -163,6 +163,14 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     return FakeResponse.OK(new { access_token = "test-access-token" });
                 }
 
+                // The Discovery document is read once while the connection is being set up, for the same
+                // reason the token is obtained there. Answered outside the gate and outside the count, like
+                // the token: this fixture measures what the source is asked to serve while publishing.
+                if (request.RequestUri.AbsolutePath == "/")
+                {
+                    return FakeResponse.OK(new { version = "7.1" });
+                }
+
                 Interlocked.Increment(ref _totalRequests);
 
                 int concurrentRequests = Interlocked.Increment(ref _concurrentRequests);

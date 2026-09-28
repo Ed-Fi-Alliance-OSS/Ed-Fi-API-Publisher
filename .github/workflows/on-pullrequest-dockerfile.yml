@@ -15,6 +15,8 @@ on:
     paths:
       - ".github/workflows/on-pullrequest-dockerfile.yml"
       - "**/Dockerfile*"
+      - "**/*.csproj"
+      - "src/Directory.Packages.props"
   workflow_dispatch:
 
 permissions: read-all

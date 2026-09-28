@@ -6,11 +6,21 @@
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
 using EdFi.Tools.ApiPublisher.Core.Extensions;
 using EdFi.Tools.ApiPublisher.Core.Processing;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Serilog;
+using System.Net;
 
 namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 {
     public class EdFiApiClient : IDisposable
     {
+        // One extra attempt, far enough apart to outlast a container that is still coming up, close enough
+        // that a run against a genuinely dead root is not held open.
+        private const int DiscoveryReadRetries = 1;
+
+        private static readonly TimeSpan DiscoveryReadRetryDelay = TimeSpan.FromSeconds(2);
+
         private readonly string _name;
 
         // The transport is shared by the request pipeline and by the token manager, and owned here: it is created or
@@ -19,8 +29,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private readonly HttpClient _httpClient;
         private readonly BearerTokenManager _bearerTokenManager;
 
-        private readonly Lazy<string> _dataManagementApiSegment;
-        private readonly Lazy<string> _changeQueriesApiSegment;
+        private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClient));
+
+        // Read once and shared by both segments, because one document states where both of them are served.
+        // Kept so that anything else needing the API's own description of itself reads it rather than asking
+        // the API a second time.
+        private readonly DiscoveryDocument _discoveryDocument;
+
+        private readonly string _dataManagementApiSegment;
+        private readonly string _changeQueriesApiSegment;
 
         public EdFiApiClient(
             string name,
@@ -41,20 +58,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             string apiUrl =
                 apiConnectionDetails.Url
                 ?? throw new InvalidOperationException("URL for API connection '{name}' was not assigned.");
-
-            _dataManagementApiSegment = new Lazy<string>(
-                () =>
-                    ConnectionDetails.SchoolYear is null
-                        ? EdFiApiConstants.DataManagementApiSegment
-                        : $"{EdFiApiConstants.DataManagementApiSegment}/{ConnectionDetails.SchoolYear}"
-            );
-
-            _changeQueriesApiSegment = new Lazy<string>(
-                () =>
-                    ConnectionDetails.SchoolYear is null
-                        ? EdFiApiConstants.ChangeQueriesApiSegment
-                        : $"{EdFiApiConstants.ChangeQueriesApiSegment}/{ConnectionDetails.SchoolYear}"
-            );
 
             _httpClientHandler = httpClientHandler ?? new HttpClientHandler();
 
@@ -96,16 +99,33 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     // body-read deadlines derived from this changes.
                     Timeout = throttlingPolicy.RequestBudget
                 };
+
+                ApiPublisherProductInfo.ApplyTo(_httpClient);
+
+                // Resolved here rather than on first use, for the same reason the token is obtained here: a
+                // connection whose requests cannot be addressed should say so while it is being set up, not
+                // from inside a processing block once the source has already been streamed. It also keeps the
+                // blocking read off the publishing threads.
+                _discoveryDocument = ReadDiscoveryDocument();
+
+                _dataManagementApiSegment = ResolveApiSegment(
+                    EdFiApiUrlSegmentResolver.DataManagement,
+                    ConnectionDetails.DataManagementUrlSegment
+                );
+
+                _changeQueriesApiSegment = ResolveApiSegment(
+                    EdFiApiUrlSegmentResolver.ChangeQueries,
+                    ConnectionDetails.ChangeQueriesUrlSegment
+                );
             }
             catch
             {
                 _bearerTokenManager?.Dispose();
+                _httpClient?.Dispose();
                 _httpClientHandler.Dispose();
 
                 throw;
             }
-
-            ApiPublisherProductInfo.ApplyTo(_httpClient);
         }
 
         /// <summary>
@@ -158,15 +178,157 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return pipeline;
         }
 
+        /// <summary>
+        /// Reads the API's Discovery document, the anonymous document at the root of the connection's URL in
+        /// which the API states where it serves each part of its surface. An API that cannot be asked, or that
+        /// answers with something unreadable, yields an empty document and so states nothing.
+        /// </summary>
+        /// <remarks>
+        /// Blocks, because the segments it feeds are read through synchronous properties by every call site
+        /// that builds a request. It happens once per client, while that client is being constructed, in the
+        /// same way the bearer token is first obtained.
+        /// </remarks>
+        /// <remarks>
+        /// The request is anonymous. The version check it replaces carried this connection's bearer token,
+        /// but the token endpoint is itself named in the document being read, so asking for one first would
+        /// be circular. Every Ed-Fi API serves its Discovery document anonymously; a gateway configured to
+        /// demand a token on the connection's root has to exempt it.
+        /// </remarks>
+        private DiscoveryDocument ReadDiscoveryDocument()
+        {
+            // A status a later run could get past is worth one more try now, rather than ending a run over a
+            // gateway that is a moment away from being ready. Bounded deliberately: this blocks client
+            // construction, and a root that keeps answering 503 is not something waiting here will fix.
+            for (int attempt = 1; attempt <= DiscoveryReadRetries + 1; attempt++)
+            {
+                var document = AttemptDiscoveryDocumentRead();
+
+                if (document.Outcome != DiscoveryOutcome.Unreachable || attempt > DiscoveryReadRetries)
+                {
+                    return document;
+                }
+
+                _logger.Information(
+                    "Reading the Discovery document for the {ConnectionName:l} API did not succeed; trying again in {Delay} (attempt {Attempt} of {Total}).",
+                    _name,
+                    DiscoveryReadRetryDelay,
+                    attempt + 1,
+                    DiscoveryReadRetries + 1
+                );
+
+                Thread.Sleep(DiscoveryReadRetryDelay);
+            }
+
+            return DiscoveryDocument.Unread;
+        }
+
+        private DiscoveryDocument AttemptDiscoveryDocumentRead()
+        {
+            using var discoveryRequestHttpClient = new HttpClient(_httpClientHandler, disposeHandler: false)
+            {
+                BaseAddress = _httpClient.BaseAddress,
+                Timeout = _httpClient.Timeout
+            };
+
+            ApiPublisherProductInfo.ApplyTo(discoveryRequestHttpClient);
+
+            try
+            {
+                using var response = discoveryRequestHttpClient.GetAsync("").GetAwaiter().GetResult();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.Warning(
+                        "The {ConnectionName:l} API at '{BaseAddress}' answered {StatusCode} for its Discovery document, so the paths it serves cannot be read from it.",
+                        _name,
+                        _httpClient.BaseAddress,
+                        (int)response.StatusCode
+                    );
+
+                    // An answer is not the same as a final answer. A gateway in front of an API that is
+                    // restarting says 503, a saturated one says 429, and a later run gets the document, so
+                    // those keep the outcome that says the run may be repeated. Anything else at that
+                    // address is not serving a Discovery document and will not tomorrow either.
+                    return MayAnswerDifferentlyLater(response.StatusCode)
+                        ? DiscoveryDocument.Unread
+                        : DiscoveryDocument.Unusable;
+                }
+
+                string content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+                try
+                {
+                    return DiscoveryDocument.Read(JObject.Parse(content));
+                }
+                catch (JsonException ex)
+                {
+                    // Also an answer, just not one a document can be read from: a gateway error page or a
+                    // sign-in redirect reaches here rather than an Ed-Fi API.
+                    _logger.Warning(
+                        ex,
+                        "The {ConnectionName:l} API at '{BaseAddress}' answered its Discovery document with something that is not JSON.",
+                        _name,
+                        _httpClient.BaseAddress
+                    );
+
+                    return DiscoveryDocument.Unusable;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Reaching the API failed outright, which a restart or a transient network fault produces,
+                // so this stays the case a later run may resolve on its own.
+                _logger.Warning(
+                    ex,
+                    "The Discovery document for the {ConnectionName:l} API at '{BaseAddress}' could not be read.",
+                    _name,
+                    _httpClient.BaseAddress
+                );
+
+                return DiscoveryDocument.Unread;
+            }
+        }
+
+        /// <summary>
+        /// Says whether a status the API answered with could be answered differently by a later run, which
+        /// decides whether the run reports a configuration fault or one that may be repeated.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately wider than <c>HttpStatusCodeExtensions.IsPotentiallyTransientFailure</c>, which
+        /// answers a different question, namely whether to retry one request inside this run. That one is
+        /// left alone because the request retry policy is built on it.
+        /// </remarks>
+        private static bool MayAnswerDifferentlyLater(HttpStatusCode statusCode) =>
+            (int)statusCode >= 500
+            || statusCode == HttpStatusCode.RequestTimeout
+            || statusCode == HttpStatusCode.TooManyRequests;
+
+        private string ResolveApiSegment(ApiUrlSegmentDefinition definition, string statedSegment)
+        {
+            var resolver = new EdFiApiUrlSegmentResolver(
+                _httpClient.BaseAddress,
+                _name,
+                ConnectionDetails.SchoolYear,
+                _logger
+            );
+
+            return resolver.Resolve(statedSegment, _discoveryDocument, definition);
+        }
+
         public HttpClient HttpClient => _httpClient;
 
         public string Name => _name;
 
         public ApiConnectionDetails ConnectionDetails { get; }
 
-        public string DataManagementApiSegment => _dataManagementApiSegment.Value;
+        /// <summary>
+        /// Gets the API's Discovery document as it was read while this client was constructed.
+        /// </summary>
+        public DiscoveryDocument DiscoveryDocument => _discoveryDocument;
 
-        public string ChangeQueriesApiSegment => _changeQueriesApiSegment.Value;
+        public string DataManagementApiSegment => _dataManagementApiSegment;
+
+        public string ChangeQueriesApiSegment => _changeQueriesApiSegment;
 
         public void Dispose()
         {

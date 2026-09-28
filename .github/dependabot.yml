@@ -9,7 +9,7 @@ updates:
     directory: src/
     target-branch: main
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       minor-patches:
         applies-to: version-updates
