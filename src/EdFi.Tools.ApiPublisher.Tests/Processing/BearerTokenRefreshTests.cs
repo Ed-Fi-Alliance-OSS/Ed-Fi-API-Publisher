@@ -437,7 +437,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .SetBaseUrl(MockRequests.SourceApiBaseUrl);
 
             A.CallTo(() => fakeRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
-                .Returns(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                .ReturnsLazily(() => new HttpResponseMessage(HttpStatusCode.Unauthorized)
                 {
                     Content = new StringContent(forged)
                 });
@@ -491,7 +491,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 .SetBaseUrl(MockRequests.SourceApiBaseUrl);
 
             A.CallTo(() => fakeRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
-                .Returns(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+                .ReturnsLazily(() => new HttpResponseMessage(HttpStatusCode.Unauthorized));
 
             TestHelpers.InitializeLogging();
 

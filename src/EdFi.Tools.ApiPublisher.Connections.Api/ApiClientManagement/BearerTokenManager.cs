@@ -7,7 +7,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Web;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
 using Newtonsoft.Json.Linq;
 using Serilog;
 using Serilog.Events;

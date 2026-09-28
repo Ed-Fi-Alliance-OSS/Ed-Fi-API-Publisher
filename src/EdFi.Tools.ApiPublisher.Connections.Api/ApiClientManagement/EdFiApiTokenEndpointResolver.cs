@@ -209,7 +209,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     );
                 }
 
-                // #8: the endpoint the run settles on is reported here, from inside the branch that knows
+                // The endpoint the run settles on is reported here, from inside the branch that knows
                 // both the declaration and the outcome. Falling through to the lines below would announce
                 // the rewritten URL as the one the API declared, which it did not.
                 return new UriBuilder(declaredUri)
@@ -329,15 +329,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             || endpoint.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Renders an endpoint for the log without the userinfo an operator may have put in it, since
-        /// <see cref="Uri.AbsoluteUri" /> carries that through and it is a credential of its own.
-        /// </summary>
-        /// <remarks>
-        /// It is left in the value that is used, because it is the address the operator or the API gave; it
-        /// simply has no business being written down. <see cref="System.Net.Http.HttpClient" /> does not act
-        /// on it in any case, since the publisher sets its own authorization header.
-        /// </remarks>
-        /// <summary>
         /// Renders a value that has not been through <see cref="Uri" />, or that parsed into something this
         /// class is about to refuse, with anything standing where credentials stand removed first.
         /// </summary>
@@ -371,6 +362,15 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return EdFiApiUrlSegmentResolver.ForLog(rendered);
         }
 
+        /// <summary>
+        /// Renders an endpoint for the log without the userinfo an operator may have put in it, since
+        /// <see cref="Uri.AbsoluteUri" /> carries that through and it is a credential of its own.
+        /// </summary>
+        /// <remarks>
+        /// It is left in the value that is used, because it is the address the operator or the API gave; it
+        /// simply has no business being written down. <see cref="System.Net.Http.HttpClient" /> does not act
+        /// on it in any case, since the publisher sets its own authorization header.
+        /// </remarks>
         public static string ForLog(Uri endpoint) =>
             string.IsNullOrEmpty(endpoint.UserInfo)
                 ? endpoint.AbsoluteUri
