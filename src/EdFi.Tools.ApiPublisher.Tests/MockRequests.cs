@@ -269,6 +269,38 @@ namespace EdFi.Tools.ApiPublisher.Tests
         /// Answers the Discovery document the way an ODS/API does, declaring where it serves the data
         /// management and change queries APIs as absolute URLs with a trailing slash.
         /// </summary>
+        /// <summary>
+        /// Builds the Discovery document response on its own, for a test that needs to alter it before it
+        /// is returned, such as one attaching the final address a redirect would have left on it.
+        /// </summary>
+        public static HttpResponseMessage DiscoveryDocumentFor(
+            IFakeHttpRequestHandler fakeRequestHandler,
+            string apiVersion = "5.2",
+            string edfiVersion = "3.3.0-a") =>
+            FakeResponse.OK(DiscoveryDocumentBody(fakeRequestHandler, apiVersion, edfiVersion));
+
+        private static object DiscoveryDocumentBody(
+            IFakeHttpRequestHandler fakeRequestHandler,
+            string apiVersion,
+            string edfiVersion) =>
+            new
+            {
+                version = apiVersion,
+                dataModels = new[]
+                {
+                    new
+                    {
+                        name = "Ed-Fi",
+                        version = edfiVersion
+                    }
+                },
+                urls = new
+                {
+                    dataManagementApi = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.DataManagementUrlSegment}/",
+                    changeQueries = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/"
+                }
+            };
+
         public static IFakeHttpRequestHandler ApiVersionMetadata(
             this IFakeHttpRequestHandler fakeRequestHandler,
             string apiVersion = "5.2",
@@ -291,7 +323,11 @@ namespace EdFi.Tools.ApiPublisher.Tests
                             urls = new
                             {
                                 dataManagementApi = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.DataManagementUrlSegment}/",
-                                changeQueries = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/"
+                                changeQueries = $"{fakeRequestHandler.BaseUrl}/{fakeRequestHandler.ChangeQueriesUrlSegment}/",
+
+                                // Declared so that the whole suite resolves the token endpoint the way a real
+                                // API is read, rather than falling back to the conventional path.
+                                oauth = $"{fakeRequestHandler.BaseUrl}/oauth/token"
                             }
                         }));
 
