@@ -31,9 +31,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         private readonly ILogger _logger = Log.ForContext(typeof(EdFiApiClient));
 
-        // Read once and shared by both segments, because one document states where both of them are served.
-        // Kept so that anything else needing the API's own description of itself reads it rather than asking
-        // the API a second time.
+        // Read once and shared by the token endpoint and both path segments, because one document states
+        // where all three are served. Kept so that anything else needing the API's own description of itself
+        // reads it rather than asking the API a second time.
         private readonly DiscoveryDocument _discoveryDocument;
 
         private readonly string _dataManagementApiSegment;
@@ -71,14 +71,36 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             try
             {
-                // The token manager is created first and obtains the initial token, so a connection that cannot
-                // authenticate fails here rather than on the first request.
+                var baseAddress = new Uri(apiUrl.EnsureSuffixApplied("/"));
+
+                // Read before the token is obtained, because the endpoint the token is requested from is taken
+                // from this document. The read is anonymous and is sent straight down the transport, so it needs
+                // neither a token nor the pipeline that carries one.
+                _discoveryDocument = ReadDiscoveryDocument(baseAddress, throttlingPolicy.RequestBudget);
+
+                var tokenEndpointResolver = new EdFiApiTokenEndpointResolver(
+                    baseAddress,
+                    _name,
+                    _logger,
+                    serverCertificatesUnverified: ignoreSslErrors
+                );
+
+                var tokenEndpoint = tokenEndpointResolver.Resolve(
+                    ConnectionDetails.AuthUrl,
+                    _discoveryDocument
+                );
+
+                // The token is obtained next, so a connection that cannot authenticate fails here rather than on
+                // the first request.
                 _bearerTokenManager = new BearerTokenManager(
                     name,
                     apiConnectionDetails,
                     bearerTokenRefreshMinutes,
                     _httpClientHandler,
-                    timeProvider
+                    tokenEndpoint,
+                    timeProvider,
+                    tokenEndpointOrigin: tokenEndpointResolver.Origin,
+                    authUrlSettingPath: tokenEndpointResolver.AuthUrlSettingPath
                 );
 
                 var pipeline = BuildRequestPipeline(
@@ -91,7 +113,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
                 _httpClient = new HttpClient(pipeline, disposeHandler: false)
                 {
-                    BaseAddress = new Uri(apiUrl.EnsureSuffixApplied("/")),
+                    BaseAddress = baseAddress,
 
                     // Stated rather than left to the HttpClient default, because the handlers above spend their
                     // waits inside it and have to know what they are working against. The default value is the
@@ -106,8 +128,6 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // connection whose requests cannot be addressed should say so while it is being set up, not
                 // from inside a processing block once the source has already been streamed. It also keeps the
                 // blocking read off the publishing threads.
-                _discoveryDocument = ReadDiscoveryDocument();
-
                 _dataManagementApiSegment = ResolveApiSegment(
                     EdFiApiUrlSegmentResolver.DataManagement,
                     ConnectionDetails.DataManagementUrlSegment
@@ -185,23 +205,28 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// </summary>
         /// <remarks>
         /// Blocks, because the segments it feeds are read through synchronous properties by every call site
-        /// that builds a request. It happens once per client, while that client is being constructed, in the
-        /// same way the bearer token is first obtained.
-        /// </remarks>
-        /// <remarks>
+        /// that builds a request. It happens once per client, while that client is constructed and before the
+        /// token is requested.
+        /// <para>
+        /// The address and the request budget are passed in rather than read from the client's own
+        /// <see cref="HttpClient" />, because this runs before that client exists: the token endpoint is stated
+        /// in the document this reads, so the document has to be in hand before a token can be asked for.
+        /// </para>
+        /// <para>
         /// The request is anonymous. The version check it replaces carried this connection's bearer token,
         /// but the token endpoint is itself named in the document being read, so asking for one first would
         /// be circular. Every Ed-Fi API serves its Discovery document anonymously; a gateway configured to
         /// demand a token on the connection's root has to exempt it.
+        /// </para>
         /// </remarks>
-        private DiscoveryDocument ReadDiscoveryDocument()
+        private DiscoveryDocument ReadDiscoveryDocument(Uri baseAddress, TimeSpan requestBudget)
         {
             // A status a later run could get past is worth one more try now, rather than ending a run over a
             // gateway that is a moment away from being ready. Bounded deliberately: this blocks client
             // construction, and a root that keeps answering 503 is not something waiting here will fix.
             for (int attempt = 1; attempt <= DiscoveryReadRetries + 1; attempt++)
             {
-                var document = AttemptDiscoveryDocumentRead();
+                var document = AttemptDiscoveryDocumentRead(baseAddress, requestBudget);
 
                 if (document.Outcome != DiscoveryOutcome.Unreachable || attempt > DiscoveryReadRetries)
                 {
@@ -222,12 +247,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return DiscoveryDocument.Unread;
         }
 
-        private DiscoveryDocument AttemptDiscoveryDocumentRead()
+        private DiscoveryDocument AttemptDiscoveryDocumentRead(Uri baseAddress, TimeSpan requestBudget)
         {
             using var discoveryRequestHttpClient = new HttpClient(_httpClientHandler, disposeHandler: false)
             {
-                BaseAddress = _httpClient.BaseAddress,
-                Timeout = _httpClient.Timeout
+                BaseAddress = baseAddress,
+                Timeout = requestBudget
             };
 
             ApiPublisherProductInfo.ApplyTo(discoveryRequestHttpClient);
@@ -236,12 +261,14 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             {
                 using var response = discoveryRequestHttpClient.GetAsync("").GetAwaiter().GetResult();
 
+                WarnIfServedElsewhere(response, baseAddress);
+
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.Warning(
                         "The {ConnectionName:l} API at '{BaseAddress}' answered {StatusCode} for its Discovery document, so the paths it serves cannot be read from it.",
                         _name,
-                        _httpClient.BaseAddress,
+                        baseAddress,
                         (int)response.StatusCode
                     );
 
@@ -268,7 +295,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                         ex,
                         "The {ConnectionName:l} API at '{BaseAddress}' answered its Discovery document with something that is not JSON.",
                         _name,
-                        _httpClient.BaseAddress
+                        baseAddress
                     );
 
                     return DiscoveryDocument.Unusable;
@@ -282,11 +309,44 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     ex,
                     "The Discovery document for the {ConnectionName:l} API at '{BaseAddress}' could not be read.",
                     _name,
-                    _httpClient.BaseAddress
+                    baseAddress
                 );
 
                 return DiscoveryDocument.Unread;
             }
+        }
+
+        /// <summary>
+        /// Reports when the Discovery document was served by an address other than the one this connection
+        /// states, which a redirect produces.
+        /// </summary>
+        /// <remarks>
+        /// The handler follows redirects, so the document may have come from somewhere else entirely. What
+        /// is read out of it, the paths and the token endpoint, is then judged against the address the
+        /// operator configured rather than against the one that answered, so a root that redirects has its
+        /// declarations trusted as though the configured host had made them.
+        /// <para>
+        /// Compared on the authority, which is host and port without the scheme, so the ordinary upgrade
+        /// from HTTP to HTTPS at the same address passes without a word. Measured: 'http://server/' and
+        /// 'https://server/' both have the authority 'server', while 'https://server:8443/' does not.
+        /// </para>
+        /// </remarks>
+        private void WarnIfServedElsewhere(HttpResponseMessage response, Uri baseAddress)
+        {
+            var servedBy = response.RequestMessage?.RequestUri;
+
+            if (servedBy is null
+                || string.Equals(servedBy.Authority, baseAddress.Authority, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _logger.Warning(
+                "The Discovery document for the {ConnectionName:l} API was served by '{ServedBy:l}', not by the address this connection states ('{BaseAddress}'). The paths this run uses, and the endpoint its key and secret are sent to, are read from that document, so they were chosen by a host the operator did not configure. Address the connection at the URL the API serves from, or remove the redirect.",
+                _name,
+                EdFiApiTokenEndpointResolver.ForLog(servedBy),
+                baseAddress
+            );
         }
 
         /// <summary>

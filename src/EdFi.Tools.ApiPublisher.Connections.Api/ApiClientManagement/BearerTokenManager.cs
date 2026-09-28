@@ -3,11 +3,11 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Web;
 using EdFi.Tools.ApiPublisher.Connections.Api.Configuration;
-using EdFi.Tools.ApiPublisher.Core.Extensions;
 using Newtonsoft.Json.Linq;
 using Serilog;
 using Serilog.Events;
@@ -48,6 +48,23 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         private readonly TimeProvider _timeProvider;
 
         private readonly HttpClient _tokenRequestHttpClient;
+        private readonly Uri _tokenEndpoint;
+
+        // The endpoint as it is written down, which is not the endpoint the request is made to: an address
+        // taken from a Discovery document, or stated on the connection, may carry userinfo, and the failure
+        // log and the exception below are what reach an operator and whatever collects their logs. The
+        // request itself keeps the address exactly as it was given.
+        private readonly string _tokenEndpointForLog;
+
+        // Where the endpoint came from, as the resolver described it. A token request that fails because
+        // the address is wrong looks exactly like one that fails because the credentials are wrong, and
+        // after this branch the address is the likelier of the two.
+        private readonly string _tokenEndpointOrigin;
+
+        // The setting an operator would edit, spelled the way they would type it. Carried separately from
+        // the origin because the two cases that most need it, a declared and a conventional address, are the
+        // ones whose origin does not name a setting: neither of them came from configuration.
+        private readonly string _authUrlSettingPath;
         private readonly ITimer _refreshTimer;
         private readonly TimeSpan _configuredRefreshInterval;
         private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
@@ -74,6 +91,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
         /// <param name="httpClientHandler">The transport the token requests are sent through. It stays owned by the
         /// caller, which shares it with the API client's own request pipeline.</param>
+        /// <param name="tokenEndpoint">The absolute URL to request the token from, as resolved by
+        /// <see cref="EdFiApiTokenEndpointResolver" /> from the connection and the API's Discovery document.</param>
         /// <param name="timeProvider">The clock the refresh timer, the retry delays and the token expiry are measured
         /// against. Defaults to the system clock.</param>
         public BearerTokenManager(
@@ -81,7 +100,10 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             ApiConnectionDetails connectionDetails,
             int bearerTokenRefreshMinutes,
             HttpClientHandler httpClientHandler,
-            TimeProvider timeProvider = null
+            Uri tokenEndpoint,
+            TimeProvider timeProvider = null,
+            string tokenEndpointOrigin = null,
+            string authUrlSettingPath = null
         )
         {
             _connectionDetails =
@@ -94,21 +116,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             _configuredRefreshInterval = TimeSpan.FromMinutes(bearerTokenRefreshMinutes);
             _refreshIntervalTicks = _configuredRefreshInterval.Ticks;
 
-            string tokenEndpointUrl =
-                connectionDetails.AuthUrl
-                ?? connectionDetails.Url
-                ?? throw new InvalidOperationException(
-                    $"Neither an authentication URL nor an API URL was assigned for API connection '{name}'."
-                );
+            _tokenEndpoint = tokenEndpoint ?? throw new ArgumentNullException(nameof(tokenEndpoint));
+            _tokenEndpointForLog = EdFiApiTokenEndpointResolver.ForLog(_tokenEndpoint);
+            _tokenEndpointOrigin = tokenEndpointOrigin;
+            _authUrlSettingPath = authUrlSettingPath ?? "the connection's AuthUrl";
 
             // Built on the transport handler itself, so a token request never passes through the handler that
             // recovers from a rejected token. It is also what keeps the "Snapshot-Identifier" header off these
             // requests. The transport is not disposed with this client, because the API client that supplied it
-            // routes its own requests through it as well and disposes it once both are done with it.
-            _tokenRequestHttpClient = new HttpClient(httpClientHandler, disposeHandler: false)
-            {
-                BaseAddress = new Uri(tokenEndpointUrl.EnsureSuffixApplied("/"))
-            };
+            // routes its own requests through it as well and disposes it once both are done with it. It carries
+            // no base address, because the endpoint is already absolute: it can name a host of its own, which is
+            // how an API served separately from its identity provider is reached.
+            _tokenRequestHttpClient = new HttpClient(httpClientHandler, disposeHandler: false);
 
             ApiPublisherProductInfo.ApplyTo(_tokenRequestHttpClient);
 
@@ -477,10 +496,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 );
             }
 
-            using var authRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                _connectionDetails.IsOdsAuthService ? "oauth/token" : string.Empty
-            );
+            using var authRequest = new HttpRequestMessage(HttpMethod.Post, _tokenEndpoint);
 
             string encodedKeyAndSecret = Base64Encode($"{key}:{_connectionDetails.Secret}");
 
@@ -501,19 +517,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 if (string.IsNullOrEmpty(scope))
                 {
                     _logger.Debug(
-                        "Sending token request for {Name} API client to '{Method} {Uri}'...",
+                        "Sending token request for {Name} API client to '{Method} {Uri:l}'...",
                         _displayName,
                         authRequest.Method,
-                        authRequest.RequestUri
+                        _tokenEndpointForLog
                     );
                 }
                 else
                 {
                     _logger.Debug(
-                        "Sending token request for {Name} API client to '{Method} {Uri}' with scope '{Scope}'...",
+                        "Sending token request for {Name} API client to '{Method} {Uri:l}' with scope '{Scope}'...",
                         _displayName,
                         authRequest.Method,
-                        authRequest.RequestUri,
+                        _tokenEndpointForLog,
                         scope
                     );
                 }
@@ -529,18 +545,18 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             if (!authResponseMessage.IsSuccessStatusCode)
             {
                 _logger.Error(
-                    "Authentication of {Name} API client against '{Uri}' failed. {Method} request returned status {StatusCode}:\r{Content}",
+                    "Authentication of {Name} API client against '{Uri:l}' failed. {Method} request returned status {StatusCode}:\r{Content}",
                     _displayName,
-                    authRequest.RequestUri,
+                    _tokenEndpointForLog,
                     authRequest.Method,
                     authResponseMessage.StatusCode,
-                    Truncate(authResponseContent)
+                    ForLog(authResponseContent)
                 );
 
                 // The status belongs in the message as well as in the log entry above, because this is the message
                 // that travels up to the operator when the run ends.
                 throw new EdFiApiAuthenticationException(
-                    $"Authentication failed for {_displayName} API client: the token request to '{authRequest.RequestUri}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}."
+                    $"Authentication failed for {_displayName} API client: the token request to '{_tokenEndpointForLog}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}.{EndpointAdvice(authResponseMessage.StatusCode)}"
                 );
             }
 
@@ -661,10 +677,34 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return Convert.ToBase64String(plainTextBytes);
         }
 
-        private static string Truncate(string content) =>
-            content is not null && content.Length > MaxLoggedAuthResponseLength
-                ? content[..MaxLoggedAuthResponseLength] + "... (truncated)"
-                : content;
+        /// <summary>
+        /// Renders what the token endpoint answered with so that it cannot break out of the line it is
+        /// written on, keeping as much of it as the log allows.
+        /// </summary>
+        /// <remarks>
+        /// Serilog escapes a quotation mark inside a string scalar and writes a newline straight through,
+        /// and the console and file templates are fixed and public, so a body carrying a line break forges
+        /// an entry indistinguishable from a real one. Before the token endpoint was read from a Discovery
+        /// document this body could only come from the host the operator configured; it can now come from
+        /// one the API named.
+        /// </remarks>
+        private static string ForLog(string content) =>
+            EdFiApiUrlSegmentResolver.ForLog(content, MaxLoggedAuthResponseLength);
+
+        /// <summary>
+        /// Adds where the endpoint came from, and what to set, for the statuses that say the address is
+        /// wrong rather than the credentials.
+        /// </summary>
+        /// <remarks>
+        /// A 401 or a 403 is about the key and the secret and needs nothing added. A 404 or a 405 says the
+        /// address serves nothing, or nothing that takes a POST, which after this branch is the likelier
+        /// fault: the endpoint is no longer composed, it is read from what the API declares.
+        /// </remarks>
+        private string EndpointAdvice(HttpStatusCode status) =>
+            _tokenEndpointOrigin is null
+            || (status != HttpStatusCode.NotFound && status != HttpStatusCode.MethodNotAllowed)
+                ? string.Empty
+                : $" That address is {_tokenEndpointOrigin}. If it is not where this API serves its token, set {_authUrlSettingPath} to the address its callers use.";
 
         private static string DescribeFailureCount(int consecutiveFailures) =>
             consecutiveFailures == 1

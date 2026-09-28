@@ -265,7 +265,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 "TestSource",
                 TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes: 28,
-                transportHandler);
+                transportHandler,
+                new Uri(TokenUrl));
 
             using var httpClient = new HttpClient(
                 new BearerTokenHandler(transportHandler, tokenManager, "TestSource"))
@@ -411,6 +412,152 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             return fakeRequestHandler;
         }
 
+        [Test]
+        [TestCase(HttpStatusCode.NotFound, true, TestName = "a 404 names where the address came from")]
+        [TestCase(HttpStatusCode.Unauthorized, false, TestName = "a 401 does not, being about the credentials")]
+        public void A_failed_token_request_should_say_where_the_address_came_from(
+            HttpStatusCode status,
+            bool shouldNameTheOrigin)
+        {
+            // After this branch the endpoint is read rather than composed, so a 404 means the address is
+            // wrong far more often than the key is. A 401 is still about the credentials and needs nothing.
+            const string Origin = "the address the API declares in its Discovery document";
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            A.CallTo(() => fakeRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => new HttpResponseMessage(status));
+
+            TestHelpers.InitializeLogging();
+
+            Action buildManager = () => new BearerTokenManager(
+                "TestSource",
+                TestHelpers.GetSourceApiConnectionDetails(),
+                bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
+                new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                new Uri(TokenUrl),
+                timeProvider: null,
+                tokenEndpointOrigin: Origin);
+
+            var thrown = Assert.Throws<EdFiApiAuthenticationException>(buildManager);
+
+            Assert.That(thrown.ToString().Contains(Origin), Is.EqualTo(shouldNameTheOrigin));
+        }
+
+        [Test]
+        public void A_token_endpoint_should_not_be_able_to_forge_a_log_line_with_its_error_body()
+        {
+            // The body of a failed token response is logged so an operator can read what the identity
+            // provider said. Serilog escapes a quotation mark inside a string scalar and writes a newline
+            // straight through, and the console and file templates are fixed and public, so a body carrying
+            // a line break forges an entry. This branch is what makes that body reachable from a host the
+            // API named rather than the one the operator configured.
+            // U+2028 is built rather than written: the C# lexer treats its escape as a line terminator
+            // even inside a string literal.
+            const char LineSeparator = (char)0x2028;
+            // Built from character codes: written as escapes, the C# lexer treats them as real line
+            // terminators inside the literal.
+            string forged = string.Concat(
+                "bad",
+                (char)13,
+                (char)10,
+                "[2026-09-28 00:00:00,000] [INFO] Everything is fine",
+                LineSeparator,
+                "also fine");
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            A.CallTo(() => fakeRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                {
+                    Content = new StringContent(forged)
+                });
+
+            TestHelpers.InitializeLogging();
+
+            using (TestCorrelator.CreateContext())
+            {
+                Action buildManager = () => new BearerTokenManager(
+                    "TestSource",
+                    TestHelpers.GetSourceApiConnectionDetails(),
+                    bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
+                    new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                    new Uri(TokenUrl));
+
+                Assert.Throws<EdFiApiAuthenticationException>(buildManager);
+
+                var reported = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("Authentication of"));
+
+                string body = reported.Properties["Content"].ToString();
+
+                // The line break the template itself carries is not part of the property.
+                // Neither line terminator survives into the property the log writes.
+                Assert.That(body, Does.Not.Contain(((char)13).ToString()));
+                Assert.That(body, Does.Not.Contain(((char)10).ToString()));
+                Assert.That(body, Does.Not.Contain(LineSeparator.ToString()));
+
+                // And what the provider actually said is still legible.
+                Assert.That(body, Does.Contain("bad"));
+                Assert.That(body, Does.Contain("Everything is fine"));
+            }
+        }
+
+        [Test]
+        public void A_failed_token_request_should_not_write_the_endpoint_userinfo_down()
+        {
+            // An endpoint may carry userinfo, whether an operator stated it or an API declared it. The
+            // resolver keeps it out of its own line, but the failure log and the exception here are what
+            // reach an operator and whatever collects their logs. The request keeps the address as given;
+            // HttpClient does not act on the userinfo in any case.
+            const string Secret = "s3cr3t-value";
+
+            var withUserInfo = new UriBuilder(TokenUrl)
+            {
+                UserName = "user",
+                Password = Secret
+            }.Uri;
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            A.CallTo(() => fakeRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
+            TestHelpers.InitializeLogging();
+
+            using (TestCorrelator.CreateContext())
+            {
+                // The initial token is taken while the manager is constructed, so a 401 surfaces from there.
+                Action buildManager = () => new BearerTokenManager(
+                    "TestSource",
+                    TestHelpers.GetSourceApiConnectionDetails(),
+                    bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
+                    new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                    withUserInfo);
+
+                var thrown = Assert.Throws<EdFiApiAuthenticationException>(buildManager);
+
+                Assert.That(thrown.ToString(), Does.Not.Contain(Secret));
+                Assert.That(thrown.ToString(), Does.Contain("oauth/token"));
+
+                var written = TestCorrelator.GetLogEventsFromCurrentContext().ToArray();
+
+                Assert.That(
+                    written.Any(e => e.MessageTemplate.Text.Contains("Authentication of")),
+                    Is.True,
+                    "the failure was never reported, so this test proves nothing");
+
+                foreach (var entry in written)
+                {
+                    Assert.That(entry.RenderMessage(), Does.Not.Contain(Secret));
+                    Assert.That(entry.Exception?.ToString() ?? string.Empty, Does.Not.Contain(Secret));
+                }
+            }
+        }
+
         private static int CountTokenRequests(IFakeHttpRequestHandler fakeRequestHandler) =>
             Fake.GetCalls(fakeRequestHandler).Count(call => call.Method.Name == "Post");
 
@@ -427,6 +574,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 TestHelpers.GetSourceApiConnectionDetails(),
                 bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
                 new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                new Uri(TokenUrl),
                 timeProvider);
 
         private sealed class MutableFlag
