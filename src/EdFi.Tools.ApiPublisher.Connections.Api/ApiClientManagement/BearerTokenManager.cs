@@ -60,6 +60,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         // the address is wrong looks exactly like one that fails because the credentials are wrong, and
         // after this branch the address is the likelier of the two.
         private readonly string _tokenEndpointOrigin;
+
+        // The setting an operator would edit, spelled the way they would type it. Carried separately from
+        // the origin because the two cases that most need it, a declared and a conventional address, are the
+        // ones whose origin does not name a setting: neither of them came from configuration.
+        private readonly string _authUrlSettingPath;
         private readonly ITimer _refreshTimer;
         private readonly TimeSpan _configuredRefreshInterval;
         private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
@@ -97,7 +102,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             HttpClientHandler httpClientHandler,
             Uri tokenEndpoint,
             TimeProvider timeProvider = null,
-            string tokenEndpointOrigin = null
+            string tokenEndpointOrigin = null,
+            string authUrlSettingPath = null
         )
         {
             _connectionDetails =
@@ -113,6 +119,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             _tokenEndpoint = tokenEndpoint ?? throw new ArgumentNullException(nameof(tokenEndpoint));
             _tokenEndpointForLog = EdFiApiTokenEndpointResolver.ForLog(_tokenEndpoint);
             _tokenEndpointOrigin = tokenEndpointOrigin;
+            _authUrlSettingPath = authUrlSettingPath ?? "the connection's AuthUrl";
 
             // Built on the transport handler itself, so a token request never passes through the handler that
             // recovers from a rejected token. It is also what keeps the "Snapshot-Identifier" header off these
@@ -697,7 +704,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             _tokenEndpointOrigin is null
             || (status != HttpStatusCode.NotFound && status != HttpStatusCode.MethodNotAllowed)
                 ? string.Empty
-                : $" That address is {_tokenEndpointOrigin}. If it is not where this API serves its token, state the right one on the connection.";
+                : $" That address is {_tokenEndpointOrigin}. If it is not where this API serves its token, set {_authUrlSettingPath} to the address its callers use.";
 
         private static string DescribeFailureCount(int consecutiveFailures) =>
             consecutiveFailures == 1

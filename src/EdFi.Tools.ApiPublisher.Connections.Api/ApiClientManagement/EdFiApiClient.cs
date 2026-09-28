@@ -99,7 +99,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     _httpClientHandler,
                     tokenEndpoint,
                     timeProvider,
-                    tokenEndpointOrigin: tokenEndpointResolver.Origin
+                    tokenEndpointOrigin: tokenEndpointResolver.Origin,
+                    authUrlSettingPath: tokenEndpointResolver.AuthUrlSettingPath
                 );
 
                 var pipeline = BuildRequestPipeline(

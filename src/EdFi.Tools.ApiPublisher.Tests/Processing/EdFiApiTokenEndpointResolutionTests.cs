@@ -507,6 +507,35 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void Each_of_the_three_sources_should_be_named_as_the_origin()
+        {
+            // The failure message on a 404 tells an operator where the address came from, which is what
+            // decides whether the fault is theirs, the API's, or nobody's. The message was tested with a
+            // hand-written origin, so nothing checked that Resolve actually sets one per source.
+            var stated = ResolverFor();
+            stated.Resolve("https://idp/token", DiscoveryDocument.Unread);
+            stated.Origin.ShouldContain("stated on this connection");
+            stated.Origin.ShouldContain("--testSourceAuthUrl");
+
+            var declared = ResolverFor();
+            declared.Resolve(null, DiscoveryDeclaring(("oauth", "https://server/identity/token")));
+            declared.Origin.ShouldContain("declares in its Discovery document");
+
+            var conventional = ResolverFor();
+            conventional.Resolve(null, DiscoveryDocument.Unread);
+            conventional.Origin.ShouldContain("conventional path");
+        }
+
+        [Test]
+        public void The_setting_to_state_an_endpoint_should_be_named_as_an_operator_types_it()
+        {
+            // Handed to the token manager so a failed request can name it, in the two cases whose origin
+            // does not: a declared and a conventional address came from nowhere an operator configured.
+            ResolverFor().AuthUrlSettingPath.ShouldBe(
+                "Connections:TestSource:AuthUrl (--testSourceAuthUrl)");
+        }
+
+        [Test]
         public void A_declared_value_that_is_not_a_URL_at_all_should_be_refused()
         {
             // The one refusal in this resolver with no test. It is where a non-string urls.oauth lands,

@@ -407,6 +407,12 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     UriFormat.UriEscaped
                 );
 
+        /// <summary>
+        /// Names the setting an operator would edit to state the token endpoint, as it is written in a
+        /// configuration file and on the command line.
+        /// </summary>
+        public string AuthUrlSettingPath => ConfigurationPath();
+
         private string ConfigurationPath()
         {
             if (string.IsNullOrEmpty(_connectionName))

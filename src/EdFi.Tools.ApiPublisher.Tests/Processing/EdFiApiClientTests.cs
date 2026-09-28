@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement;
@@ -102,6 +103,47 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             A.CallTo(() => fakeRequestHandler.Post(DeclaredUrl, A<HttpRequestMessage>.Ignored))
                 .MustNotHaveHappened();
+        }
+
+        [Test]
+        public void The_origin_of_the_token_address_should_reach_the_failure_message_from_the_client()
+        {
+            // The resolver records which of the three sources answered, and the token manager puts it in the
+            // message a 404 produces. Nothing joined the two: the manager's own test hands it a written-out
+            // origin, so passing null from the client here would leave the whole suite green while an
+            // operator reading that message learned nothing about where the address came from.
+            const string DeclaredTokenUrl = MockRequests.SourceApiBaseUrl + "/identity/connect/token";
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .ApiVersionMetadataUrls(
+                    "5.2",
+                    "3.3.0-a",
+                    new Dictionary<string, string>
+                    {
+                        ["dataManagementApi"] = MockRequests.SourceApiBaseUrl + "/data/v3/",
+                        ["changeQueries"] = MockRequests.SourceApiBaseUrl + "/changeQueries/v1/",
+                        ["oauth"] = DeclaredTokenUrl
+                    });
+
+            // The declared endpoint answers 404, which is the status that makes the address the likely fault.
+            A.CallTo(() => fakeRequestHandler.Post(DeclaredTokenUrl, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => new HttpResponseMessage(HttpStatusCode.NotFound));
+
+            TestHelpers.InitializeLogging();
+
+            Action buildClient = () => new EdFiApiClient(
+                "TestClient",
+                TestHelpers.GetSourceApiConnectionDetails(),
+                60,
+                false,
+                new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+            var thrown = Assert.Throws<EdFiApiAuthenticationException>(buildClient);
+
+            // The declared branch, named as the resolver words it, and the setting an operator would edit.
+            Assert.That(thrown.ToString(), Does.Contain("declares in its Discovery document"));
+            Assert.That(thrown.ToString(), Does.Contain("--testClientAuthUrl"));
         }
 
         [Test]
