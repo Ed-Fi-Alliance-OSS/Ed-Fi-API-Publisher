@@ -73,6 +73,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         {
             if (!string.IsNullOrWhiteSpace(statedAuthUrl))
             {
+                Origin = $"the address stated on this connection ({ConfigurationPath()})";
+
                 return FromStatedAuthUrl(statedAuthUrl);
             }
 
@@ -80,11 +82,23 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             if (declaredUrl is null)
             {
+                Origin = "the conventional path, because neither this connection nor the API named one";
+
                 return ConventionalEndpointReported(discoveryDocument);
             }
 
+            Origin = "the address the API declares in its Discovery document";
+
             return FromDeclaredUrl(declaredUrl);
         }
+
+        /// <summary>
+        /// Where the endpoint this resolver last answered with came from, in one clause an error message can
+        /// carry. What an operator does about a token request that fails depends entirely on this: a stated
+        /// address is theirs to correct, a declared one is the API's, and a composed one means neither said
+        /// anything and the conventional guess was wrong.
+        /// </summary>
+        public string Origin { get; private set; }
 
         private Uri FromStatedAuthUrl(string statedAuthUrl)
         {
@@ -280,8 +294,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 return declaredUri;
             }
 
-            _logger.Information(
-                "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}', on a different host than the API itself; this connection's key and secret will be sent to {TokenHost}.",
+            // Warning, not Information: this is the one line saying the connection's long-lived key and
+            // secret leave the address its operator configured, for one the API chose. A run that raises
+            // the level to Warning to quiet a long publish would otherwise lose exactly that.
+            _logger.Warning(
+                "The {ConnectionName:l} API declares its token endpoint as '{TokenEndpoint:l}', on a different address than the API itself; this connection's key and secret will be sent to '{TokenHost:l}'.",
                 _connectionName,
                 ForLog(declaredUri),
                 declaredUri.Authority

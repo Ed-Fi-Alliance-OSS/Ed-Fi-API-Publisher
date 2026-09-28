@@ -413,6 +413,39 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        [TestCase(HttpStatusCode.NotFound, true, TestName = "a 404 names where the address came from")]
+        [TestCase(HttpStatusCode.Unauthorized, false, TestName = "a 401 does not, being about the credentials")]
+        public void A_failed_token_request_should_say_where_the_address_came_from(
+            HttpStatusCode status,
+            bool shouldNameTheOrigin)
+        {
+            // After this branch the endpoint is read rather than composed, so a 404 means the address is
+            // wrong far more often than the key is. A 401 is still about the credentials and needs nothing.
+            const string Origin = "the address the API declares in its Discovery document";
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            A.CallTo(() => fakeRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily(() => new HttpResponseMessage(status));
+
+            TestHelpers.InitializeLogging();
+
+            Action buildManager = () => new BearerTokenManager(
+                "TestSource",
+                TestHelpers.GetSourceApiConnectionDetails(),
+                bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
+                new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                new Uri(TokenUrl),
+                timeProvider: null,
+                tokenEndpointOrigin: Origin);
+
+            var thrown = Assert.Throws<EdFiApiAuthenticationException>(buildManager);
+
+            Assert.That(thrown.ToString().Contains(Origin), Is.EqualTo(shouldNameTheOrigin));
+        }
+
+        [Test]
         public void A_token_endpoint_should_not_be_able_to_forge_a_log_line_with_its_error_body()
         {
             // The body of a failed token response is logged so an operator can read what the identity

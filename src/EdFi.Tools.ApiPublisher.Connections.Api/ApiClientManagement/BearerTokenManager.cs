@@ -3,6 +3,7 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Web;
@@ -54,6 +55,11 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         // log and the exception below are what reach an operator and whatever collects their logs. The
         // request itself keeps the address exactly as it was given.
         private readonly string _tokenEndpointForLog;
+
+        // Where the endpoint came from, as the resolver described it. A token request that fails because
+        // the address is wrong looks exactly like one that fails because the credentials are wrong, and
+        // after this branch the address is the likelier of the two.
+        private readonly string _tokenEndpointOrigin;
         private readonly ITimer _refreshTimer;
         private readonly TimeSpan _configuredRefreshInterval;
         private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
@@ -90,7 +96,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             int bearerTokenRefreshMinutes,
             HttpClientHandler httpClientHandler,
             Uri tokenEndpoint,
-            TimeProvider timeProvider = null
+            TimeProvider timeProvider = null,
+            string tokenEndpointOrigin = null
         )
         {
             _connectionDetails =
@@ -105,6 +112,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
             _tokenEndpoint = tokenEndpoint ?? throw new ArgumentNullException(nameof(tokenEndpoint));
             _tokenEndpointForLog = EdFiApiTokenEndpointResolver.ForLog(_tokenEndpoint);
+            _tokenEndpointOrigin = tokenEndpointOrigin;
 
             // Built on the transport handler itself, so a token request never passes through the handler that
             // recovers from a rejected token. It is also what keeps the "Snapshot-Identifier" header off these
@@ -541,7 +549,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 // The status belongs in the message as well as in the log entry above, because this is the message
                 // that travels up to the operator when the run ends.
                 throw new EdFiApiAuthenticationException(
-                    $"Authentication failed for {_displayName} API client: the token request to '{_tokenEndpointForLog}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}."
+                    $"Authentication failed for {_displayName} API client: the token request to '{_tokenEndpointForLog}' returned status {(int)authResponseMessage.StatusCode} {authResponseMessage.StatusCode}.{EndpointAdvice(authResponseMessage.StatusCode)}"
                 );
             }
 
@@ -675,6 +683,21 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// </remarks>
         private static string ForLog(string content) =>
             EdFiApiUrlSegmentResolver.ForLog(content, MaxLoggedAuthResponseLength);
+
+        /// <summary>
+        /// Adds where the endpoint came from, and what to set, for the statuses that say the address is
+        /// wrong rather than the credentials.
+        /// </summary>
+        /// <remarks>
+        /// A 401 or a 403 is about the key and the secret and needs nothing added. A 404 or a 405 says the
+        /// address serves nothing, or nothing that takes a POST, which after this branch is the likelier
+        /// fault: the endpoint is no longer composed, it is read from what the API declares.
+        /// </remarks>
+        private string EndpointAdvice(HttpStatusCode status) =>
+            _tokenEndpointOrigin is null
+            || (status != HttpStatusCode.NotFound && status != HttpStatusCode.MethodNotAllowed)
+                ? string.Empty
+                : $" That address is {_tokenEndpointOrigin}. If it is not where this API serves its token, state the right one on the connection.";
 
         private static string DescribeFailureCount(int consecutiveFailures) =>
             consecutiveFailures == 1

@@ -607,9 +607,11 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                     );
 
                 var offHostNotice = TestCorrelator.GetLogEventsFromCurrentContext()
-                    .Single(e => e.MessageTemplate.Text.Contains("different host"));
+                    .Single(e => e.MessageTemplate.Text.Contains("different address"));
 
-                offHostNotice.Level.ShouldBe(LogEventLevel.Information);
+                // Warning, so a run that raises the level to quiet a long publish keeps the one line saying
+                // the key and secret left the address its operator configured.
+                offHostNotice.Level.ShouldBe(LogEventLevel.Warning);
                 offHostNotice.RenderMessage().ShouldContain("identity.example");
             }
         }
