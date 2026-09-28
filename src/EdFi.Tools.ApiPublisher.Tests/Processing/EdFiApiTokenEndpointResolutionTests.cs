@@ -507,6 +507,35 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_declared_value_that_is_not_a_URL_at_all_should_be_refused()
+        {
+            // The one refusal in this resolver with no test. It is where a non-string urls.oauth lands,
+            // since Declares calls ToString on whatever JSON token it finds, and where anything Uri cannot
+            // resolve against the connection URL lands too.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor().Resolve(
+                    statedAuthUrl: null,
+                    DiscoveryDeclaring(("oauth", "http://"))));
+
+            exception.Message.ShouldContain("neither a URL nor a path");
+            exception.Message.ShouldContain("AuthUrl");
+        }
+
+        [Test]
+        public void A_stated_endpoint_still_carrying_a_placeholder_should_be_refused()
+        {
+            // A declared value gets this check; a stated one did not, though an operator copying a
+            // tenant-qualified example out of the documentation is exactly how one arrives.
+            var exception = Should.Throw<InvalidConfigurationException>(
+                () => ResolverFor().Resolve(
+                    "https://server/{tenant}/oauth/token",
+                    DiscoveryDocument.Unread));
+
+            exception.Message.ShouldContain("route placeholder");
+            exception.Message.ShouldContain("AuthUrl");
+        }
+
+        [Test]
         [TestCase("ftp://user:s3cr3t@idp/token", TestName = "with an authority")]
         [TestCase("user:s3cr3t@idp/token", TestName = "with the user as the scheme")]
         public void A_refused_stated_endpoint_should_not_carry_its_credentials_into_the_message(string stated)

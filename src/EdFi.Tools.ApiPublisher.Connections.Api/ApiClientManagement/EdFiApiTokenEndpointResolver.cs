@@ -102,6 +102,17 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 );
             }
 
+            // The same check a declared URL gets. A stated value is likelier to carry one, not less: an
+            // operator copying a tenant-qualified example out of the documentation brings the '{tenant}'
+            // with it, and sending that as a request produces a 404 naming a URL with '%7B' in it, which
+            // reads as a defect in the tool rather than as a value that was never filled in.
+            if (EdFiApiUrlSegmentResolver.ContainsRoutePlaceholder(statedUri.ToString()))
+            {
+                throw new InvalidConfigurationException(
+                    $"The authentication URL stated for the {_connectionName} connection is '{ForLog(statedUri)}', which still carries a route placeholder. Set {ConfigurationPath()} to the address its callers use, with the placeholder resolved."
+                );
+            }
+
             _logger.Information(
                 "The {ConnectionName:l} connection states {ConfigurationKey:l}, so its token will be requested from '{TokenEndpoint:l}' and its Discovery document is not consulted for one.",
                 _connectionName,
