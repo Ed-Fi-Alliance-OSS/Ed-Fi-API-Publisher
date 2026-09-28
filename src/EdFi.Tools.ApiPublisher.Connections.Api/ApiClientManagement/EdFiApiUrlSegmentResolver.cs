@@ -139,18 +139,21 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
         /// that has been through <see cref="Uri" /> is written as its <see cref="Uri.AbsoluteUri" />, which
         /// percent-encodes control characters; one that has not is escaped here.
         /// </remarks>
-        public static string ForLog(string value)
+        /// <param name="longestRendered">
+        /// How much of the value to keep. A URL is unreadable long before 200 characters, so that is the
+        /// default; a caller writing down something an API answered with, where the content is the whole
+        /// point of the entry, passes its own.
+        /// </param>
+        public static string ForLog(string value, int longestRendered = 200)
         {
-            const int LongestRendered = 200;
-
             if (string.IsNullOrEmpty(value))
             {
                 return value;
             }
 
-            var rendered = new StringBuilder(Math.Min(value.Length, LongestRendered) + 1);
+            var rendered = new StringBuilder(Math.Min(value.Length, longestRendered) + 1);
 
-            foreach (char character in value.Length > LongestRendered ? value[..LongestRendered] : value)
+            foreach (char character in value.Length > longestRendered ? value[..longestRendered] : value)
             {
                 if (char.IsControl(character) || IsLineOrDirectionMarker(character))
                 {
@@ -167,7 +170,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                 }
             }
 
-            if (value.Length > LongestRendered)
+            if (value.Length > longestRendered)
             {
                 rendered.Append("...");
             }

@@ -413,6 +413,66 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
+        public void A_token_endpoint_should_not_be_able_to_forge_a_log_line_with_its_error_body()
+        {
+            // The body of a failed token response is logged so an operator can read what the identity
+            // provider said. Serilog escapes a quotation mark inside a string scalar and writes a newline
+            // straight through, and the console and file templates are fixed and public, so a body carrying
+            // a line break forges an entry. This branch is what makes that body reachable from a host the
+            // API named rather than the one the operator configured.
+            // U+2028 is built rather than written: the C# lexer treats its escape as a line terminator
+            // even inside a string literal.
+            const char LineSeparator = (char)0x2028;
+            // Built from character codes: written as escapes, the C# lexer treats them as real line
+            // terminators inside the literal.
+            string forged = string.Concat(
+                "bad",
+                (char)13,
+                (char)10,
+                "[2026-09-28 00:00:00,000] [INFO] Everything is fine",
+                LineSeparator,
+                "also fine");
+
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl);
+
+            A.CallTo(() => fakeRequestHandler.Post(A<string>.Ignored, A<HttpRequestMessage>.Ignored))
+                .Returns(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                {
+                    Content = new StringContent(forged)
+                });
+
+            TestHelpers.InitializeLogging();
+
+            using (TestCorrelator.CreateContext())
+            {
+                Action buildManager = () => new BearerTokenManager(
+                    "TestSource",
+                    TestHelpers.GetSourceApiConnectionDetails(),
+                    bearerTokenRefreshMinutes: (int)ConfiguredInterval.TotalMinutes,
+                    new HttpClientHandlerFakeBridge(fakeRequestHandler),
+                    new Uri(TokenUrl));
+
+                Assert.Throws<EdFiApiAuthenticationException>(buildManager);
+
+                var reported = TestCorrelator.GetLogEventsFromCurrentContext()
+                    .Single(e => e.MessageTemplate.Text.Contains("Authentication of"));
+
+                string body = reported.Properties["Content"].ToString();
+
+                // The line break the template itself carries is not part of the property.
+                // Neither line terminator survives into the property the log writes.
+                Assert.That(body, Does.Not.Contain(((char)13).ToString()));
+                Assert.That(body, Does.Not.Contain(((char)10).ToString()));
+                Assert.That(body, Does.Not.Contain(LineSeparator.ToString()));
+
+                // And what the provider actually said is still legible.
+                Assert.That(body, Does.Contain("bad"));
+                Assert.That(body, Does.Contain("Everything is fine"));
+            }
+        }
+
+        [Test]
         public void A_failed_token_request_should_not_write_the_endpoint_userinfo_down()
         {
             // An endpoint may carry userinfo, whether an operator stated it or an API declared it. The

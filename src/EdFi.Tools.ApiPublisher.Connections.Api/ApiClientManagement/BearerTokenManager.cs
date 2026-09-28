@@ -536,7 +536,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     _tokenEndpointForLog,
                     authRequest.Method,
                     authResponseMessage.StatusCode,
-                    Truncate(authResponseContent)
+                    ForLog(authResponseContent)
                 );
 
                 // The status belongs in the message as well as in the log entry above, because this is the message
@@ -663,10 +663,19 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             return Convert.ToBase64String(plainTextBytes);
         }
 
-        private static string Truncate(string content) =>
-            content is not null && content.Length > MaxLoggedAuthResponseLength
-                ? content[..MaxLoggedAuthResponseLength] + "... (truncated)"
-                : content;
+        /// <summary>
+        /// Renders what the token endpoint answered with so that it cannot break out of the line it is
+        /// written on, keeping as much of it as the log allows.
+        /// </summary>
+        /// <remarks>
+        /// Serilog escapes a quotation mark inside a string scalar and writes a newline straight through,
+        /// and the console and file templates are fixed and public, so a body carrying a line break forges
+        /// an entry indistinguishable from a real one. Before the token endpoint was read from a Discovery
+        /// document this body could only come from the host the operator configured; it can now come from
+        /// one the API named.
+        /// </remarks>
+        private static string ForLog(string content) =>
+            EdFiApiUrlSegmentResolver.ForLog(content, MaxLoggedAuthResponseLength);
 
         private static string DescribeFailureCount(int consecutiveFailures) =>
             consecutiveFailures == 1
