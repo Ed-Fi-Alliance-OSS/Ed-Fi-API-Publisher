@@ -13,6 +13,7 @@ using EdFi.Tools.ApiPublisher.Core.Configuration;
 using EdFi.Tools.ApiPublisher.Tests.Helpers;
 using FakeItEasy;
 using NUnit.Framework;
+using Serilog.Sinks.TestCorrelator;
 
 namespace EdFi.Tools.ApiPublisher.Tests.Processing
 {
@@ -135,6 +136,56 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var thrown = Assert.Throws<InvalidConfigurationException>(buildClient);
 
             Assert.That(thrown.Message, Does.Contain("--ignoreSslErrors"));
+        }
+
+        [Test]
+        [TestCase("https://elsewhere.test/", true, TestName = "a redirect to another host is reported")]
+        [TestCase("https://test.source:8443/", true, TestName = "a redirect to another port is reported")]
+        [TestCase("http://test.source/", false, TestName = "the same address over another scheme is not")]
+        public void A_Discovery_document_served_by_another_address_should_be_reported(
+            string servedBy,
+            bool shouldWarn)
+        {
+            // The handler follows redirects, so the document may come from somewhere else, and what is read
+            // out of it is judged against the address the operator configured rather than the one that
+            // answered. HttpClient records the final address on RequestMessage; the fake does not set it,
+            // so it is set here the way a real redirect would leave it.
+            //
+            // The connection is at "https://test.source". The third case differs from it by scheme alone,
+            // which is the ordinary upgrade a root performs and must pass without a word; comparing the
+            // whole URL rather than the authority would warn on it, and that is what this case pins.
+            var fakeRequestHandler = A.Fake<IFakeHttpRequestHandler>()
+                .SetBaseUrl(MockRequests.SourceApiBaseUrl)
+                .SetDataManagementUrlSegment("data/v3")
+                .SetChangeQueriesUrlSegment("changeQueries/v1")
+                .OAuthToken()
+                .ApiVersionMetadata();
+
+            A.CallTo(() => fakeRequestHandler.Get($"{MockRequests.SourceApiBaseUrl}/", A<HttpRequestMessage>.Ignored))
+                .ReturnsLazily((string url, HttpRequestMessage request) =>
+                {
+                    var response = MockRequests.DiscoveryDocumentFor(fakeRequestHandler);
+                    response.RequestMessage = new HttpRequestMessage(HttpMethod.Get, new Uri(servedBy));
+
+                    return response;
+                });
+
+            TestHelpers.InitializeLogging();
+
+            using (TestCorrelator.CreateContext())
+            {
+                using var client = new EdFiApiClient(
+                    "TestClient",
+                    TestHelpers.GetSourceApiConnectionDetails(),
+                    60,
+                    false,
+                    new HttpClientHandlerFakeBridge(fakeRequestHandler));
+
+                Assert.That(
+                    TestCorrelator.GetLogEventsFromCurrentContext()
+                        .Any(e => e.MessageTemplate.Text.Contains("was served by")),
+                    Is.EqualTo(shouldWarn));
+            }
         }
 
         [Test]

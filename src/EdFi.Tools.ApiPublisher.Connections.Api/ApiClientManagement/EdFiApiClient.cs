@@ -98,8 +98,7 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
                     bearerTokenRefreshMinutes,
                     _httpClientHandler,
                     tokenEndpoint,
-                    timeProvider
-                ,
+                    timeProvider,
                     tokenEndpointOrigin: tokenEndpointResolver.Origin
                 );
 
@@ -261,6 +260,8 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
             {
                 using var response = discoveryRequestHttpClient.GetAsync("").GetAwaiter().GetResult();
 
+                WarnIfServedElsewhere(response, baseAddress);
+
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.Warning(
@@ -312,6 +313,39 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.ApiClientManagement
 
                 return DiscoveryDocument.Unread;
             }
+        }
+
+        /// <summary>
+        /// Reports when the Discovery document was served by an address other than the one this connection
+        /// states, which a redirect produces.
+        /// </summary>
+        /// <remarks>
+        /// The handler follows redirects, so the document may have come from somewhere else entirely. What
+        /// is read out of it, the paths and the token endpoint, is then judged against the address the
+        /// operator configured rather than against the one that answered, so a root that redirects has its
+        /// declarations trusted as though the configured host had made them.
+        /// <para>
+        /// Compared on the authority, which is host and port without the scheme, so the ordinary upgrade
+        /// from HTTP to HTTPS at the same address passes without a word. Measured: 'http://server/' and
+        /// 'https://server/' both have the authority 'server', while 'https://server:8443/' does not.
+        /// </para>
+        /// </remarks>
+        private void WarnIfServedElsewhere(HttpResponseMessage response, Uri baseAddress)
+        {
+            var servedBy = response.RequestMessage?.RequestUri;
+
+            if (servedBy is null
+                || string.Equals(servedBy.Authority, baseAddress.Authority, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _logger.Warning(
+                "The Discovery document for the {ConnectionName:l} API was served by '{ServedBy:l}', not by the address this connection states ('{BaseAddress}'). The paths this run uses, and the endpoint its key and secret are sent to, are read from that document, so they were chosen by a host the operator did not configure. Address the connection at the URL the API serves from, or remove the redirect.",
+                _name,
+                EdFiApiTokenEndpointResolver.ForLog(servedBy),
+                baseAddress
+            );
         }
 
         /// <summary>
