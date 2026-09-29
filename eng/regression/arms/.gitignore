@@ -1,2 +1,8 @@
 # Container log mounts for the arms (LOGS_FOLDER in each .env)
 .logs/
+
+# The arm definitions are committed (the root .gitignore ignores every *.env): they hold only the development
+# credentials the arm's own bootstrap creates, and a clean clone must be able to start an arm without a copy step.
+!arm-*.env
+# Per-workstation overrides (for example SOURCE_* pointed at Northridge), layered over arm-<name>.env by Get-Arm.
+arm-*.local.env

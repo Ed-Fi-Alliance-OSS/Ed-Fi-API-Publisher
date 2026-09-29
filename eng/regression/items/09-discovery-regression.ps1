@@ -25,6 +25,8 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '../lib/Regression.psm1') -Force
 
 $item = '09'
+# An exception anywhere below still ends in a result row (Complete-Item is not reached when a step throws).
+trap { exit (Complete-ItemAfterError -Item $item -ArmName $Arm -ResultsFile $ResultsFile -Failures $failures -ErrorRecord $_) }
 $armDef = Get-Arm $Arm   # not $arm: it would inherit the [string] constraint of the -Arm parameter
 $publisher = Resolve-Publisher -Path $PublisherPath -Image $PublisherImage
 $run = New-RunFolder -Item $item -ArmName $armDef.Name -RunRoot $RunRoot
@@ -37,7 +39,7 @@ if ($publisher.Mode -ne 'docker')
     exit (Complete-Item -Item $item -Arm $armDef -ResultsFile $ResultsFile -Failures $failures)
 }
 
-$baseline = Resolve-Publisher -Image $BaselineImage
+$baseline = Resolve-Publisher -Image $BaselineImage -Baseline
 $arguments = @('--disableCursorPaging=true', '--includeDescriptors=true')
 
 # Both runs go through the proxy so its journal holds every source request; the journal's URL shapes (path plus
@@ -47,7 +49,7 @@ function Get-JournalShapes
     param([string] $SaveAs)
 
     $journal = Get-ProxyJournal $armDef
-    if ($SaveAs) { $journal | ConvertTo-Json -Depth 6 -Compress | Set-Content (Join-Path $run $SaveAs) }
+    if ($SaveAs) { Save-ProxyJournal -Entries $journal -Path (Join-Path $run $SaveAs) -Compress }
 
     $shapes = @{}
     foreach ($entry in $journal)
@@ -82,6 +84,8 @@ $rc = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -LogNa
 $rcCounts = Compare-Counts -Arm $armDef -Log $rc.Log -ReportCsv (Join-Path $run 'rc-counts.csv')
 $rcShapes = Get-JournalShapes -SaveAs 'rc-proxy-journal.json'
 
+# An empty journal (runs that bypassed the proxy) would make every shape comparison below trivially equal.
+Assert-Condition $failures ($v13Shapes.Count -gt 0 -and $rcShapes.Count -gt 0) "the proxy journal holds the source requests of both runs ($($v13Shapes.Count) and $($rcShapes.Count) shapes)"
 Assert-Condition $failures ($v13.ExitCode -eq 0) "v1.3 run exited with 0 (was $($v13.ExitCode))"
 Assert-Condition $failures ($rc.ExitCode -eq 0) "release candidate run exited with 0 (was $($rc.ExitCode))"
 Assert-Condition $failures ($v13Counts.Mismatches.Count -eq 0) "v1.3 counts match ($($v13Counts.Mismatches.Count) mismatch(es))"

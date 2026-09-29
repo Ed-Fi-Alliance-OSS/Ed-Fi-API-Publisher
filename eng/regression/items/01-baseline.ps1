@@ -8,7 +8,8 @@
     Item 1: baseline full and incremental publish with offset/limit paging (APIPUB-125).
     Leg 1 publishes the whole source into an empty target and compares Total-Count per resource.
     Leg 2 changes one student on the source and publishes from the change version recorded before the change;
-    the target must carry the change afterwards and the counts must still match.
+    the target must carry the change afterwards, the counts must still match, and the run summary must show that only
+    the changed documents were attempted (at most -MaxIncrementalDocuments).
 #>
 [CmdletBinding()]
 param(
@@ -16,13 +17,16 @@ param(
     [string] $PublisherPath,
     [string] $PublisherImage,
     [string] $ResultsFile = (Join-Path $PSScriptRoot '../results/results-local.md'),
-    [string] $RunRoot
+    [string] $RunRoot,
+    [int] $MaxIncrementalDocuments = 10
 )
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '../lib/Regression.psm1') -Force
 
 $item = '01'
+# An exception anywhere below still ends in a result row (Complete-Item is not reached when a step throws).
+trap { exit (Complete-ItemAfterError -Item $item -ArmName $Arm -ResultsFile $ResultsFile -Failures $failures -ErrorRecord $_) }
 $armDef = Get-Arm $Arm   # not $arm: it would inherit the [string] constraint of the -Arm parameter
 $publisher = Resolve-Publisher -Path $PublisherPath -Image $PublisherImage
 $run = New-RunFolder -Item $item -ArmName $armDef.Name -RunRoot $RunRoot
@@ -62,6 +66,10 @@ else
     $incremental = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -LogName 'incremental.log' -Arguments @('--disableCursorPaging=true', "--lastChangeVersionProcessed=$before")
     $seconds += $incremental.Seconds
     Assert-Condition $failures ($incremental.ExitCode -eq 0) "incremental publish from change version $before exited with 0 (was $($incremental.ExitCode))"
+    # The window must limit what is read: an incremental publish that ignored it would republish the whole source,
+    # and every check below would still hold (the first arm B runs of 2026-09-25 did exactly that, 108,285 documents).
+    $total = Get-RunSummaryTotal $incremental.Log
+    Assert-Condition $failures ($null -ne $total -and $total.Attempted -ge 1 -and $total.Attempted -le $MaxIncrementalDocuments) "the incremental publish attempted only the changed documents ($(if ($total) { $total.Attempted } else { 'no run summary' }); at most $MaxIncrementalDocuments expected for one edited student)"
 
     $targetToken = Get-BearerToken $armDef.TargetUrl $armDef.TargetKey $armDef.TargetSecret
     $published = @(Invoke-Api -BaseUrl $armDef.TargetUrl -Token $targetToken -Resource '/ed-fi/students' -Query "?studentUniqueId=$($student.studentUniqueId)")

@@ -6,9 +6,11 @@
 <#
 .SYNOPSIS
     Item 4: token lifetime and 401 handling (APIPUB-119), the four scenarios from Ana's comment on APIPUB-125.
-      LongRun           a run crossing at least two refresh intervals; refresh lines present, no auth errors, no drops
+      LongRun           a run crossing at least two refresh intervals of the source client; interval = half the token
+                        lifetime (capped at the configured one), no auth errors, no drops
       Unauthorized401   the current token is invalidated mid-run; the 401 is replayed with a fresh token, nothing dropped
-      TokenEndpointDown token invalidated while the token endpoint is unreachable; Fatal entry and non-zero exit
+      TokenEndpointDown token invalidated while the token endpoint is unreachable; token requests during the outage,
+                        then a Fatal entry and a non-zero exit
       BadCredentials    wrong secret from the start; immediate non-zero exit (code 3), nothing dropped silently
     The long run needs real time: with a 30-minute token the derived refresh interval is 15 minutes, so run it on
     Northridge overnight, or set SOURCE_TOKEN_TIMEOUT_MINUTES=2 in the arm's .env for a dry run in minutes.
@@ -29,6 +31,8 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '../lib/Regression.psm1') -Force
 
 $item = '04'
+# An exception anywhere below still ends in a result row (Complete-Item is not reached when a step throws).
+trap { exit (Complete-ItemAfterError -Item $item -ArmName $Arm -ResultsFile $ResultsFile -Failures $failures -ErrorRecord $_) }
 $armDef = Get-Arm $Arm   # not $arm: it would inherit the [string] constraint of the -Arm parameter
 $publisher = Resolve-Publisher -Path $PublisherPath -Image $PublisherImage
 $run = New-RunFolder -Item $item -ArmName $armDef.Name -RunRoot $RunRoot
@@ -59,9 +63,20 @@ foreach ($scenario in ($Scenarios.Split(',') | ForEach-Object { $_.Trim() } | Wh
             $result = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -LogName 'long-run.log' -Arguments @('--includeDescriptors=true') -TimeoutMinutes $TimeoutMinutes
             $seconds += $result.Seconds
             Assert-Condition $failures ($result.ExitCode -eq 0) "long run exited with 0 (was $($result.ExitCode))"
-            Assert-Condition $failures (Test-LogContains $result.Log 'Bearer token refresh interval for') 'the startup log reports the refresh interval derived from the token lifetime'
-            $refreshes = Get-LogMatchCount $result.Log 'Bearer token refreshed successfully'
-            Assert-Condition $failures ($refreshes -ge 2) "at least two refreshes happened during the run ($refreshes; token lifetime $tokenMinutes min, run $(Format-Duration $result.Seconds))"
+            # The interval is min(configured, lifetime / 2) (BearerTokenRefreshPolicy); both inputs are on the line.
+            $intervalMatch = Select-String -Path $result.Log -Pattern 'Bearer token refresh interval for "source" API client set to ([\d.]+) minutes \(configured interval: ([\d.]+) minutes, token lifetime reported by the API: ([\d.]+) minutes\)' | Select-Object -First 1
+            $intervalOk = $false
+            if ($intervalMatch)
+            {
+                $interval, $configured, $lifetime = $intervalMatch.Matches[0].Groups[1..3] | ForEach-Object { [double] $_.Value }
+                $expected = [math]::Min($configured, $lifetime / 2)
+                $intervalOk = [math]::Abs($interval - $expected) -le 0.05
+            }
+            Assert-Condition $failures $intervalOk "the source refresh interval is half the token lifetime, capped at the configured interval ($(if ($intervalMatch) { "$interval min for a $lifetime min token, configured $configured" } else { 'no interval line for the source client' }))"
+            # Source refreshes only: the target client refreshes on its own schedule, and one interval crossed by both
+            # would otherwise count as two.
+            $refreshes = Get-LogMatchCount $result.Log 'Bearer token refreshed successfully for "source" API client'
+            Assert-Condition $failures ($refreshes -ge 2) "the source token was refreshed at least twice during the run ($refreshes; token lifetime $tokenMinutes min, run $(Format-Duration $result.Seconds))"
             Assert-Condition $failures (-not (Test-LogContains $result.Log 'rejected as unauthorized')) 'no request was rejected as unauthorized during the long run'
             $long = Compare-Counts -Arm $armDef -Log $result.Log -ReportCsv (Join-Path $run 'long-run-counts.csv')
             Assert-Condition $failures ($long.Mismatches.Count -eq 0) "long run counts match ($($long.Mismatches.Count) mismatch(es))"
@@ -103,6 +118,7 @@ foreach ($scenario in ($Scenarios.Split(',') | ForEach-Object { $_.Trim() } | Wh
             # so the publisher cannot re-acquire one: it must give up with a Fatal entry and a non-zero exit.
             Start-Scenario $scenario
             $script:faultIds = @()
+            $script:outageStartedAt = $null
             $tick = {
                 param($state)
                 if ($script:faultIds.Count -eq 0 -and $state.Seconds -ge $FaultAfterSeconds)
@@ -110,6 +126,7 @@ foreach ($scenario in ($Scenarios.Split(',') | ForEach-Object { $_.Trim() } | Wh
                     $authorization = Get-ProxyCurrentAuthorization $armDef
                     if ($authorization)
                     {
+                        $script:outageStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
                         $script:faultIds += Enable-ProxyFault $armDef 'token-unreachable'
                         $script:faultIds += Enable-ProxyFault $armDef '401-for-token' -Replace @{ AUTHORIZATION = $authorization }
                     }
@@ -122,6 +139,10 @@ foreach ($scenario in ($Scenarios.Split(',') | ForEach-Object { $_.Trim() } | Wh
             Assert-Condition $failures (-not $result.Killed) "the publisher gave up on its own before the $($tokenMinutes + 15) minute timeout"
             Assert-Condition $failures ($result.ExitCode -ne 0) "run with the token endpoint down exited non-zero (was $($result.ExitCode))"
             Assert-Condition $failures (Test-LogContains $result.Log '\[FATL\]') 'a Fatal log entry explains the exit'
+            # The exit must follow failed re-acquisition attempts, not an early give-up: the journal holds the token
+            # requests the proxy reset after the outage started.
+            $attempts = if ($script:outageStartedAt) { @(Get-ProxyJournal $armDef '/oauth/token' | Where-Object { $_.request.method -eq 'POST' -and [long] $_.request.loggedDate -ge $script:outageStartedAt }).Count } else { 0 }
+            Assert-Condition $failures ($attempts -gt 0) "the publisher tried to re-acquire the token during the outage ($attempts token request(s) after it started)"
         }
         'BadCredentials'
         {

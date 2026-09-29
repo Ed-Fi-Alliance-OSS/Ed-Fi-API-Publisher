@@ -27,6 +27,8 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '../lib/Regression.psm1') -Force
 
 $item = '12'
+# An exception anywhere below still ends in a result row (Complete-Item is not reached when a step throws).
+trap { exit (Complete-ItemAfterError -Item $item -ArmName $Arm -ResultsFile $ResultsFile -Failures $failures -ErrorRecord $_) }
 $armDef = Get-Arm $Arm   # not $arm: it would inherit the [string] constraint of the -Arm parameter
 $publisher = Resolve-Publisher -Path $PublisherPath -Image $PublisherImage
 $run = New-RunFolder -Item $item -ArmName $armDef.Name -RunRoot $RunRoot
@@ -69,11 +71,22 @@ Assert-Condition $failures ($throttled -gt 0) "the source answered 429 during th
 
 $waits = @(Select-String -Path $result.Log -Pattern 'rejected as too many requests by the .* API\. Waiting (\d+(?:\.\d+)?)s' | ForEach-Object { [double] $_.Matches[0].Groups[1].Value })
 Assert-Condition $failures ($waits.Count -gt 0) "the publisher logged the Retry-After waits ($($waits.Count) wait(s))"
-if ($waits.Count -gt 0)
+
+# The wait is measured where the source sees it, not taken from the publisher's own log line: for every 429, the gap
+# until the proxy received the next request for the same URL (both timestamps from the proxy's clock).
+$byUrl = $journal | Group-Object { $_.request.url }
+$gaps = @(foreach ($group in $byUrl)
 {
-    $shortest = ($waits | Measure-Object -Minimum).Minimum
-    Assert-Condition $failures ($shortest -ge $RetryAfterSeconds) "every wait honoured the Retry-After of ${RetryAfterSeconds}s (shortest $shortest s)"
-}
+    $entries = @($group.Group | Sort-Object { [long] $_.request.loggedDate })
+    for ($index = 0; $index -lt $entries.Count - 1; $index++)
+    {
+        if ($entries[$index].responseDefinition.status -eq 429) { ([long] $entries[$index + 1].request.loggedDate - [long] $entries[$index].request.loggedDate) / 1000.0 }
+    }
+})
+Assert-Condition $failures ($gaps.Count -gt 0) "the journal shows the requests that followed the 429s ($($gaps.Count) retried)"
+$shortest = if ($gaps.Count -gt 0) { ($gaps | Measure-Object -Minimum).Minimum } else { $null }
+# 50 ms of slack for the proxy's own timestamping; a retry that ignores Retry-After comes back within milliseconds.
+Assert-Condition $failures ($gaps.Count -gt 0 -and $shortest -ge ($RetryAfterSeconds - 0.05)) ("every retry after a 429 came at least the Retry-After of {0}s later (shortest gap {1:N2}s over {2} retries)" -f $RetryAfterSeconds, $shortest, $gaps.Count)
 Assert-Condition $failures (-not (Test-LogContains $result.Log 'still being rejected as too many requests')) 'no read ran out of retries'
 
 $peak = Measure-ProxyConcurrency $journal
@@ -82,6 +95,6 @@ Assert-Condition $failures ($peak -le $MaxConcurrent) "in-flight source requests
 $counts = Compare-Counts -Arm $armDef -Log $result.Log -ReportCsv (Join-Path $run 'counts.csv')
 Assert-Condition $failures ($counts.Mismatches.Count -eq 0) "counts match ($($counts.Mismatches.Count) mismatch(es))"
 
-$journal | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $run 'proxy-journal.json')
+Save-ProxyJournal -Entries $journal -Path (Join-Path $run 'proxy-journal.json')
 
-exit (Complete-Item -Item $item -Arm $armDef -ResultsFile $ResultsFile -Failures $failures -Counts $counts.Summary -Seconds $result.Seconds -Log $result.Log -Notes "cap $MaxConcurrent, journal peak $peak; retry budget $retryAttempts; $throttled x 429 with Retry-After $RetryAfterSeconds; $($waits.Count) waits")
+exit (Complete-Item -Item $item -Arm $armDef -ResultsFile $ResultsFile -Failures $failures -Counts $counts.Summary -Seconds $result.Seconds -Log $result.Log -Notes "cap $MaxConcurrent, journal peak $peak; retry budget $retryAttempts; $throttled x 429 with Retry-After $RetryAfterSeconds; $($waits.Count) waits logged, shortest retry gap $(if ($null -ne $shortest) { '{0:N2}s' -f $shortest } else { 'n/a' })")

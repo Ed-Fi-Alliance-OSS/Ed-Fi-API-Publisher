@@ -25,6 +25,8 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '../lib/Regression.psm1') -Force
 
 $item = '02'
+# An exception anywhere below still ends in a result row (Complete-Item is not reached when a step throws).
+trap { exit (Complete-ItemAfterError -Item $item -ArmName $Arm -ResultsFile $ResultsFile -Failures $failures -ErrorRecord $_) }
 $armDef = Get-Arm $Arm   # not $arm: it would inherit the [string] constraint of the -Arm parameter
 $publisher = Resolve-Publisher -Path $PublisherPath -Image $PublisherImage
 $run = New-RunFolder -Item $item -ArmName $armDef.Name -RunRoot $RunRoot
@@ -42,8 +44,20 @@ $outputFolder = Join-Path $run 'parity'
 $consoleLog = Join-Path $run 'parity-console.log'
 
 $stopwatch = [Diagnostics.Stopwatch]::StartNew()
-& $parityScript -PublisherPath $publisher.Path -SourceUrl $armDef.SourceUrl -SourceKey $armDef.SourceKey -SourceSecret $armDef.SourceSecret -OutputFolder $outputFolder -ExtraArgs '--ignoreIsolation=true', '--includeDescriptors=true' *>&1 | Tee-Object -FilePath $consoleLog
+# The parity script reports a mismatch with Write-Error, which is terminating here ($ErrorActionPreference = 'Stop');
+# it is caught so the assertions below still run against the console log and the report.
+$parityError = $null
+try
+{
+    & $parityScript -PublisherPath $publisher.Path -SourceUrl $armDef.SourceUrl -SourceKey $armDef.SourceKey -SourceSecret $armDef.SourceSecret -OutputFolder $outputFolder -ExtraArgs '--ignoreIsolation=true', '--includeDescriptors=true' *>&1 | Tee-Object -FilePath $consoleLog
+}
+catch
+{
+    $parityError = $_.Exception.Message
+    Add-Content -Path $consoleLog -Value "[regression harness] Compare-PagingParity.ps1 stopped: $parityError"
+}
 $stopwatch.Stop()
+Assert-Condition $failures ($null -eq $parityError) "Compare-PagingParity.ps1 finished without an error$(if ($parityError) { " ($parityError)" })"
 
 # The parity script exits 1 on a mismatch but ends without an explicit exit on success, so $LASTEXITCODE is not a
 # reliable verdict; its console output is.
@@ -59,7 +73,11 @@ if ($armDef.Name -eq 'A')
 }
 else
 {
-    Assert-Condition $failures (Test-LogContains $cursorLog 'using Cursor paging') 'the cursor run used cursor paging'
+    # Every resource, not just one: the resolver logs one "using <strategy> paging" line per resource, and on a 7.3
+    # source only the /deletes and /keyChanges streams (not part of a full publish) are offset-paged by design.
+    $strategies = @(Select-String -Path $cursorLog -Pattern '"(/[^"]+)": using (\w+) paging' | ForEach-Object { [pscustomobject]@{ Resource = $_.Matches[0].Groups[1].Value; Strategy = $_.Matches[0].Groups[2].Value } })
+    $offsetPaged = @($strategies | Where-Object { $_.Strategy -ne 'Cursor' -and $_.Resource -notmatch '/(deletes|keyChanges)$' } | ForEach-Object { $_.Resource })
+    Assert-Condition $failures ($strategies.Count -gt 0 -and $offsetPaged.Count -eq 0) "every resource of the cursor run used cursor paging ($($strategies.Count) resources, $($offsetPaged.Count) not: $($offsetPaged | Select-Object -First 3))"
     Assert-Condition $failures (-not (Test-LogContains $cursorLog 'offset/limit paging will be used')) 'no fallback to offset/limit on a 7.3 source'
 }
 

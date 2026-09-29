@@ -24,6 +24,8 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '../lib/Regression.psm1') -Force
 
 $item = 'D1'
+# An exception anywhere below still ends in a result row (Complete-Item is not reached when a step throws).
+trap { exit (Complete-ItemAfterError -Item $item -ArmName $Arm -ResultsFile $ResultsFile -Failures $failures -ErrorRecord $_) }
 $armDef = Get-Arm $Arm   # not $arm: it would inherit the [string] constraint of the -Arm parameter
 $publisher = Resolve-Publisher -Path $PublisherPath -Image $PublisherImage
 $run = New-RunFolder -Item $item -ArmName $armDef.Name -RunRoot $RunRoot
@@ -38,8 +40,12 @@ Assert-Condition $failures ($result.ExitCode -eq 0) "the publish into the DMS ex
 
 $targetHost = ([uri] $armDef.TargetUrl).Authority
 $targetUrls = @(Select-String -Path $result.Log -Pattern "https?://$([regex]::Escape($targetHost))[^\s'`"\]\)]*" -AllMatches | ForEach-Object { $_.Matches.Value } | Sort-Object -Unique)
-$allowedPrefixes = @($target.DataManagementApi, $target.Oauth, $target.BaseUrl.TrimEnd('/')) | Where-Object { $_ }
-$offRoute = @($targetUrls | Where-Object { $url = $_; -not ($allowedPrefixes | Where-Object { $url.StartsWith($_) }) })
+# Every URL must start with one the Discovery document advertises (dataManagementApi, oauth, dependencies, metadata,
+# ...). The base URL is allowed only as itself (the Discovery request): as a prefix it would admit every URL on the
+# host, a hardcoded /data/v3 included.
+$allowedPrefixes = @($target.Discovery.urls.PSObject.Properties | ForEach-Object { "$($_.Value)".TrimEnd('/') } | Where-Object { $_ })
+$baseUrl = $target.BaseUrl.TrimEnd('/')
+$offRoute = @($targetUrls | Where-Object { $url = $_; ($url.TrimEnd('/') -ne $baseUrl) -and -not ($allowedPrefixes | Where-Object { $url.StartsWith($_) }) })
 $targetUrls | Set-Content (Join-Path $run 'target-urls.txt')
 
 Assert-Condition $failures ($targetUrls.Count -gt 0) "the Debug log shows target URLs ($($targetUrls.Count) distinct)"

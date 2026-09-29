@@ -9,6 +9,7 @@
 .EXAMPLE
     .\Start-Arm.ps1 -Arm B                 # up, clone the templates, bootstrap the Admin database
     .\Start-Arm.ps1 -Arm B -ResetTarget    # put the target back to the empty minimal template
+    .\Start-Arm.ps1 -Arm B -ResetSource    # undo the source edits of items 1 and 8 (fresh populated template)
     .\Start-Arm.ps1 -Arm B -Down           # stop and remove the containers (volumes kept)
     .\Start-Arm.ps1 -Arm B -Down -Purge    # also remove the volumes
 #>
@@ -17,15 +18,22 @@ param(
     [Parameter(Mandatory)] [string] $Arm,
     [switch] $Down,
     [switch] $Purge,
-    [switch] $ResetTarget
+    [switch] $ResetTarget,
+    [switch] $ResetSource
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'lib/Regression.psm1') -Force
 
 $definition = Get-Arm $Arm
 
 if ($Down) { Stop-RegressionArm $definition -Purge:$Purge; return }
-if ($ResetTarget) { Reset-RegressionTarget $definition; return }
+if ($ResetTarget -or $ResetSource)
+{
+    if ($ResetSource) { Reset-RegressionSource $definition }
+    if ($ResetTarget) { Reset-RegressionTarget $definition }
+    return
+}
 
 Start-RegressionArm $definition
