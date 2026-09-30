@@ -7,7 +7,7 @@
 .SYNOPSIS
     Item D4: DMS self-contained authentication smoke (Keycloak disabled, the Config Service issues tokens)
     (APIPUB-146). Restart the DMS without -EnableKeycloak first (see arms/arm-d-dms.md). The oauth URL the DMS
-    advertises must then be served by the DMS stack itself, and a publish must complete.
+    advertises must then issue a token whose issuer is not a Keycloak realm, and a publish must complete.
 #>
 [CmdletBinding()]
 param(
@@ -32,13 +32,15 @@ Write-Host "Item $item DMS self-contained authentication on arm $($armDef.Name) 
 
 $target = Get-ApiUrls $armDef.TargetUrl
 Write-Host "  DMS oauth endpoint: $($target.Oauth)"
-$keycloakUrl = if ($armDef.Env.Contains('KEYCLOAK_URL')) { $armDef.Env['KEYCLOAK_URL'] } else { '' }
-$keycloakHost = if ($keycloakUrl) { ([uri] $keycloakUrl).Authority } else { $null }
-Assert-Condition $failures (-not $keycloakHost -or ([uri] $target.Oauth).Authority -ne $keycloakHost) "the advertised token endpoint is not Keycloak ($($target.Oauth))"
 
+# The advertised oauth host cannot tell the modes apart: the DMS fronts the token endpoint and advertises its own
+# address also when Keycloak issues the tokens (see D2). The token's issuer can: a Keycloak issuer is a realm URL. An
+# opaque token or one without iss fails here too, since then nothing shows which provider issued it.
 $token = $null
 try { $token = Get-BearerToken $armDef.TargetUrl $armDef.TargetKey $armDef.TargetSecret } catch { }
 Assert-Condition $failures ($null -ne $token) 'a bearer token can be obtained from the self-contained token endpoint with the arm D target credentials'
+$issuer = Get-JwtIssuer $token
+Assert-Condition $failures ($issuer -and "$issuer" -notmatch '/realms/') "the token was issued by the DMS itself, not Keycloak (iss '$issuer')"
 
 $result = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -Arguments @('--includeDescriptors=true')
 Assert-Condition $failures ($result.ExitCode -eq 0) "the publish exited with 0 (was $($result.ExitCode))"

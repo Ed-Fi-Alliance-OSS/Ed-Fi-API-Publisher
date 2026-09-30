@@ -93,6 +93,13 @@ foreach ($token in $itemTokens)
     else { throw "-ItemArguments must start with a parameter name (e.g. '-FaultAfterSeconds', '30'), not '$token'." }
 }
 
+# Checked once here: Write-ResultRow refuses a table without the Publisher column, and an item would only hit that
+# after its runs, inside its own error handler.
+if ((Test-Path $ResultsFile) -and -not ((Get-Content $ResultsFile) -match '^\| Date \| Item \| Arm \| Result \| Publisher \|'))
+{
+    throw "$ResultsFile has no '| Date | Item | Arm | Result | Publisher |' table header; add the Publisher column after Result or pass a new -ResultsFile."
+}
+
 # The results file names the release candidate once, in the line its template leaves for it.
 $rcPlaceholder = '^Release candidate under test: _to be filled in.*$'
 if ((Test-Path $ResultsFile) -and ((Get-Content $ResultsFile) -match $rcPlaceholder))

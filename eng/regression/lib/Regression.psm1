@@ -437,6 +437,20 @@ function Get-ApiUrls
     return $result
 }
 
+function Get-JwtIssuer
+{
+    # The iss claim of a JWT bearer token, or $null for an opaque token or one that does not decode. Used by D2 and D4
+    # to tell the identity provider apart: the DMS advertises its own oauth address in both modes (APIPUB-146), and a
+    # Keycloak token's issuer is a realm URL (.../realms/<realm>).
+    param([string] $Token)
+
+    if (-not $Token -or $Token.Split('.').Count -ne 3) { return $null }
+
+    $payload = $Token.Split('.')[1].Replace('-', '+').Replace('_', '/')
+    $payload = $payload.PadRight($payload.Length + (4 - $payload.Length % 4) % 4, '=')
+    try { return ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload)) | ConvertFrom-Json).iss } catch { return $null }
+}
+
 function Get-BearerToken
 {
     # Tokens are cached per URL and key: the ODS limits live tokens per client, and the helpers should not compete
@@ -581,8 +595,17 @@ function Get-PublisherIdentity
 
     if ($Image)
     {
-        $digest = & docker image inspect -f '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}' $Image 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $digest) { return "$Image (not pulled locally)" }
+        $inspect = { & docker image inspect -f '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}' $Image 2>$null }
+        $digest = & $inspect
+        if ($LASTEXITCODE -ne 0 -or -not $digest)
+        {
+            # Pull now rather than let docker run do it later: the identity is resolved once, before the first run,
+            # and every row of the run would otherwise go without the digest that ties it to the RC.
+            Write-Host "Pulling $Image to record its digest ..."
+            & docker pull --quiet $Image | Out-Null
+            $digest = & $inspect
+        }
+        if ($LASTEXITCODE -ne 0 -or -not $digest) { return "$Image (not found locally or in its registry)" }
         $digest = "$digest".Trim()
 
         return "$Image ($($digest -replace '^.*@', ''))"
@@ -619,7 +642,8 @@ function Expand-PublisherPackage
         if (Test-Path $folder) { Remove-Item -Recurse -Force $folder }
         New-Item -ItemType Directory -Force -Path $folder | Out-Null
         Write-Host "Extracting $([IO.Path]::GetFileName($packageFile)) to $folder ..."
-        Expand-Archive -Path $packageFile -DestinationPath $folder
+        # A nupkg is a zip; ZipFile does not look at the extension, which older Expand-Archive versions reject.
+        [IO.Compression.ZipFile]::ExtractToDirectory($packageFile, $folder)
         @([IO.Path]::GetFileName($packageFile), "sha256 $hash") | Set-Content $marker
     }
 
@@ -652,9 +676,12 @@ function ConvertTo-NetworkUrl
     if (-not $Url) { return $Url }
     $normalized = $Url.TrimEnd('/') + '/'
 
-    if ($normalized -eq $Arm.SourceUrl) { return $Arm.SourceUrlInNetwork }
-    if ($normalized -eq $Arm.TargetUrl) { return $Arm.TargetUrlInNetwork }
-    if ($Arm.ProxyUrl -and $normalized -eq $Arm.ProxyUrl) { return $Arm.ProxyUrlInNetwork }
+    # An external arm that leaves *_URL_IN_NETWORK empty (arm D's source) maps to its host-facing URL, so the
+    # localhost rewrite below still has to apply to the mapped value.
+    $mapped = if ($normalized -eq $Arm.SourceUrl) { $Arm.SourceUrlInNetwork }
+        elseif ($normalized -eq $Arm.TargetUrl) { $Arm.TargetUrlInNetwork }
+        elseif ($Arm.ProxyUrl -and $normalized -eq $Arm.ProxyUrl) { $Arm.ProxyUrlInNetwork }
+    if ($mapped) { $Url = $mapped; $normalized = $mapped.TrimEnd('/') + '/' }
 
     if ($normalized -match '^https?://(localhost|127\.0\.0\.1)[:/]')
     {
@@ -1572,6 +1599,11 @@ function Write-ResultRow
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
         ) | Set-Content $resolvedResults
     }
+    elseif (-not ((Get-Content $resolvedResults) -match '^\| Date \| Item \| Arm \| Result \| Publisher \|'))
+    {
+        # A table from before the Publisher column would take the row one cell off from Counts onwards.
+        throw "$resolvedResults has no '| Date | Item | Arm | Result | Publisher |' table header; add the Publisher column after Result or pass a new -ResultsFile."
+    }
 
     $logLink = ''
     if ($Log)
@@ -1667,7 +1699,7 @@ function Assert-Condition
 Export-ModuleMember -Function @(
     'Get-RegressionRoot', 'Read-EnvFile', 'Get-Arm', 'Invoke-ArmPsql', 'Wait-Url',
     'Start-RegressionArm', 'Stop-RegressionArm', 'Reset-RegressionTarget', 'Reset-RegressionSource', 'Get-RootEducationOrganizationIds',
-    'Get-ApiUrls', 'Get-BearerToken', 'Invoke-Api', 'Get-ResourceCount', 'Get-ApiResources', 'Get-NewestChangeVersion',
+    'Get-ApiUrls', 'Get-JwtIssuer', 'Get-BearerToken', 'Invoke-Api', 'Get-ResourceCount', 'Get-ApiResources', 'Get-NewestChangeVersion',
     'Resolve-Publisher', 'Get-PublisherIdentity', 'Expand-PublisherPackage', 'New-RunFolder', 'Invoke-Publisher',
     'Enable-ProxyFault', 'Disable-ProxyFault', 'Reset-ProxyMappings', 'Reset-ProxyJournal', 'Get-ProxyJournal', 'Save-ProxyJournal', 'Get-ProxyCurrentAuthorization', 'Get-ProxyPageReads', 'Test-ProxyPageReads', 'Measure-ProxyConcurrency',
     'Get-StreamedResources', 'Compare-Counts', 'Compare-RequestUrls', 'Get-RunSummaryTotal', 'Get-PublishedErrorRecords', 'Initialize-PostgreSqlConfigurationStore', 'Get-StoredLastChangeVersion', 'Test-LogContains', 'Get-LogMatchCount',

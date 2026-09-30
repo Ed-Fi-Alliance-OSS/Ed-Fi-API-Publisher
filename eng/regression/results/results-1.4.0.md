@@ -6,5 +6,5 @@ Arms: A = ODS/API 7.1 / DS 4.0.0, B = ODS/API 7.3.2 / DS 5.2.0, C = ODS/API 7.3.
 
 Release candidate under test: _to be filled in when the RC is cut (nupkg version, Docker image tag)._
 
-| Date | Item | Arm | Result | Counts | Duration | Log | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
+| Date | Item | Arm | Result | Publisher | Counts | Duration | Log | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |

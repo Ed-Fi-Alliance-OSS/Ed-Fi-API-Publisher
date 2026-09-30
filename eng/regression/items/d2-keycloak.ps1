@@ -43,13 +43,7 @@ Write-Host "  DMS oauth endpoint: $($target.Oauth)"
 $token = $null
 try { $token = Get-BearerToken $armDef.TargetUrl $armDef.TargetKey $armDef.TargetSecret } catch { }
 Assert-Condition $failures ($null -ne $token) 'a bearer token can be obtained from the advertised oauth endpoint with the arm D target credentials'
-$issuer = $null
-if ($token -and $token.Split('.').Count -eq 3)
-{
-    $payload = $token.Split('.')[1].Replace('-', '+').Replace('_', '/')
-    $payload = $payload.PadRight($payload.Length + (4 - $payload.Length % 4) % 4, '=')
-    try { $issuer = ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload)) | ConvertFrom-Json).iss } catch { }
-}
+$issuer = Get-JwtIssuer $token
 Assert-Condition $failures ("$issuer" -match '/realms/') "the token was issued by Keycloak (iss '$issuer')"
 
 $result = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -Arguments @('--includeDescriptors=true')
