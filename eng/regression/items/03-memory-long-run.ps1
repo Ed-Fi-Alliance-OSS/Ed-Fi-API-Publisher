@@ -147,9 +147,13 @@ foreach ($mode in ($PagingModes.Split(',') | ForEach-Object { $_.Trim() } | Wher
     $pageReads = @(Get-ProxyPageReads $armDef)
     $pageReads | Select-Object Resource, Paging, Successful, Failed, Partitions, @{ n = 'Duplicates'; e = { $_.Duplicates.Count } } |
         Export-Csv -NoTypeInformation -Path (Join-Path $run "$($mode.ToLowerInvariant())-page-reads.csv")
-    $pageProblems = @(Test-ProxyPageReads -PageReads $pageReads -CountRows $counts.Rows -PageSize $PageSize)
+    # Students, staffs and contacts are streamed a second time as "<resource>#Retry" (the authorization retry pass after
+    # their school associations), so each of their pages is read twice by design (arm B run of 2026-09-29).
+    $passes = @{}
+    foreach ($match in (Select-String -Path $result.Log -Pattern '(/[\w-]+/[\w-]+)#Retry' -AllMatches | ForEach-Object { $_.Matches })) { $passes[$match.Groups[1].Value] = 2 }
+    $pageProblems = @(Test-ProxyPageReads -PageReads $pageReads -CountRows $counts.Rows -PageSize $PageSize -Passes $passes)
     if ($pageProblems.Count -gt 0) { $pageProblems | Format-Table -AutoSize | Out-String -Width 200 | Write-Host }
-    Assert-Condition $failures ($pageReads.Count -gt 0 -and $pageProblems.Count -eq 0) "$mode run read every page of every resource exactly once per the proxy journal ($($pageProblems.Count) resource(s) off: $(($pageProblems | Select-Object -First 3 | ForEach-Object { $_.Resource }) -join ', '))"
+    Assert-Condition $failures ($pageReads.Count -gt 0 -and $pageProblems.Count -eq 0) "$mode run read every page of every resource once per pass per the proxy journal ($($pageProblems.Count) resource(s) off: $(($pageProblems | Select-Object -First 3 | ForEach-Object { $_.Resource }) -join ', '))"
     $countSummaries += "${mode}: $($counts.Summary)"
 }
 

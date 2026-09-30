@@ -1133,6 +1133,7 @@ function Get-ProxyPageReads
             Successful = $row.Successful
             Failed     = $row.Failed
             Duplicates = @($row.Urls.Keys | Where-Object { $row.Urls[$_] -gt 1 } | Sort-Object)
+            UrlHits    = $row.Urls
             Partitions = $row.Partitions
         }
     })
@@ -1150,10 +1151,13 @@ function Get-ProxyPageReads
       offset/limit  floor(T/S) + 1   (a full last page is followed by one empty continuation read), 0 or 1 when T = 0
       cursor        between ceil(T/S) + P and ceil(T/S) + 2P - 1 for P partitions (each walk ends on an empty page);
                     at least ceil(T/S) when the journal does not hold the /partitions body
+    A resource the publisher streams in more than one pass (-Passes, e.g. students, staffs and contacts, which get a
+    "#Retry" authorization pass after their school associations) reads every page once per pass: each URL may then be
+    answered that many times, and the expected counts are multiplied by the number of passes.
 #>
 function Test-ProxyPageReads
 {
-    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $PageReads, [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $CountRows, [Parameter(Mandatory)] [int] $PageSize)
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $PageReads, [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $CountRows, [Parameter(Mandatory)] [int] $PageSize, [hashtable] $Passes = @{})
 
     $readsByResource = @{}
     foreach ($read in $PageReads) { $readsByResource[$read.Resource] = $read }
@@ -1163,6 +1167,8 @@ function Test-ProxyPageReads
         if (-not ($count.Source -is [int])) { continue }
 
         $total = [int] $count.Source
+        $passCount = if ($Passes.ContainsKey($count.Resource)) { [int] $Passes[$count.Resource] } else { 1 }
+        $passNote = if ($passCount -gt 1) { " in $passCount passes" } else { '' }
         $read = $readsByResource[$count.Resource]
         if (-not $read)
         {
@@ -1170,9 +1176,10 @@ function Test-ProxyPageReads
             continue
         }
 
-        if ($read.Duplicates.Count -gt 0)
+        $overRead = @($read.UrlHits.Keys | Where-Object { $read.UrlHits[$_] -gt $passCount } | Sort-Object)
+        if ($overRead.Count -gt 0)
         {
-            [pscustomobject]@{ Resource = $count.Resource; Problem = "$($read.Duplicates.Count) page URL(s) answered 2xx more than once, first $($read.Duplicates[0])" }
+            [pscustomobject]@{ Resource = $count.Resource; Problem = "$($overRead.Count) page URL(s) answered 2xx more than $passCount time(s)$passNote, first $($overRead[0])" }
             continue
         }
 
@@ -1181,18 +1188,18 @@ function Test-ProxyPageReads
         {
             'Offset'
             {
-                $expected = if ($total -eq 0) { @(0, 1) } else { @([math]::Floor($total / $PageSize) + 1) }
-                if ($read.Successful -notin $expected) { [pscustomobject]@{ Resource = $count.Resource; Problem = "$($read.Successful) successful offset page read(s) for $total item(s) at page size $PageSize (expected $($expected -join ' or '))" } }
+                $expected = if ($total -eq 0) { @(0, $passCount) } else { @(([math]::Floor($total / $PageSize) + 1) * $passCount) }
+                if ($read.Successful -notin $expected) { [pscustomobject]@{ Resource = $count.Resource; Problem = "$($read.Successful) successful offset page read(s) for $total item(s) at page size $PageSize$passNote (expected $($expected -join ' or '))" } }
             }
             'Cursor'
             {
                 if ($null -ne $read.Partitions)
                 {
-                    $low = $pages + $read.Partitions
-                    $high = $pages + [math]::Max(2 * $read.Partitions - 1, $read.Partitions)
-                    if ($read.Successful -lt $low -or $read.Successful -gt $high) { [pscustomobject]@{ Resource = $count.Resource; Problem = "$($read.Successful) successful cursor page read(s) for $total item(s) in $($read.Partitions) partition(s) at page size $PageSize (expected $low to $high)" } }
+                    $low = ($pages + $read.Partitions) * $passCount
+                    $high = ($pages + [math]::Max(2 * $read.Partitions - 1, $read.Partitions)) * $passCount
+                    if ($read.Successful -lt $low -or $read.Successful -gt $high) { [pscustomobject]@{ Resource = $count.Resource; Problem = "$($read.Successful) successful cursor page read(s) for $total item(s) in $($read.Partitions) partition(s) at page size $PageSize$passNote (expected $low to $high)" } }
                 }
-                elseif ($read.Successful -lt $pages) { [pscustomobject]@{ Resource = $count.Resource; Problem = "$($read.Successful) successful cursor page read(s) for $total item(s) at page size $PageSize (expected at least $pages)" } }
+                elseif ($read.Successful -lt ($pages * $passCount)) { [pscustomobject]@{ Resource = $count.Resource; Problem = "$($read.Successful) successful cursor page read(s) for $total item(s) at page size $PageSize$passNote (expected at least $($pages * $passCount))" } }
             }
             'None'
             {
@@ -1317,17 +1324,20 @@ function Compare-Counts
 function Get-RequestUrlShapes
 {
     # Every URL in a log, reduced to scheme, host, path and the query parameter NAMES, so paging values do not
-    # count as differences between two runs.
+    # count as differences between two runs. A backslash ends a URL: v1.4 logs the Discovery document as an escaped
+    # JSON string (\"http://host/data/v3/\"). A bare base URL (path "/") is left out: v1.4 names the base it
+    # resolves Discovery routes against ("relative to 'http://proxy:8080/'"), which v1.3 used without logging it.
     param([Parameter(Mandatory)] [string] $Log)
 
     $shapes = New-Object System.Collections.Generic.HashSet[string]
-    foreach ($match in (Select-String -Path $Log -Pattern "https?://[^\s'`"\]\)]+" -AllMatches))
+    foreach ($match in (Select-String -Path $Log -Pattern "https?://[^\s'`"\]\)\\]+" -AllMatches))
     {
         foreach ($url in $match.Matches.Value)
         {
             $url = $url.TrimEnd('.', ',', ';')
             $parts = $url.Split('?', 2)
             $shape = $parts[0]
+            if ($parts.Count -eq 1 -and $shape -match '^https?://[^/]+/?$') { continue }
             if ($parts.Count -eq 2)
             {
                 $names = @($parts[1].Split('&') | ForEach-Object { $_.Split('=')[0] } | Sort-Object -Unique)
