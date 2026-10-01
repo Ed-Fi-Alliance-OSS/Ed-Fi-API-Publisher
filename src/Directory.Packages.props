@@ -10,10 +10,10 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="AWSSDK.CloudWatchLogs" Version="4.0.104.3" />
+    <PackageVersion Include="AWSSDK.CloudWatchLogs" Version="4.0.105" />
     <PackageVersion Include="AWSSDK.Core" Version="4.0.102.1" />
-    <PackageVersion Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.101.4" />
-    <PackageVersion Include="AWSSDK.SimpleSystemsManagement" Version="4.0.103.9" />
+    <PackageVersion Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.102.1" />
+    <PackageVersion Include="AWSSDK.SimpleSystemsManagement" Version="4.0.104.1" />
     <PackageVersion Include="Amazon.Extensions.Configuration.SystemsManager" Version="7.1.1" />
     <PackageVersion Include="Autofac" Version="8.4.0" />
     <PackageVersion Include="Autofac.Extensions.DependencyInjection" Version="10.0.0" />
@@ -23,7 +23,7 @@
     <PackageVersion Include="FluentAssertions" Version="8.11.0" />
     <PackageVersion Include="Jering.Javascript.NodeJS" Version="7.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeStyle" Version="4.14.0" />
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.0" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
@@ -53,7 +53,7 @@
     <PackageVersion Include="Serilog.Sinks.TestCorrelator" Version="4.0.2" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <PackageVersion Include="SmartFormat" Version="3.6.1" />
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.34.0.3385" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" />
     <PackageVersion Include="System.Data.SqlClient" Version="4.9.1" />
     <PackageVersion Include="System.DirectoryServices.Protocols" Version="10.0.12" />
     <PackageVersion Include="System.Drawing.Common" Version="10.0.12" />
