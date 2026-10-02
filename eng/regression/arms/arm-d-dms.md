@@ -44,7 +44,7 @@ The runner tells a DMS from an ODS/API by the version its Discovery document rep
 
 - copies the source's school years into the target after `TARGET_RESET_COMMAND`, because the publisher never publishes `schoolYearTypes` and a reprovisioned DMS data store has none;
 - starts retries at 1000 ms (`--retryStartingDelayMilliseconds=1000`), because the DMS answers transient 500s under the default concurrency;
-- expects the shortfall listed in `KNOWN_TARGET_REJECTIONS` (source records the DMS rejects as invalid and an ODS/API accepts) and tolerates exactly that many rejected documents. The committed values are Grand Bend's; set the key empty, or to the right values, in `arm-d.local.env` for another source.
+- expects the shortfall listed in `KNOWN_TARGET_REJECTIONS` (source records the DMS rejects as invalid and an ODS/API accepts) and tolerates exactly that many rejected documents, when the source is an ODS/API. A DMS source never holds those records. The committed values are Grand Bend's; set the key empty, or to the right values, in `arm-d.local.env` for another source.
 
 ## DMS as the source
 

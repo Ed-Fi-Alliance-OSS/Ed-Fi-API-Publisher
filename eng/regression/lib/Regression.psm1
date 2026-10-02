@@ -811,6 +811,7 @@ function Invoke-Publisher
     $memoryCsv = [IO.Path]::ChangeExtension($log, '.memory.csv')
     $argumentsFile = [IO.Path]::ChangeExtension($log, '.args.txt')
     $targetIsDms = try { (Get-ApiUrls $TargetUrl).IsDms } catch { $false }
+    $sourceIsDms = try { (Get-ApiUrls $SourceUrl).IsDms } catch { $false }
     if ($targetIsDms -and $TargetUrl -eq $Arm.TargetUrl) { Initialize-DmsTargetSchoolYears $Arm }
 
     if ($Publisher.Mode -eq 'docker')
@@ -843,7 +844,8 @@ function Invoke-Publisher
     # into exit 1. Tolerating exactly their number keeps the exit code meaningful; Compare-Counts still checks that
     # the rejected documents are those and no others.
     $knownRejectionTotal = 0
-    if ($targetIsDms) { foreach ($count in (Get-KnownTargetRejections $Arm).Values) { $knownRejectionTotal += $count } }
+    # Only an ODS/API source holds them: a DMS source never accepted them in the first place.
+    if ($targetIsDms -and -not $sourceIsDms) { foreach ($count in (Get-KnownTargetRejections $Arm).Values) { $knownRejectionTotal += $count } }
     if ($knownRejectionTotal -gt 0 -and -not ($Arguments | Where-Object { $_ -like '--toleratedItemErrorCount=*' })) { $Arguments = @("--toleratedItemErrorCount=$knownRejectionTotal") + $Arguments }
     $allArguments = $connectionArguments + $Arguments
 
@@ -1416,8 +1418,9 @@ function Compare-Counts
     if (-not $Resources) { $Resources = Get-StreamedResources $Log }
     if (-not $Resources) { throw "No streamed resources found in '$Log'; nothing to compare." }
 
-    # Only a DMS target rejects these records; an ODS/API target must hold all of them.
-    $knownRejections = if ((Get-ApiUrls $TargetUrl).IsDms) { Get-KnownTargetRejections $Arm } else { @{} }
+    # Only a DMS target rejects these records, and only an ODS/API source holds them (a DMS source rejected them when
+    # it was loaded). Every other pairing must match exactly.
+    $knownRejections = if ((Get-ApiUrls $TargetUrl).IsDms -and -not (Get-ApiUrls $SourceUrl).IsDms) { Get-KnownTargetRejections $Arm } else { @{} }
 
     $rows = foreach ($resource in $Resources)
     {
