@@ -4,7 +4,7 @@
   "priority": 1,
   "request": {
     "method": "GET",
-    "urlPathPattern": "/data/v3/ed-fi/educationContents"
+    "urlPathPattern": "__DATA_PATH__/ed-fi/educationContents"
   },
   "response": {
     "status": 200,
