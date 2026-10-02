@@ -819,6 +819,12 @@ function Invoke-Publisher
     # shipped 100 ms starting delay a different handful of documents exhausts its retries on every run; with 1000 ms
     # none did (APIPUB-124 comment 99404). Read from the host-side URL, before any in-network rewrite.
     if (-not ($Arguments | Where-Object { $_ -like '--retryStartingDelayMilliseconds=*' }) -and $targetIsDms) { $Arguments = @('--retryStartingDelayMilliseconds=1000') + $Arguments }
+    # Source records a DMS target rejects as invalid (KNOWN_TARGET_REJECTIONS) would otherwise turn every full publish
+    # into exit 1. Tolerating exactly their number keeps the exit code meaningful; Compare-Counts still checks that
+    # the rejected documents are those and no others.
+    $knownRejectionTotal = 0
+    if ($targetIsDms) { foreach ($count in (Get-KnownTargetRejections $Arm).Values) { $knownRejectionTotal += $count } }
+    if ($knownRejectionTotal -gt 0 -and -not ($Arguments | Where-Object { $_ -like '--toleratedItemErrorCount=*' })) { $Arguments = @("--toleratedItemErrorCount=$knownRejectionTotal") + $Arguments }
     $allArguments = $connectionArguments + $Arguments
 
     # Secrets and passwords are not written to the args file; everything else is, so a run can be repeated by hand.
@@ -1325,6 +1331,22 @@ function Get-StreamedResources
     Compares Total-Count on source and target for every resource the run streamed (or -Resources).
     Works for ODS/API and DMS targets alike because it goes through each instance's Discovery URLs.
 #>
+function Get-KnownTargetRejections
+{
+    # The arm's KNOWN_TARGET_REJECTIONS as a resource -> count map: source records a DMS target rejects as invalid
+    # while an ODS/API accepts them (see arms/arm-d.env). Empty for every other arm.
+    param([Parameter(Mandatory)] $Arm)
+
+    $map = @{}
+    foreach ($pair in "$(Get-EnvValue $Arm.Env 'KNOWN_TARGET_REJECTIONS')".Split(',', [StringSplitOptions]::RemoveEmptyEntries))
+    {
+        $resource, $count = $pair.Trim().Split('=')
+        $map[$resource.Trim()] = [int] $count
+    }
+
+    return $map
+}
+
 function Compare-Counts
 {
     param(
@@ -1348,13 +1370,17 @@ function Compare-Counts
 
     $sourceToken = Get-BearerToken $SourceUrl $SourceKey $SourceSecret
     $targetToken = Get-BearerToken $TargetUrl $TargetKey $TargetSecret
+    # Only a DMS target rejects these records; an ODS/API target must hold all of them.
+    $knownRejections = if ((Get-ApiUrls $TargetUrl).IsDms) { Get-KnownTargetRejections $Arm } else { @{} }
 
     $rows = foreach ($resource in $Resources)
     {
         $source = Get-ResourceCount $SourceUrl $sourceToken $resource
         $target = Get-ResourceCount $TargetUrl $targetToken $resource
-        # A count that could not be read is a mismatch even when both sides fail the same way ("ERR 403" on both).
-        [pscustomobject]@{ Resource = $resource; Source = $source; Target = $target; Match = (($source -is [int]) -and ($target -is [int]) -and ($source -eq $target)) }
+        $expectedShortfall = if ($knownRejections.ContainsKey($resource)) { $knownRejections[$resource] } else { 0 }
+        # A count that could not be read is a mismatch even when both sides fail the same way ("ERR 403" on both). A
+        # known rejection must account for the difference exactly, so any other shortfall still shows.
+        [pscustomobject]@{ Resource = $resource; Source = $source; Target = $target; ExpectedShortfall = $expectedShortfall; Match = (($source -is [int]) -and ($target -is [int]) -and ($source - $expectedShortfall -eq $target)) }
     }
 
     if ($ReportCsv) { $rows | Export-Csv -NoTypeInformation -Path $ReportCsv }
