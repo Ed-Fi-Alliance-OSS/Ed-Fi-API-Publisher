@@ -1079,8 +1079,28 @@ function Get-ProxyMappingFile
 
 <#
 .SYNOPSIS
+    The URL paths of the source's data and token endpoints as the proxy serves them, from the Discovery document the
+    source answers through the proxy: /data/v3 and /oauth/token for an ODS/API, /api/data and /api/oauth/token for a
+    DMS. Fault mappings and journal queries use these instead of assuming the ODS/API layout.
+#>
+function Get-ProxySourcePaths
+{
+    param([Parameter(Mandatory)] $Arm)
+
+    if (-not $Arm.ProxyUrl) { throw "Arm $($Arm.Name) has no PROXY_PORT; it has no proxy to read paths through." }
+    $urls = Get-ApiUrls $Arm.ProxyUrl
+
+    return [pscustomobject]@{
+        Data  = ([uri] $urls.DataManagementApi).AbsolutePath.TrimEnd('/')
+        Token = ([uri] $urls.Oauth).AbsolutePath.TrimEnd('/')
+    }
+}
+
+<#
+.SYNOPSIS
     Loads one fault mapping from proxy/mappings/<Name>.json into the arm's WireMock and returns its id.
     -Replace substitutes __TOKEN__ placeholders (URL_PATTERN, RETRY_AFTER, BASE_URL, ...) before loading.
+    __DATA_PATH__ and __TOKEN_PATH__ default to the source's paths (Get-ProxySourcePaths).
 #>
 function Enable-ProxyFault
 {
@@ -1089,6 +1109,13 @@ function Enable-ProxyFault
     if (-not $Arm.ProxyAdminUrl) { throw "Arm $($Arm.Name) has no PROXY_PORT; fault injection is unavailable." }
 
     $json = Get-Content (Get-ProxyMappingFile $Name) -Raw
+    if ($json -match '__(DATA|TOKEN)_PATH__')
+    {
+        $paths = Get-ProxySourcePaths $Arm
+        $Replace = $Replace.Clone()
+        if (-not $Replace.ContainsKey('DATA_PATH')) { $Replace['DATA_PATH'] = $paths.Data }
+        if (-not $Replace.ContainsKey('TOKEN_PATH')) { $Replace['TOKEN_PATH'] = $paths.Token }
+    }
     # -Literal replaces exact text (used to turn the quoted "__INVALID_ID__" placeholder into a JSON null, object or array).
     foreach ($text in $Literal.Keys) { $json = $json.Replace([string] $text, [string] $Literal[$text]) }
     foreach ($token in $Replace.Keys) { $json = $json.Replace("__${token}__", [string] $Replace[$token]) }
@@ -1808,7 +1835,7 @@ Export-ModuleMember -Function @(
     'Start-RegressionArm', 'Stop-RegressionArm', 'Reset-RegressionTarget', 'Reset-RegressionSource', 'Get-RootEducationOrganizationIds',
     'Get-ApiUrls', 'Get-JwtIssuer', 'Get-BearerToken', 'Invoke-Api', 'Get-ResourceCount', 'Get-ApiResources', 'Get-NewestChangeVersion',
     'Resolve-Publisher', 'Get-PublisherIdentity', 'Expand-PublisherPackage', 'New-RunFolder', 'Invoke-Publisher',
-    'Enable-ProxyFault', 'Disable-ProxyFault', 'Reset-ProxyMappings', 'Reset-ProxyJournal', 'Get-ProxyJournal', 'Save-ProxyJournal', 'Get-ProxyCurrentAuthorization', 'Get-ProxyPageReads', 'Test-ProxyPageReads', 'Measure-ProxyConcurrency',
+    'Get-ProxySourcePaths', 'Enable-ProxyFault', 'Disable-ProxyFault', 'Reset-ProxyMappings', 'Reset-ProxyJournal', 'Get-ProxyJournal', 'Save-ProxyJournal', 'Get-ProxyCurrentAuthorization', 'Get-ProxyPageReads', 'Test-ProxyPageReads', 'Measure-ProxyConcurrency',
     'Get-StreamedResources', 'Compare-Counts', 'Compare-RequestUrls', 'Get-RunSummaryTotal', 'Get-PublishedErrorRecords', 'Initialize-PostgreSqlConfigurationStore', 'Get-StoredLastChangeVersion', 'Test-LogContains', 'Get-LogMatchCount',
     'Format-Duration', 'Write-ResultRow', 'Complete-Item', 'Complete-ItemAfterError', 'New-FailureList', 'Assert-Condition'
 )
