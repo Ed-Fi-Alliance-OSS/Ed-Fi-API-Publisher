@@ -502,7 +502,10 @@ function Get-BearerToken
     if ($script:TokenCache.ContainsKey($cacheKey) -and $script:TokenCache[$cacheKey].Expires -gt (Get-Date)) { return $script:TokenCache[$cacheKey].Token }
 
     $urls = Get-ApiUrls $BaseUrl
-    $response = Invoke-RestMethod -Method Post -Uri $urls.Oauth -Body @{ grant_type = 'client_credentials'; client_id = $Key; client_secret = $Secret } -TimeoutSec 60
+    # HTTP Basic, as the publisher sends them: the DMS token endpoint rejects credentials in the form body with
+    # "Malformed Authorization header", and the ODS/API accepts either form.
+    $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$($Key):$($Secret)"))
+    $response = Invoke-RestMethod -Method Post -Uri $urls.Oauth -Headers @{ Authorization = "Basic $basic" } -Body @{ grant_type = 'client_credentials' } -TimeoutSec 60
     # Cached for half the lifetime the API reports (at most 20 minutes), so a short-lived token used by item 4 is not
     # served after it expired.
     $lifetimeSeconds = if ($response.PSObject.Properties['expires_in'] -and $response.expires_in) { [double] $response.expires_in } else { 2400 }
