@@ -1194,8 +1194,9 @@ function Save-ProxyJournal
 #>
 function Get-ProxyCurrentAuthorization
 {
-    param([Parameter(Mandatory)] $Arm, [string] $UrlPattern = '^/data/v3/')
+    param([Parameter(Mandatory)] $Arm, [string] $UrlPattern)
 
+    if (-not $UrlPattern) { $UrlPattern = "^$([regex]::Escape((Get-ProxySourcePaths $Arm).Data))/" }
     $entries = @(Get-ProxyJournal $Arm $UrlPattern | Where-Object { $_.request.headers -and $_.request.headers.PSObject.Properties['Authorization'] })
     if ($entries.Count -eq 0) { return $null }
 
@@ -1595,6 +1596,19 @@ function Get-PublishedErrorRecords
     return $records.ToArray()
 }
 
+function Get-StoreArm
+{
+    # The arm whose db-admin container holds the PostgreSQL configuration store: the arm itself for an ODS arm, or the
+    # arm STORE_ARM names for an external one (arm D has no database container of its own; it uses arm B's, on the
+    # network its publisher container already joins for the proxy, see arms/arm-d-dms.md).
+    param([Parameter(Mandatory)] $Arm)
+
+    $storeArm = Get-EnvValue $Arm.Env 'STORE_ARM'
+    if ($Arm.Type -eq 'ods' -or -not $storeArm) { return $Arm }
+
+    return Get-Arm $storeArm
+}
+
 <#
 .SYNOPSIS
     Creates the PostgreSQL configuration store of docs/ConfigurationStore/PostgreSql.md in the arm's db-admin container
@@ -1624,8 +1638,9 @@ function Initialize-PostgreSqlConfigurationStore
         $targetUrl = ConvertTo-NetworkUrl $Arm $targetUrl
     }
 
-    $exists = (Invoke-ArmPsql $Arm -Service db-admin -TuplesOnly -Sql "select 1 from pg_database where datname = '$Database'") -join ''
-    if ($exists.Trim() -ne '1') { Invoke-ArmPsql $Arm -Service db-admin -Sql "create database $Database" | Out-Null }
+    $storeArm = Get-StoreArm $Arm
+    $exists = (Invoke-ArmPsql $storeArm -Service db-admin -TuplesOnly -Sql "select 1 from pg_database where datname = '$Database'") -join ''
+    if ($exists.Trim() -ne '1') { Invoke-ArmPsql $storeArm -Service db-admin -Sql "create database $Database" | Out-Null }
 
     $prefix = '/ed-fi/apiPublisher/connections'
     $seed = if ($null -ne $LastChangeVersion) { "insert into dbo.configuration_value (configuration_key, configuration_value) values ('$prefix/$SourceName/lastChangeVersionsProcessed', '{`"$TargetName`": $LastChangeVersion}');" } else { '' }
@@ -1649,14 +1664,14 @@ $seed
 "@
     $setupFile = Join-Path $RunFolder 'store-setup.sql'
     Set-Content -Path $setupFile -Value $setup
-    Invoke-ArmPsql $Arm -Service db-admin -Database $Database -File $setupFile | Out-Null
+    Invoke-ArmPsql $storeArm -Service db-admin -Database $Database -File $setupFile | Out-Null
     Write-Host "  configuration store ready in db-admin/$Database ($SourceName -> $SourceUrl, $TargetName -> $targetUrl)"
 
-    $user = Get-EnvValue $Arm.Env 'POSTGRES_USER' 'postgres'
-    $password = Get-EnvValue $Arm.Env 'POSTGRES_PASSWORD'
+    $user = Get-EnvValue $storeArm.Env 'POSTGRES_USER' 'postgres'
+    $password = Get-EnvValue $storeArm.Env 'POSTGRES_PASSWORD'
     if ($Publisher.Mode -eq 'docker') { return "Host=db-admin;Port=5432;Database=$Database;Username=$user;Password=$password" }
 
-    return "Host=127.0.0.1;Port=$(Get-EnvValue $Arm.Env 'ADMIN_DB_PORT');Database=$Database;Username=$user;Password=$password"
+    return "Host=127.0.0.1;Port=$(Get-EnvValue $storeArm.Env 'ADMIN_DB_PORT');Database=$Database;Username=$user;Password=$password"
 }
 
 function Get-StoredLastChangeVersion
@@ -1664,7 +1679,7 @@ function Get-StoredLastChangeVersion
     # The change version the PostgreSQL configuration store records for one source and target pair, or $null.
     param([Parameter(Mandatory)] $Arm, [Parameter(Mandatory)] [string] $SourceName, [Parameter(Mandatory)] [string] $TargetName, [string] $Database = 'edfi_api_publisher_configuration')
 
-    $json = ((Invoke-ArmPsql $Arm -Service db-admin -Database $Database -TuplesOnly -Sql "select configuration_value from dbo.configuration_value where configuration_key = '/ed-fi/apiPublisher/connections/$SourceName/lastChangeVersionsProcessed'") -join '').Trim()
+    $json = ((Invoke-ArmPsql (Get-StoreArm $Arm) -Service db-admin -Database $Database -TuplesOnly -Sql "select configuration_value from dbo.configuration_value where configuration_key = '/ed-fi/apiPublisher/connections/$SourceName/lastChangeVersionsProcessed'") -join '').Trim()
     if (-not $json) { return $null }
 
     $values = ConvertFrom-Json $json
