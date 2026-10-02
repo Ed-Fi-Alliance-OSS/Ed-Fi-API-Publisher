@@ -81,9 +81,9 @@ foreach ($mode in ($PagingModes.Split(',') | ForEach-Object { $_.Trim() } | Wher
     Reset-RegressionTarget $armDef
     Reset-ProxyMappings $armDef
     Reset-ProxyJournal $armDef
-    # The source's data path as the proxy serves it, from its Discovery document: /data/v3 for an ODS/API, /api/data
-    # for a DMS. A fixed /data/v3 would never match a DMS source, so the fault would never fire and no page would count.
-    $dataPath = ([uri] (Get-ApiUrls $armDef.ProxyUrl).DataManagementApi).AbsolutePath.TrimEnd('/')
+    # The source's data path as the proxy serves it: /data/v3 for an ODS/API, /api/data for a DMS. A fixed /data/v3
+    # would never match a DMS source, so the fault would never fire and no page would count.
+    $dataPath = (Get-ProxySourcePaths $armDef).Data
 
     $script:faultId = $null
     $script:faultStartedAt = $null
