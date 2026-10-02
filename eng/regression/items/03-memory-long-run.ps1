@@ -81,6 +81,9 @@ foreach ($mode in ($PagingModes.Split(',') | ForEach-Object { $_.Trim() } | Wher
     Reset-RegressionTarget $armDef
     Reset-ProxyMappings $armDef
     Reset-ProxyJournal $armDef
+    # The source's data path as the proxy serves it, from its Discovery document: /data/v3 for an ODS/API, /api/data
+    # for a DMS. A fixed /data/v3 would never match a DMS source, so the fault would never fire and no page would count.
+    $dataPath = ([uri] (Get-ApiUrls $armDef.ProxyUrl).DataManagementApi).AbsolutePath.TrimEnd('/')
 
     $script:faultId = $null
     $script:faultStartedAt = $null
@@ -90,7 +93,7 @@ foreach ($mode in ($PagingModes.Split(',') | ForEach-Object { $_.Trim() } | Wher
         param($state)
         if (-not $script:faultId -and $state.Seconds -ge $FaultAfterSeconds)
         {
-            $script:faultId = Enable-ProxyFault $armDef '500-window' -Replace @{ URL_PATTERN = '/data/v3/.*' }
+            $script:faultId = Enable-ProxyFault $armDef '500-window' -Replace @{ URL_PATTERN = "$dataPath/.*" }
             $script:faultStartedAt = $state.Seconds
         }
         elseif ($script:faultId -and -not $script:faultDone -and $state.Seconds -ge ($script:faultStartedAt + $FaultSeconds))
@@ -132,7 +135,7 @@ foreach ($mode in ($PagingModes.Split(',') | ForEach-Object { $_.Trim() } | Wher
     }
     Assert-Condition $failures ($null -ne $script:faultId) "$mode run lasted long enough for the 500 window to start at ${FaultAfterSeconds}s (ran $($result.Seconds)s)"
 
-    $injected = @(Get-ProxyJournal $armDef '^/data/v3/' | Where-Object { $_.responseDefinition.status -eq 500 }).Count
+    $injected = @(Get-ProxyJournal $armDef "^$([regex]::Escape($dataPath))/" | Where-Object { $_.responseDefinition.status -eq 500 }).Count
     Assert-Condition $failures ($injected -gt 0) "$mode run hit the injected 500s ($injected responses)"
     $retried = Get-LogMatchCount $result.Log "failed with status 'InternalServerError'\. Retrying"
     Assert-Condition $failures ($retried -gt 0) "$mode run retried the failed page reads ($retried retry lines)"
@@ -144,7 +147,7 @@ foreach ($mode in ($PagingModes.Split(',') | ForEach-Object { $_.Trim() } | Wher
     # line is written once per resource by construction, so a resource re-read from its first page after a 500
     # would still log it once. In the journal the re-read shows as a page URL answered 2xx twice, or as more
     # successful page reads than the source's Total-Count needs at this page size.
-    $pageReads = @(Get-ProxyPageReads $armDef)
+    $pageReads = @(Get-ProxyPageReads $armDef -DataPath $dataPath)
     $pageReads | Select-Object Resource, Paging, Successful, Failed, Partitions, @{ n = 'Duplicates'; e = { $_.Duplicates.Count } } |
         Export-Csv -NoTypeInformation -Path (Join-Path $run "$($mode.ToLowerInvariant())-page-reads.csv")
     # Students, staffs and contacts are streamed a second time as "<resource>#Retry" (the authorization retry pass after
