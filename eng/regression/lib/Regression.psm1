@@ -406,6 +406,7 @@ function Reset-RegressionTarget
         & pwsh -NoProfile -Command $command
         if ($LASTEXITCODE -ne 0) { throw "TARGET_RESET_COMMAND failed ($LASTEXITCODE): $command" }
         Wait-Url $Arm.TargetUrl -TimeoutSeconds 300
+        if ((Get-ApiUrls $Arm.TargetUrl).IsDms) { Copy-SchoolYearTypes $Arm }
 
         return
     }
@@ -417,6 +418,29 @@ function Reset-RegressionTarget
     Invoke-ArmPsql $Arm -Service db-ods -Sql "create database `"$($Arm.TargetOdsDatabase)`" template `"EdFi_Ods_Minimal_Template`"" | Out-Null
     Invoke-ComposeArm $Arm @('start', 'api-target')
     Wait-Url $Arm.TargetUrl -TimeoutSeconds 300
+}
+
+<#
+.SYNOPSIS
+    Copies the source's school years into the target. The publisher never publishes schoolYearTypes (it drops them
+    from its dependency graph): an ODS/API database ships them, but a new DMS data store has none until its seed data
+    is loaded, and without them graduation plans and sessions fail and the failure cascades through every student
+    record (APIPUB-124 comment 99404). A POST of an existing school year updates it, so a repeat is harmless.
+#>
+function Copy-SchoolYearTypes
+{
+    param([Parameter(Mandatory)] $Arm)
+
+    $sourceToken = Get-BearerToken $Arm.SourceUrl $Arm.SourceKey $Arm.SourceSecret
+    $targetToken = Get-BearerToken $Arm.TargetUrl $Arm.TargetKey $Arm.TargetSecret
+    $years = @(Invoke-Api -BaseUrl $Arm.SourceUrl -Token $sourceToken -Resource '/ed-fi/schoolYearTypes' -Query '?limit=500')
+    foreach ($year in $years)
+    {
+        $body = [ordered]@{ schoolYear = $year.schoolYear; schoolYearDescription = $year.schoolYearDescription; currentSchoolYear = $year.currentSchoolYear }
+        Invoke-Api -BaseUrl $Arm.TargetUrl -Token $targetToken -Resource '/ed-fi/schoolYearTypes' -Method POST -Body $body | Out-Null
+    }
+
+    Write-Host "  Copied $($years.Count) school years from the source into the DMS target."
 }
 
 <#
@@ -577,7 +601,9 @@ function Get-ApiResources
     $dependencies = Invoke-RestMethod -Uri $dependenciesUrl -Headers @{ Authorization = "Bearer $Token" } -TimeoutSec 120
 
     $resources = @($dependencies | ForEach-Object { $_.resource } | Where-Object { $_ } | Select-Object -Unique)
-    if ($ExcludeDescriptors) { $resources = @($resources | Where-Object { $_ -notmatch 'Descriptors$' }) }
+    # Also leaves out schoolYearTypes, which the publisher never publishes: every target holds them before a run (an
+    # ODS/API template ships them, a DMS target is seeded by Copy-SchoolYearTypes), so they are not publisher output.
+    if ($ExcludeDescriptors) { $resources = @($resources | Where-Object { $_ -notmatch 'Descriptors$' -and $_ -notmatch '/schoolYearTypes$' }) }
 
     return $resources
 }
