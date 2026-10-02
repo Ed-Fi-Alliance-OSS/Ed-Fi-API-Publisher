@@ -43,7 +43,7 @@ To run the publisher as a container against the DMS, set `DOCKER_NETWORK` in `ar
 The runner tells a DMS from an ODS/API by the version its Discovery document reports (8.x for the DMS). For a DMS target it:
 
 - copies the source's school years into the target after `TARGET_RESET_COMMAND`, because the publisher never publishes `schoolYearTypes` and a reprovisioned DMS data store has none;
-- starts retries at 1000 ms (`--retryStartingDelayMilliseconds=1000`), because the DMS answers transient 500s under the default concurrency;
+- relies on the DMS PostgreSQL having enough connections. The DMS keeps a connection pool per data store, and with the compose default of `max_connections = 100` a run that uses two data stores (DMS to DMS) exhausts it: requests fail with `500` ("53300: sorry, too many clients already") and some documents are not published. Raise it before running arm D, for example `ALTER SYSTEM SET max_connections = 300;` in the `dms-postgresql` container followed by a restart of that container, the Configuration Service and the DMS;
 - expects the shortfall listed in `KNOWN_TARGET_REJECTIONS` (source records the DMS rejects as invalid and an ODS/API accepts) and tolerates exactly that many rejected documents, when the source is an ODS/API. A DMS source never holds those records. The committed values are Grand Bend's; set the key empty, or to the right values, in `arm-d.local.env` for another source.
 
 ## DMS as the source
