@@ -447,6 +447,21 @@ function Copy-SchoolYearTypes
     Write-Host "  Copied $($years.Count) school years from the source into the DMS target."
 }
 
+function Initialize-DmsTargetSchoolYears
+{
+    # Seeds the arm's DMS target with the source's school years when it has none. Reset-RegressionTarget seeds them
+    # after a reset, but D1, D2, D4 and D5 publish without resetting first, and a run into a target without school years
+    # fails every student record. Measured: the 409s this produces are retried with backoff, which turned D1 into a run
+    # of more than 30 minutes.
+    param([Parameter(Mandatory)] $Arm)
+
+    $targetToken = Get-BearerToken $Arm.TargetUrl $Arm.TargetKey $Arm.TargetSecret
+    $existing = Get-ResourceCount $Arm.TargetUrl $targetToken '/ed-fi/schoolYearTypes'
+    if ($existing -is [int] -and $existing -gt 0) { return }
+
+    Copy-SchoolYearTypes $Arm
+}
+
 <#
 .SYNOPSIS
     Puts the arm's source back to the shipped populated template, undoing the edits items 1 and 8 make (an edited
@@ -836,6 +851,7 @@ function Invoke-Publisher
     $memoryCsv = [IO.Path]::ChangeExtension($log, '.memory.csv')
     $argumentsFile = [IO.Path]::ChangeExtension($log, '.args.txt')
     $targetIsDms = try { (Get-ApiUrls $TargetUrl).IsDms } catch { $false }
+    if ($targetIsDms -and $TargetUrl -eq $Arm.TargetUrl) { Initialize-DmsTargetSchoolYears $Arm }
 
     if ($Publisher.Mode -eq 'docker')
     {
