@@ -1416,13 +1416,16 @@ function Compare-Counts
     if (-not $Resources) { $Resources = Get-StreamedResources $Log }
     if (-not $Resources) { throw "No streamed resources found in '$Log'; nothing to compare." }
 
-    $sourceToken = Get-BearerToken $SourceUrl $SourceKey $SourceSecret
-    $targetToken = Get-BearerToken $TargetUrl $TargetKey $TargetSecret
     # Only a DMS target rejects these records; an ODS/API target must hold all of them.
     $knownRejections = if ((Get-ApiUrls $TargetUrl).IsDms) { Get-KnownTargetRejections $Arm } else { @{} }
 
     $rows = foreach ($resource in $Resources)
     {
+        # Tokens are fetched per resource (Get-BearerToken caches them for half their lifetime): counting every
+        # resource of a DMS takes longer than one token lives, and a token taken once up front ran out partway and
+        # turned the last resources into "ERR 401".
+        $sourceToken = Get-BearerToken $SourceUrl $SourceKey $SourceSecret
+        $targetToken = Get-BearerToken $TargetUrl $TargetKey $TargetSecret
         $source = Get-ResourceCount $SourceUrl $sourceToken $resource
         $target = Get-ResourceCount $TargetUrl $targetToken $resource
         $expectedShortfall = if ($knownRejections.ContainsKey($resource)) { $knownRejections[$resource] } else { 0 }
