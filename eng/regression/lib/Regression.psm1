@@ -467,6 +467,8 @@ function Get-ApiUrls
         DataManagementApi = ("$($urls.dataManagementApi)").TrimEnd('/')
         Oauth             = "$($urls.oauth)"
         ChangeQueries     = if ($urls.PSObject.Properties['changeQueries']) { ("$($urls.changeQueries)").TrimEnd('/') } else { $null }
+        # The ODS/API reports version 7.x or earlier; the DMS (Ed-Fi API v8) reports 8.x.
+        IsDms             = $(try { ([version] "$($discovery.version)").Major -ge 8 } catch { $false })
         Discovery         = $discovery
     }
 
@@ -803,6 +805,7 @@ function Invoke-Publisher
     $errorLog = [IO.Path]::ChangeExtension($log, '.err.log')
     $memoryCsv = [IO.Path]::ChangeExtension($log, '.memory.csv')
     $argumentsFile = [IO.Path]::ChangeExtension($log, '.args.txt')
+    $targetIsDms = try { (Get-ApiUrls $TargetUrl).IsDms } catch { $false }
 
     if ($Publisher.Mode -eq 'docker')
     {
@@ -826,6 +829,10 @@ function Invoke-Publisher
     # Use-Snapshot header answers 404 "Snapshot not found" (seen on the first live run of item 1). Isolation is
     # therefore off unless the item sets --ignoreIsolation itself (the pre-7 stub is the only case that wants it on).
     if (-not ($Arguments | Where-Object { $_ -like '--ignoreIsolation=*' })) { $Arguments = @('--ignoreIsolation=true') + $Arguments }
+    # A DMS target answers transient 500s (PostgreSQL serialization failures) under the default concurrency. With the
+    # shipped 100 ms starting delay a different handful of documents exhausts its retries on every run; with 1000 ms
+    # none did (APIPUB-124 comment 99404). Read from the host-side URL, before any in-network rewrite.
+    if (-not ($Arguments | Where-Object { $_ -like '--retryStartingDelayMilliseconds=*' }) -and $targetIsDms) { $Arguments = @('--retryStartingDelayMilliseconds=1000') + $Arguments }
     $allArguments = $connectionArguments + $Arguments
 
     # Secrets and passwords are not written to the args file; everything else is, so a run can be repeated by hand.
