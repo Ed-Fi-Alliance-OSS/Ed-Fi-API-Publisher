@@ -876,10 +876,6 @@ function Invoke-Publisher
     # Use-Snapshot header answers 404 "Snapshot not found" (seen on the first live run of item 1). Isolation is
     # therefore off unless the item sets --ignoreIsolation itself (the pre-7 stub is the only case that wants it on).
     if (-not ($Arguments | Where-Object { $_ -like '--ignoreIsolation=*' })) { $Arguments = @('--ignoreIsolation=true') + $Arguments }
-    # A DMS target answers transient 500s (PostgreSQL serialization failures) under the default concurrency. With the
-    # shipped 100 ms starting delay a different handful of documents exhausts its retries on every run; with 1000 ms
-    # none did (APIPUB-124 comment 99404). Read from the host-side URL, before any in-network rewrite.
-    if (-not ($Arguments | Where-Object { $_ -like '--retryStartingDelayMilliseconds=*' }) -and $targetIsDms) { $Arguments = @('--retryStartingDelayMilliseconds=1000') + $Arguments }
     # Source records a DMS target rejects as invalid (KNOWN_TARGET_REJECTIONS) would otherwise turn every full publish
     # into exit 1. Tolerating exactly their number keeps the exit code meaningful; Compare-Counts still checks that
     # the rejected documents are those and no others.
