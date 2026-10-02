@@ -163,6 +163,10 @@ function Get-Arm
     }
 
     $proxyPort = Get-EnvValue $values 'PROXY_PORT'
+    # The path the source's Discovery document answers at behind the proxy: empty for an ODS/API, "api/" for a DMS
+    # (arm D with a DMS source, see arms/arm-d-dms.md).
+    $proxyBasePath = (Get-EnvValue $values 'PROXY_BASE_PATH' '').Trim('/')
+    if ($proxyBasePath) { $proxyBasePath += '/' }
 
     return [pscustomobject]@{
         Name               = $armName
@@ -177,9 +181,9 @@ function Get-Arm
         TargetUrl          = $targetUrl
         SourceUrlInNetwork = $sourceInNetwork
         TargetUrlInNetwork = $targetInNetwork
-        ProxyUrl           = if ($proxyPort) { "http://127.0.0.1:$proxyPort/" } else { $null }
+        ProxyUrl           = if ($proxyPort) { "http://127.0.0.1:$proxyPort/$proxyBasePath" } else { $null }
         ProxyAdminUrl      = if ($proxyPort) { "http://127.0.0.1:$proxyPort/__admin" } else { $null }
-        ProxyUrlInNetwork  = 'http://proxy:8080/'
+        ProxyUrlInNetwork  = "http://proxy:8080/$proxyBasePath"
         SourceKey          = Get-EnvValue $values 'SOURCE_KEY'
         SourceSecret       = Get-EnvValue $values 'SOURCE_SECRET'
         TargetKey          = Get-EnvValue $values 'TARGET_KEY'
