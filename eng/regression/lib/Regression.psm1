@@ -422,7 +422,8 @@ function Get-ApiUrls
     $result = [pscustomobject]@{
         BaseUrl           = "$key/"
         Version           = $discovery.version
-        Suite             = $discovery.suite
+        # The DMS Discovery document has no suite, and a missing property throws under strict mode.
+        Suite             = if ($discovery.PSObject.Properties['suite']) { $discovery.suite } else { $null }
         DataManagementApi = ("$($urls.dataManagementApi)").TrimEnd('/')
         Oauth             = "$($urls.oauth)"
         ChangeQueries     = if ($urls.PSObject.Properties['changeQueries']) { ("$($urls.changeQueries)").TrimEnd('/') } else { $null }
