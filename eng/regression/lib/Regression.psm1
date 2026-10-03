@@ -836,13 +836,21 @@ function Invoke-Publisher
     # Use-Snapshot header answers 404 "Snapshot not found" (seen on the first live run of item 1). Isolation is
     # therefore off unless the item sets --ignoreIsolation itself (the pre-7 stub is the only case that wants it on).
     if (-not ($Arguments | Where-Object { $_ -like '--ignoreIsolation=*' })) { $Arguments = @('--ignoreIsolation=true') + $Arguments }
-    # Source records a DMS target rejects as invalid (KNOWN_TARGET_REJECTIONS) would otherwise turn every full publish
-    # into exit 1. Tolerating exactly their number keeps the exit code meaningful; Compare-Counts still checks that
-    # the rejected documents are those and no others.
-    $knownRejectionTotal = 0
-    # Only an ODS/API source holds them: a DMS source never accepted them in the first place.
-    if ($targetIsDms -and -not $sourceIsDms) { foreach ($count in (Get-KnownTargetRejections $Arm).Values) { $knownRejectionTotal += $count } }
-    if ($knownRejectionTotal -gt 0 -and -not ($Arguments | Where-Object { $_ -like '--toleratedItemErrorCount=*' })) { $Arguments = @("--toleratedItemErrorCount=$knownRejectionTotal") + $Arguments }
+    # Source records a DMS target rejects as invalid (KNOWN_TARGET_REJECTIONS) are left out of the run rather than
+    # tolerated: a tolerance also keeps the last change version from advancing (item 10) and would hide the rejection an
+    # item provokes on purpose (item 6). None of the listed resources has dependents, so excluding them drops nothing
+    # else. Only from an ODS/API source (a DMS source never accepted them) and only when the run is not already scoped
+    # to other resources by --include or --includeOnly.
+    if ($targetIsDms -and -not $sourceIsDms -and -not ($Arguments | Where-Object { $_ -match '^--(include|includeOnly)=' }))
+    {
+        $knownResources = @((Get-KnownTargetRejections $Arm).Keys)
+        if ($knownResources.Count -gt 0)
+        {
+            $existing = $Arguments | Where-Object { $_ -like '--exclude=*' } | Select-Object -First 1
+            $excluded = @(if ($existing) { $existing.Substring('--exclude='.Length).Split(',') }) + $knownResources | Select-Object -Unique
+            $Arguments = @($Arguments | Where-Object { $_ -notlike '--exclude=*' }) + "--exclude=$($excluded -join ',')"
+        }
+    }
     $allArguments = $connectionArguments + $Arguments
 
     # Secrets and passwords are not written to the args file; everything else is, so a run can be repeated by hand.

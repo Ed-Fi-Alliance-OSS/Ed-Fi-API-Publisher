@@ -44,7 +44,7 @@ The runner tells a DMS from an ODS/API by the version its Discovery document rep
 
 - copies the source's school years into the target after `TARGET_RESET_COMMAND`, because the publisher never publishes `schoolYearTypes` and a reprovisioned DMS data store has none;
 - relies on the DMS PostgreSQL having enough connections. The DMS keeps a connection pool per data store, and with the compose default of `max_connections = 100` a run that uses two data stores (DMS to DMS) exhausts it: requests fail with `500` ("53300: sorry, too many clients already") and some documents are not published. Raise it before running arm D, for example `ALTER SYSTEM SET max_connections = 300;` in the `dms-postgresql` container followed by a restart of that container, the Configuration Service and the DMS;
-- expects the shortfall listed in `KNOWN_TARGET_REJECTIONS` (source records the DMS rejects as invalid and an ODS/API accepts) and tolerates exactly that many rejected documents, when the source is an ODS/API. A DMS source never holds those records. The committed values are Grand Bend's; set the key empty, or to the right values, in `arm-d.local.env` for another source.
+- excludes the resources listed in `KNOWN_TARGET_REJECTIONS` (source records the DMS rejects as invalid and an ODS/API accepts) when the source is an ODS/API, unless the item scopes the run with `--include` or `--includeOnly`. Excluding them, rather than tolerating their rejection, keeps the exit code and the last change version behaving as on any other run. A DMS source never holds those records. The committed values are Grand Bend's; set the key empty, or to the right values, in `arm-d.local.env` for another source.
 
 ## DMS as the source
 
