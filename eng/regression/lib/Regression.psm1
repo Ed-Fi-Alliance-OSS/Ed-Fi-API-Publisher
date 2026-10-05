@@ -881,15 +881,16 @@ function Invoke-Publisher
     # item provokes on purpose (item 6). None of the listed resources has dependents, so excluding them drops nothing
     # else. Only from an ODS/API source (a DMS source never accepted them) and only when the run is not already scoped
     # to other resources by --include or --includeOnly.
-    if ($targetIsDms -and -not $sourceIsDms -and -not ($Arguments | Where-Object { $_ -match '^--(include|includeOnly)=' }))
+    # Resources a DMS source and an ODS/API target hold differently by design (KNOWN_DMS_TO_ODS_DIVERGENCES) are left
+    # out the same way, from a DMS source into an ODS/API target only.
+    $knownResources = @()
+    if ($targetIsDms -and -not $sourceIsDms) { $knownResources = @((Get-KnownTargetRejections $Arm).Keys) }
+    if ($sourceIsDms -and -not $targetIsDms) { $knownResources = @(Get-KnownDmsToOdsDivergences $Arm) }
+    if ($knownResources.Count -gt 0 -and -not ($Arguments | Where-Object { $_ -match '^--(include|includeOnly)=' }))
     {
-        $knownResources = @((Get-KnownTargetRejections $Arm).Keys)
-        if ($knownResources.Count -gt 0)
-        {
-            $existing = $Arguments | Where-Object { $_ -like '--exclude=*' } | Select-Object -First 1
-            $excluded = @(if ($existing) { $existing.Substring('--exclude='.Length).Split(',') }) + $knownResources | Select-Object -Unique
-            $Arguments = @($Arguments | Where-Object { $_ -notlike '--exclude=*' }) + "--exclude=$($excluded -join ',')"
-        }
+        $existing = $Arguments | Where-Object { $_ -like '--exclude=*' } | Select-Object -First 1
+        $excluded = @(if ($existing) { $existing.Substring('--exclude='.Length).Split(',') }) + $knownResources | Select-Object -Unique
+        $Arguments = @($Arguments | Where-Object { $_ -notlike '--exclude=*' }) + "--exclude=$($excluded -join ',')"
     }
     $allArguments = $connectionArguments + $Arguments
 
@@ -1439,6 +1440,16 @@ function Get-KnownTargetRejections
     }
 
     return $map
+}
+
+function Get-KnownDmsToOdsDivergences
+{
+    # The arm's KNOWN_DMS_TO_ODS_DIVERGENCES as a list of resources: a DMS source and an ODS/API target hold them
+    # differently by design, so publishing them from a DMS into an ODS/API cannot make the counts match (see
+    # arms/arm-d.env). Empty for every other arm.
+    param([Parameter(Mandatory)] $Arm)
+
+    return @("$(Get-EnvValue $Arm.Env 'KNOWN_DMS_TO_ODS_DIVERGENCES')".Split(',', [StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { $_.Trim() })
 }
 
 function Compare-Counts
