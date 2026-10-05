@@ -89,6 +89,8 @@ function Invoke-SourceEdit
 
     $classPeriod = $Documents.Period.Body | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $classPeriod.classPeriodName = $edits.NewName
+    # A DMS requires the id in a PUT body; an ODS/API ignores it (the URL's id wins).
+    $classPeriod | Add-Member -NotePropertyName id -NotePropertyValue $Documents.Period.Id -Force
     $put = Invoke-Api -BaseUrl $armDef.SourceUrl -Token $sourceToken -Resource "/ed-fi/classPeriods/$($Documents.Period.Id)" -Method PUT -Body $classPeriod
     Assert-Condition $failures ([int] $put.StatusCode -in 200, 204) "round ${Round}: class period '$($edits.OldName)' re-keyed to '$($edits.NewName)' on the source (HTTP $($put.StatusCode))"
 
