@@ -19,6 +19,8 @@ From `Data-Management-Service/eng/docker-compose` (PowerShell 7):
 
 Data Standard 5.2 matches arm B (the source). The `.env.ds52` overlay in that folder selects the DS 5.2 schema packages; `.env.ds61` exists for a 6.1 pairing with arm C if that is wanted later.
 
+Provision every data store with the SchemaTools (`api-schema-tools`) built from the same revision as the running DMS image; point `DMS_SCHEMA_TOOL_PATH` at it if the local checkout is not at that revision. The provisioning script otherwise uses the build in the checkout, and the effective schema hash does not change when only the generated tables do, so a mismatch goes unnoticed until a request fails. Seen here: data stores provisioned by an older SchemaTools lacked the tracked-change `DocumentId` column the image expects, and `/deletes` and `/keyChanges` for students, staffs and contacts answered `500`.
+
 Then create the DMS client the publisher writes with (`setup-keycloak.ps1` for the Keycloak realm and client; the Config Service API for the vendor and application) and put its key and secret as `TARGET_KEY` / `TARGET_SECRET` in `arm-d.local.env` (git-ignored; `Get-Arm` layers it over the committed `arm-d.env`). The publisher discovers the DMS token endpoint from the Discovery document (`urls.oauth`, APIPUB-109), so no token URL is configured here.
 
 ## Two identity modes
