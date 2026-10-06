@@ -3,6 +3,7 @@
 # The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 # See the LICENSE and NOTICES files in the project root for more information.
 
+#Requires -Version 7.4
 <#
 .SYNOPSIS
     Starts, resets or stops one regression arm (A, B, C from Docker Hub images; D is external, see arms/arm-d-dms.md).

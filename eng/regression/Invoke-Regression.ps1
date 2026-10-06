@@ -3,6 +3,7 @@
 # The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 # See the LICENSE and NOTICES files in the project root for more information.
 
+#Requires -Version 7.4
 <#
 .SYNOPSIS
     Driver for the API Publisher regression (APIPUB-125 items 1 to 13, APIPUB-146 items D1 to D5).

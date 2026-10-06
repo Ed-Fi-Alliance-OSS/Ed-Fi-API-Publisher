@@ -68,8 +68,10 @@ services:
     volumes:
       - vol-db-ods:/var/lib/postgresql/data
     restart: unless-stopped
+    # -h localhost: over TCP. While the image's first-start init loads the templates, the entrypoint's temporary server
+    # answers pg_isready on the socket only, which made the arm "healthy" minutes before the templates existed.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-postgres} -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -d ${POSTGRES_DB:-postgres} -U ${POSTGRES_USER}"]
       start_period: "120s"
       interval: 10s
       retries: 30
@@ -87,7 +89,7 @@ services:
       - vol-db-admin:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-postgres} -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -d ${POSTGRES_DB:-postgres} -U ${POSTGRES_USER}"]
       start_period: "60s"
       interval: 10s
       retries: 30

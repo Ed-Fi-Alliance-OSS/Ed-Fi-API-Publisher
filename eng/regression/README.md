@@ -4,7 +4,7 @@ Scripted, repeatable execution of the release regression: the twelve items of [A
 
 ## Prerequisites
 
-- Windows or Linux workstation with **PowerShell 7.4+** and **Docker Desktop** (Compose v2), or Docker Engine on Linux. Around 6 GB of RAM free per running ODS arm.
+- Windows or Linux workstation with **PowerShell 7.4+** (`pwsh`; the scripts refuse Windows PowerShell 5.1, which strips the quotes the SQL identifiers need) and **Docker Desktop** (Compose v2), or Docker Engine on Linux. Around 6 GB of RAM free per running ODS arm.
 - Network access to Docker Hub (`edfialliance/*`, `wiremock/wiremock`).
 - The publisher under test, one of:
   - a local build: the **.NET 10 SDK**, `dotnet build -c Release`, then `src/EdFi.Tools.ApiPublisher.Cli/bin/Release/net10.0/EdFiApiPublisher.exe` (`-PublisherPath`);
@@ -13,6 +13,8 @@ Scripted, repeatable execution of the release regression: the twelve items of [A
 - Item 9 compares against the published `edfialliance/ods-api-publisher:v1.3.0` image (pulled on first use).
 - Free host ports, all bound to 127.0.0.1: 8101-8103, 8180, 5401 (arm A); 8201-8203, 8280, 5402 (arm B); 8301-8303, 8380, 5403 (arm C).
 - For arm D, the [Data-Management-Service](https://github.com/Ed-Fi-Alliance-OSS/Data-Management-Service) repository checked out next to this one (see `arms/arm-d-dms.md`).
+- For the Northridge long runs (items 3 and 4), a SQL Server instance on the Windows host with about 50 GB free, `sqlcmd` and 7-Zip (see "Northridge source"). Not needed for the arms.
+- No workstation at hand: `aws/` creates a Windows host in AWS with all of the above installed (see `aws/README.md` and "Running on the AWS host").
 
 ## Quick start
 
@@ -53,6 +55,7 @@ eng/regression/
   README.md                      this file
   Invoke-Regression.ps1          driver: -Arms A,B,C,D -Items 1..13,d1..d5 -PublisherPath|-PublisherPackage|-PublisherImage -Version
   Start-Arm.ps1                  up / -ResetTarget / -ResetSource / -Down [-Purge] for one arm
+  Start-NorthridgeSource.ps1     the Northridge source for the long runs: host database restore + the source API stack on 8001
   arms/
     ods-arm.yml                  one compose file for every ODS arm (source API, target API, two databases, proxy)
     arm-a.env, arm-b.env, arm-c.env   image tag, ports, credentials per arm; the only per-arm difference (committed)
@@ -60,6 +63,10 @@ eng/regression/
     arm-<x>.local.env            optional, git-ignored: per-workstation overrides of single keys (Northridge source, DMS client)
     arm-d-dms.md                 how to start the DMS with Keycloak or self-contained auth
     bootstrap-pgsql.sql          Admin bootstrap: two ODS instances, two API clients (psql variables from the .env)
+    northridge/                  Northridge source stack: northridge.yml + northridge.env (+ .local.env), the Admin DB SQL Server
+                                 build context, the host restore/login SQL and the Admin bootstrap (sqlcmd variables)
+  aws/
+    regression-host.yaml, bootstrap-host.ps1, Invoke-RegressionHost.ps1, README.md   a Windows EC2 host that runs all of this
   proxy/
     README.md, mappings/         WireMock fault definitions loaded on demand (500, 401, token outage, 429, invalid id, pre-7 stub)
   items/
@@ -83,6 +90,24 @@ eng/regression/
 Every ODS arm is two API containers over one shared Admin database: the source serves the Grand Bend populated template, the target the minimal template, each through its own API client. Both clients are associated with every top-level education organization the source template contains (read from the ODS at bootstrap time), because the TPDM sample data hangs off organizations outside the Grand Bend LEA and a client limited to the LEA cannot read them. Isolation is off (`--ignoreIsolation=true`) on every run because the images have no snapshot connection; the runner adds the switch unless an item sets it. The WireMock proxy sits in front of the source API and is transparent until an item enables a fault. The ports leave the Northridge stack (8001/8003) and the 7.1 side stack (8011) untouched, so all can run side by side.
 
 To point the functional items at another source (for example Northridge for the long runs), put the `SOURCE_*` values in `arms/arm-<x>.local.env`: `Get-Arm` layers it over the committed file (and hands docker compose a merged copy), so the committed definition stays as it is. Nothing else reads the machine's state.
+
+### Northridge source
+
+The memory and token-lifetime long runs (items 3 and 4) need the 10.6 M document Northridge dataset. It is not an arm: `Start-NorthridgeSource.ps1` serves it as a **source only** on `127.0.0.1:8001`, and the publisher's target stays arm B's. `arms/northridge/` holds one compose file (`northridge.yml`: the ODS/API 7.3.2 `-mssql` image for Data Standard 5.2.0 as `api-source`, an Admin/Security SQL Server Express container built from the upstream `ods-api-db-admin` mssql context because Docker Hub publishes no `-mssql` tag for it, optional Swagger) and `northridge.env` (+ git-ignored `northridge.local.env` overlay). The database itself lives on the **host SQL Server**: the script restores it from the public backup (`EdFi_Ods_Northridge_v73_20241218.7z`, 730 MB download, about 17 GB restored; downloaded into `arms/northridge/.backups`, git-ignored) when it does not exist, applies `fix-northridge-gradingperiodname.sql` once (the backup ships empty `GradingPeriodName` keys the target API rejects), creates or re-passwords the `edfi_docker` login the container uses, turns on mixed authentication and TCP 1433 if needed, adds a firewall rule for the local subnet, and sets `max server memory` when `-SqlMaxMemoryMB` is given. The backup has no `changes` or `tpdm` schema, so the API runs without TPDM and Change Queries and the publisher reads it with `--ignoreIsolation=true` (the harness default).
+
+```powershell
+cd eng/regression
+.\Start-NorthridgeSource.ps1                        # elevated PowerShell 7, Windows login that is sysadmin on the instance; ~20 min the first time
+.\Start-Arm.ps1 -Arm B                              # the target
+# paste the three lines the script printed into arms/arm-b.local.env:
+#   SOURCE_PORT=8001  SOURCE_KEY=northridgeKey  SOURCE_SECRET=northridgeSecret  PROXY_FORWARD_URL=http://host.docker.internal:8001
+.\Invoke-Regression.ps1 -Arms B -Items 3 -PublisherImage <tag> -SkipArmStart -Version 1.4.0
+.\Invoke-Regression.ps1 -Arms B -Items 4 -PublisherPath <exe> -SkipArmStart -Version 1.4.0
+# afterwards: delete arms/arm-b.local.env (or its SOURCE_* lines) and
+.\Start-NorthridgeSource.ps1 -Down                  # containers off; the host database stays (-Purge also drops the Admin volumes)
+```
+
+`-SkipArmStart` matters: starting arm B with the overlay in place would publish arm B's own source API on 8001 too. Items 3 and 4 read through arm B's proxy, which `PROXY_FORWARD_URL` points at the Northridge API; everything else in the items is unchanged. Keep the host quiet during the run: an earlier laptop run starved the host SQL Server when RAM was low (page reads hit the API's 30 s SQL timeout). The host SQL Server instance can be anything from 2019 up; the laptop used 2025 Developer, the AWS host 2022 Developer.
 
 ## Items
 
@@ -124,13 +149,40 @@ To point the functional items at another source (for example Northridge for the 
 
 ## Manual residue (what stays a workstation task)
 
-- **Items 3 and 4 on Northridge.** The memory and token-lifetime long runs need hours and the 10.6 M document Northridge source (SQL Server on the host). With arm B up, put `SOURCE_PORT=8001`, the Northridge client's `SOURCE_KEY` / `SOURCE_SECRET` and `PROXY_FORWARD_URL=http://host.docker.internal:8001` (items 3 and 4 read through the proxy, which otherwise forwards to arm B's own source API) in `arms/arm-b.local.env` and run the item overnight with `-SkipArmStart` (starting the arm with that file in place would try to publish arm B's source API on 8001 too); the scripts are the same. Remove the file afterwards. Earlier runs starved the host SQL Server when RAM was low, so keep the host quiet. Item 3's memory growth check needs at least 40 samples after the warm-up, so on Grand Bend it only warns.
+- **Items 3 and 4 on Northridge.** The memory and token-lifetime long runs need hours; the source is scripted (`Start-NorthridgeSource.ps1`, see "Northridge source") but the run is still started by hand, overnight, with the `arm-b.local.env` overlay and `-SkipArmStart`, and the overlay removed afterwards. Item 3's memory growth check needs at least 40 samples after the warm-up, so on Grand Bend it only warns.
 - **Item 4 dry run.** With the ODS default 30-minute token the refresh interval is 15 minutes; set `SOURCE_TOKEN_TIMEOUT_MINUTES=2` in `arms/arm-b.local.env` and restart the arm (`Start-Arm.ps1 -Arm B`) to exercise the refresh scenarios in minutes.
 - **Remediations** (`--remediationsScriptFile`). Not scripted: they need Node.js next to the publisher (the image has none), and a healthy ODS target gives no failure that a remediation plan is needed for, because the publisher resolves missing references itself. The unit and integration tests (`RemediationTests`, `RemediationIntegrationTests`) cover the Node.js plumbing; a manual run against a target with a staged data defect is recorded in the results file and on APIPUB-125.
 - **Item 2** needs the local build because the parity script reads the SQLite targets with the publisher's own assemblies.
 - **Items 3 and 9** need the publisher as a container (memory limit; v1.3 baseline image).
 - **Arm D** is started from the DMS repository; switching between Keycloak and self-contained auth (D2 vs D4) is a restart of that stack.
 - **Pre-7 isolation branch.** No arm has a source below ODS/API 7. `proxy/mappings/pre7-discovery.json` and `pre7-snapshots.json` stub a 6.2 Discovery document over a 7.x source so the snapshot branch can be exercised by hand: enable them with `-Replace @{ BASE_URL = $arm.ProxyUrl }`, run a publish through the proxy without `--ignoreIsolation`, and check for the `Snapshot-Identifier` header in the proxy journal. Not part of the scripted items.
+
+## Running on the AWS host
+
+`aws/` defines a Windows Server EC2 instance (`r7i.2xlarge`, 64 GB, Docker Desktop over WSL 2, SQL Server 2022 Developer, PowerShell 7, .NET 10 SDK, both repositories under `C:\GIT\Ed-Fi`) that runs the runbook exactly as a workstation does, reachable only through Systems Manager; `aws/README.md` has the permissions, the cost (about $0.90 per hour running, $24 per month stopped) and the operational rules. Deploy once with `aws\Invoke-RegressionHost.ps1 -Deploy`, then per run:
+
+```powershell
+# workstation
+cd eng/regression/aws
+.\Invoke-RegressionHost.ps1 -Start
+.\Invoke-RegressionHost.ps1 -Rdp                     # Administrator; -Password -KeyFile <pem> prints the password
+
+# host (RDP session; `pwsh` as administrator, not the "Windows PowerShell" shortcut)
+cd C:\GIT\Ed-Fi\Ed-Fi-API-Publisher
+git fetch; git checkout <release branch>; git pull
+dotnet build -c Release src\EdFi.Tools.ApiPublisher.Cli       # or build.ps1 -Command Package and -PublisherPackage
+cd eng\regression
+.\Start-Arm.ps1 -Arm B
+.\Invoke-Regression.ps1 -Arms B -Items 1,2,5,6,7,8,10,11,12,13 -Version 1.4.0 -PublisherPath ..\..\src\EdFi.Tools.ApiPublisher.Cli\bin\Release\net10.0\EdFiApiPublisher.exe -SkipArmStart
+.\Start-NorthridgeSource.ps1 -SqlMaxMemoryMB 20480            # first time: downloads and restores the backup (about 20 minutes)
+#   paste the printed lines into arms\arm-b.local.env, then items 3 and 4 as in "Northridge source"
+gh auth login; git add results; git commit                    # the result rows, with your own GitHub account
+
+# workstation, when the run is over
+.\Invoke-RegressionHost.ps1 -Stop
+```
+
+Disconnect the RDP session (do not sign out) while a long run is in progress: Docker Desktop and the running `pwsh` belong to the session. The arms, the proxy and the publisher behave as on a laptop; the only host-specific setting is `-SqlMaxMemoryMB 20480`, which leaves the other half of the RAM to Docker Desktop's VM (`.wslconfig` caps it at 32 GB).
 
 ## Recovery
 

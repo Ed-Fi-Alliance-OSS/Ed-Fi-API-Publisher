@@ -3,6 +3,7 @@
 # The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 # See the LICENSE and NOTICES files in the project root for more information.
 
+#Requires -Version 7.4
 <#
 .SYNOPSIS
     Shared functions for the API Publisher regression harness (APIPUB-125, APIPUB-146).
@@ -77,6 +78,38 @@ function Get-EnvValue
 
 <#
 .SYNOPSIS
+    Reads a committed .env definition plus its optional git-ignored <name>.local.env overlay (single keys overridden).
+    When the overlay exists, a merged copy is written under arms/.logs, because docker compose takes one --env-file
+    per call. Used for the arms (Get-Arm) and the Northridge source stack (Start-NorthridgeSource.ps1).
+    Returns @{ Values; EnvFile (the file compose should read); LocalFile; Overrides (the keys the overlay set) }.
+#>
+function Read-EnvDefinition
+{
+    param([Parameter(Mandatory)] [string] $EnvFile)
+
+    if (-not (Test-Path $EnvFile)) { throw "'$EnvFile' does not exist." }
+
+    $values = Read-EnvFile $EnvFile
+    $localFile = [IO.Path]::ChangeExtension($EnvFile, '.local.env')
+    $effectiveFile = $EnvFile
+    $overridden = @()
+    if (Test-Path $localFile)
+    {
+        $overrides = Read-EnvFile $localFile
+        foreach ($key in $overrides.Keys) { $values[$key] = $overrides[$key] }
+        $overridden = @($overrides.Keys)
+
+        $mergedFolder = Join-Path $script:RegressionRoot 'arms/.logs'
+        New-Item -ItemType Directory -Force -Path $mergedFolder | Out-Null
+        $effectiveFile = Join-Path $mergedFolder "$([IO.Path]::GetFileNameWithoutExtension($EnvFile)).merged.env"
+        ($values.Keys | ForEach-Object { "$_=$($values[$_])" }) | Set-Content $effectiveFile
+    }
+
+    return @{ Values = $values; EnvFile = $effectiveFile; LocalFile = $localFile; Overrides = $overridden }
+}
+
+<#
+.SYNOPSIS
     Loads an arm definition from arms/arm-<name>.env and derives the URLs the item scripts use.
     ODS arms (ARM_TYPE=ods) run from arms/ods-arm.yml; the DMS arm (ARM_TYPE=dms) points at an
     externally started stack (see arms/arm-d-dms.md).
@@ -99,19 +132,12 @@ function Get-Arm
         throw "Unknown arm '$armName': '$envFile' does not exist. Arms defined in ${armsFolder}: $($known -join ', '). To add one, copy arm-b.env (see README, 'Adding an arm or an item')."
     }
 
-    $values = Read-EnvFile $envFile
-    $localFile = [IO.Path]::ChangeExtension($envFile, '.local.env')
-    if (Test-Path $localFile)
+    $definition = Read-EnvDefinition $envFile
+    $values = $definition.Values
+    $envFile = $definition.EnvFile
+    if ($definition.Overrides.Count -gt 0)
     {
-        $overrides = Read-EnvFile $localFile
-        foreach ($key in $overrides.Keys) { $values[$key] = $overrides[$key] }
-        Write-Host "Arm $armName uses local overrides from $([IO.Path]::GetFileName($localFile)): $($overrides.Keys -join ', ')"
-
-        # Compose takes one --env-file per call here, so it reads a merged copy (under the git-ignored .logs folder).
-        $mergedFolder = Join-Path $armsFolder '.logs'
-        New-Item -ItemType Directory -Force -Path $mergedFolder | Out-Null
-        $envFile = Join-Path $mergedFolder "arm-$($armName.ToLowerInvariant()).merged.env"
-        ($values.Keys | ForEach-Object { "$_=$($values[$_])" }) | Set-Content $envFile
+        Write-Host "Arm $armName uses local overrides from $([IO.Path]::GetFileName($definition.LocalFile)): $($definition.Overrides -join ', ')"
     }
     $type = Get-EnvValue $values 'ARM_TYPE' 'ods'
     $project = Get-EnvValue $values 'COMPOSE_PROJECT_NAME' "apipub-reg-$($armName.ToLowerInvariant())"
@@ -237,7 +263,7 @@ function Wait-Url
 
 function New-OdsDatabaseFromTemplate
 {
-    param([Parameter(Mandatory)] $Arm, [Parameter(Mandatory)] [string] $Database, [Parameter(Mandatory)] [string] $Template)
+    param([Parameter(Mandatory)] $Arm, [Parameter(Mandatory)] [string] $Database, [Parameter(Mandatory)] [string] $Template, [int] $TemplateTimeoutMinutes = 20)
 
     $exists = (Invoke-ArmPsql $Arm -Service db-ods -TuplesOnly -Sql "select 1 from pg_database where datname = '$Database'") -join ''
 
@@ -245,6 +271,20 @@ function New-OdsDatabaseFromTemplate
     {
         Write-Host "  $Database already exists."
         return
+    }
+
+    # On the first start the sandbox image is still loading the templates when pg_isready already answers (the entrypoint's
+    # init server listens on the socket), and the populated template takes minutes. The last init step flags both
+    # databases as templates, so that flag is what to wait for (first live run on the AWS host, 2026-10-01).
+    $deadline = (Get-Date).AddMinutes($TemplateTimeoutMinutes)
+    $announced = $false
+    while ($true)
+    {
+        $ready = (Invoke-ArmPsql $Arm -Service db-ods -TuplesOnly -Sql "select 1 from pg_database where datname = '$Template' and datistemplate") -join ''
+        if ($ready.Trim() -eq '1') { break }
+        if ((Get-Date) -gt $deadline) { throw "Template $Template was not ready in db-ods after $TemplateTimeoutMinutes minutes; see 'docker compose logs db-ods' for the arm." }
+        if (-not $announced) { Write-Host "  Waiting for db-ods to finish loading $Template (first start takes a few minutes) ..."; $announced = $true }
+        Start-Sleep -Seconds 10
     }
 
     Write-Host "  Creating $Database from $Template ..."
@@ -1697,7 +1737,7 @@ function Assert-Condition
 }
 
 Export-ModuleMember -Function @(
-    'Get-RegressionRoot', 'Read-EnvFile', 'Get-Arm', 'Invoke-ArmPsql', 'Wait-Url',
+    'Get-RegressionRoot', 'Read-EnvFile', 'Read-EnvDefinition', 'Get-EnvValue', 'Get-Arm', 'Invoke-ArmPsql', 'Wait-Url',
     'Start-RegressionArm', 'Stop-RegressionArm', 'Reset-RegressionTarget', 'Reset-RegressionSource', 'Get-RootEducationOrganizationIds',
     'Get-ApiUrls', 'Get-JwtIssuer', 'Get-BearerToken', 'Invoke-Api', 'Get-ResourceCount', 'Get-ApiResources', 'Get-NewestChangeVersion',
     'Resolve-Publisher', 'Get-PublisherIdentity', 'Expand-PublisherPackage', 'New-RunFolder', 'Invoke-Publisher',
