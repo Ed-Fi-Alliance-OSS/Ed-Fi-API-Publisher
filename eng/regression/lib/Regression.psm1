@@ -878,19 +878,20 @@ function Invoke-Publisher
     if (-not ($Arguments | Where-Object { $_ -like '--ignoreIsolation=*' })) { $Arguments = @('--ignoreIsolation=true') + $Arguments }
     # Source records a DMS target rejects as invalid (KNOWN_TARGET_REJECTIONS) are left out of the run rather than
     # tolerated: a tolerance also keeps the last change version from advancing (item 10) and would hide the rejection an
-    # item provokes on purpose (item 6). None of the listed resources has dependents, so excluding them drops nothing
-    # else. Only from an ODS/API source (a DMS source never accepted them) and only when the run is not already scoped
-    # to other resources by --include or --includeOnly.
+    # item provokes on purpose (item 6). Only from an ODS/API source (a DMS source never accepted them) and only when
+    # the run is not already scoped to other resources by --include or --includeOnly.
     # Resources a DMS source and an ODS/API target hold differently by design (KNOWN_DMS_TO_ODS_DIVERGENCES) are left
     # out the same way, from a DMS source into an ODS/API target only.
+    # Both go to --excludeOnly, which keeps their dependents: --exclude would also drop every resource that references
+    # them (the tribal affiliation descriptors take staffs and student education organization associations with them).
     $knownResources = @()
     if ($targetIsDms -and -not $sourceIsDms) { $knownResources = @((Get-KnownTargetRejections $Arm).Keys) }
     if ($sourceIsDms -and -not $targetIsDms) { $knownResources = @(Get-KnownDmsToOdsDivergences $Arm) }
     if ($knownResources.Count -gt 0 -and -not ($Arguments | Where-Object { $_ -match '^--(include|includeOnly)=' }))
     {
-        $existing = $Arguments | Where-Object { $_ -like '--exclude=*' } | Select-Object -First 1
-        $excluded = @(if ($existing) { $existing.Substring('--exclude='.Length).Split(',') }) + $knownResources | Select-Object -Unique
-        $Arguments = @($Arguments | Where-Object { $_ -notlike '--exclude=*' }) + "--exclude=$($excluded -join ',')"
+        $existing = $Arguments | Where-Object { $_ -like '--excludeOnly=*' } | Select-Object -First 1
+        $excluded = @(if ($existing) { $existing.Substring('--excludeOnly='.Length).Split(',') }) + $knownResources | Select-Object -Unique
+        $Arguments = @($Arguments | Where-Object { $_ -notlike '--excludeOnly=*' }) + "--excludeOnly=$($excluded -join ',')"
     }
     $allArguments = $connectionArguments + $Arguments
 
