@@ -68,8 +68,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             // A TimeoutException here (rather than a cancellation) means the token was not honored
             await Assert.CatchAsync<OperationCanceledException>(
-                (Func<Task>)(() => provider.TryGetResourceItemAsync(MissingItemUrl, cancellationSource.Token)
-                    .WaitAsync(TimeSpan.FromSeconds(15))));
+                () => provider.TryGetResourceItemAsync(MissingItemUrl, cancellationSource.Token)
+                    .WaitAsync(TimeSpan.FromSeconds(15)));
 
             stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15));
 
