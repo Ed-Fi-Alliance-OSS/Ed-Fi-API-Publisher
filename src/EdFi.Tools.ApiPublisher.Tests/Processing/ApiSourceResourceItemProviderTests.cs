@@ -30,7 +30,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         private const string MissingItemUrl = "/ed-fi/students/abc123";
 
         [Test]
-        public void Should_stop_retrying_a_transient_failure_once_the_cancellation_token_is_cancelled()
+        public async Task Should_stop_retrying_a_transient_failure_once_the_cancellation_token_is_cancelled()
         {
             TestHelpers.InitializeLogging();
 
@@ -67,7 +67,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             var stopwatch = Stopwatch.StartNew();
 
             // A TimeoutException here (rather than a cancellation) means the token was not honored
-            Assert.CatchAsync<OperationCanceledException>(
+            await Assert.CatchAsync<OperationCanceledException>(
                 (Func<Task>)(() => provider.TryGetResourceItemAsync(MissingItemUrl, cancellationSource.Token)
                     .WaitAsync(TimeSpan.FromSeconds(15))));
 
