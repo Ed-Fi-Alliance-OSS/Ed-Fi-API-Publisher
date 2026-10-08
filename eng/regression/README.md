@@ -97,9 +97,9 @@ The memory and token-lifetime long runs (items 3 and 4) need the 10.6 M document
 
 ```powershell
 cd eng/regression
+.\Start-Arm.ps1 -Arm B                              # the target, first, and with no arm-b.local.env overlay in place
 .\Start-NorthridgeSource.ps1                        # elevated PowerShell 7, Windows login that is sysadmin on the instance; ~20 min the first time
-.\Start-Arm.ps1 -Arm B                              # the target
-# paste the three lines the script printed into arms/arm-b.local.env:
+# paste the lines the script printed into arms/arm-b.local.env (never into arm-b.env itself):
 #   SOURCE_PORT=8001  SOURCE_KEY=northridgeKey  SOURCE_SECRET=northridgeSecret  PROXY_FORWARD_URL=http://host.docker.internal:8001
 .\Invoke-Regression.ps1 -Arms B -Items 3 -PublisherImage <tag> -SkipArmStart -Version 1.4.0
 .\Invoke-Regression.ps1 -Arms B -Items 4 -PublisherPath <exe> -SkipArmStart -Version 1.4.0
@@ -107,7 +107,7 @@ cd eng/regression
 .\Start-NorthridgeSource.ps1 -Down                  # containers off; the host database stays (-Purge also drops the Admin volumes)
 ```
 
-`-SkipArmStart` matters: starting arm B with the overlay in place would publish arm B's own source API on 8001 too. Items 3 and 4 read through arm B's proxy, which `PROXY_FORWARD_URL` points at the Northridge API; everything else in the items is unchanged. Keep the host quiet during the run: an earlier laptop run starved the host SQL Server when RAM was low (page reads hit the API's 30 s SQL timeout). The host SQL Server instance can be anything from 2019 up; the laptop used 2025 Developer, the AWS host 2022 Developer.
+Arm B goes first because `Start-NorthridgeSource.ps1` also associates arm B's target client with the Northridge education organizations (`NORTHRIDGE_ED_ORGS`, by `arms/northridge/grant-arm-target-pgsql.sql`) and restarts arm B's target API: arm B's own bootstrap associates its clients only with Grand Bend's organizations, and without the grant the target refuses every Northridge document with 403 "No relationships have been established". Run the Northridge script again after `Start-Arm.ps1 -Arm B -Purge`, which recreates arm B's Admin database. `-SkipArmStart` matters: starting arm B with the overlay in place would publish arm B's own source API on 8001 too, and Northridge could not bind its port. Items 3 and 4 read through arm B's proxy, which `PROXY_FORWARD_URL` points at the Northridge API; everything else in the items is unchanged. Keep the host quiet during the run: an earlier laptop run starved the host SQL Server when RAM was low (page reads hit the API's 30 s SQL timeout). The host SQL Server instance can be anything from 2019 up; the laptop used 2025 Developer, the AWS host 2022 Developer.
 
 ## Items
 

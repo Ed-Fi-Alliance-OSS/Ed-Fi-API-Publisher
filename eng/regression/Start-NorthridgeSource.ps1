@@ -36,7 +36,8 @@ param(
     [string] $BackupFolder,
     [string] $SqlInstance = 'localhost',
     [int] $SqlMaxMemoryMB = 0,
-    [int] $TimeoutSeconds = 900
+    [int] $TimeoutSeconds = 900,
+    [string] $TargetArm = 'B'
 )
 
 Set-StrictMode -Version Latest
@@ -76,10 +77,11 @@ function Invoke-HostSql
         Runs T-SQL on the host SQL Server with the current Windows login (sqlcmd -E). -Sql inline or -File; -Variables
         become sqlcmd -v values. -Scalar returns the trimmed single value (no headers). Throws on a SQL error (-b).
     #>
-    param([string] $Sql, [string] $File, [string] $Database = 'master', [hashtable] $Variables = @{}, [switch] $Scalar)
+    param([string] $Sql, [string] $File, [string] $Database = 'master', [hashtable] $Variables = @{}, [switch] $Scalar, [string] $Separator)
 
     $arguments = @('-S', $SqlInstance, '-E', '-C', '-b', '-d', $Database, '-W')
     if ($Scalar) { $arguments += @('-h', '-1') }
+    if ($Separator) { $arguments += @('-s', $Separator) }
     foreach ($key in $Variables.Keys) { $arguments += @('-v', "$key=$($Variables[$key])") }
     if ($File) { $arguments += @('-i', $File) } else { $arguments += @('-Q', $Sql) }
 
@@ -129,6 +131,35 @@ function Get-NorthridgeBackupFile
     return $bak
 }
 
+function ConvertTo-RestoreMoves
+{
+    <#
+    .SYNOPSIS
+        Turns RESTORE FILELISTONLY output (sqlcmd -W -s '|') into the MOVE clauses of the restore. The columns are
+        split on the separator, never on whitespace: the PhysicalName recorded in the backup is the source server's
+        path, typically under "C:\Program Files\Microsoft SQL Server", and splitting it on spaces once read a piece of
+        that path as the file type (first restore on the AWS host, 2026-10-06).
+    #>
+    param([string[]] $FileList, [string] $DataPath, [string] $LogPath, [string] $Database)
+
+    $moves = @()
+    $dataIndex = 0
+    foreach ($line in $FileList)
+    {
+        $columns = "$line" -split '\|'
+        # Header row, the dashes under it, and the "(n rows affected)" line have no data/log Type in the third column.
+        if ($columns.Count -lt 3 -or $columns[0] -eq 'LogicalName') { continue }
+        $logical = $columns[0].Trim()
+        $type = $columns[2].Trim()
+        $target = $null
+        if ($type -eq 'D') { $target = if ($dataIndex -eq 0) { "$DataPath\$Database.mdf" } else { "$DataPath\${Database}_$dataIndex.ndf" }; $dataIndex++ }
+        elseif ($type -eq 'L') { $target = "$LogPath\${Database}_log.ldf" }
+        if ($target) { $moves += "MOVE N'$logical' TO N'$target'" }
+    }
+
+    return $moves
+}
+
 function Restore-NorthridgeDatabase
 {
     $bak = Get-NorthridgeBackupFile
@@ -139,23 +170,8 @@ function Restore-NorthridgeDatabase
 
     $dataPath = (Invoke-HostSql -Scalar -Sql "SET NOCOUNT ON; SELECT CONVERT(nvarchar(500), SERVERPROPERTY('InstanceDefaultDataPath'))").TrimEnd('\')
     $logPath = (Invoke-HostSql -Scalar -Sql "SET NOCOUNT ON; SELECT CONVERT(nvarchar(500), SERVERPROPERTY('InstanceDefaultLogPath'))").TrimEnd('\')
-    $fileList = Invoke-HostSql -Sql "RESTORE FILELISTONLY FROM DISK = N'$bak'" -Scalar:$false
-    # Rows are "LogicalName PhysicalName Type ..." (-W trims the columns); skip the header and the dashes.
-    $moves = @()
-    $dataIndex = 0
-    foreach ($line in $fileList)
-    {
-        $parts = -split "$line"
-        if ($parts.Count -lt 3 -or $parts[0] -in @('LogicalName', '') -or $parts[0].StartsWith('-')) { continue }
-        $logical = $parts[0]
-        switch ($parts[2])
-        {
-            'D' { $target = if ($dataIndex -eq 0) { "$dataPath\$hostDb.mdf" } else { "$dataPath\${hostDb}_$dataIndex.ndf" }; $dataIndex++ }
-            'L' { $target = "$logPath\${hostDb}_log.ldf" }
-            default { continue }
-        }
-        $moves += "MOVE N'$logical' TO N'$target'"
-    }
+    $fileList = Invoke-HostSql -Sql "RESTORE FILELISTONLY FROM DISK = N'$bak'" -Separator '|'
+    $moves = ConvertTo-RestoreMoves -FileList $fileList -DataPath $dataPath -LogPath $logPath -Database $hostDb
     if ($moves.Count -lt 2) { throw "RESTORE FILELISTONLY on '$bak' did not list a data and a log file: $($fileList -join ' | ')" }
 
     Write-Host "  Restoring $hostDb from $([IO.Path]::GetFileName($bak)) (about 17 GB; several minutes) ..."
@@ -301,6 +317,35 @@ Write-Host '  Smoke test: token and one students page through the API ...'
 $token = Get-BearerToken -BaseUrl $sourceUrl -Key $clientKey -Secret $clientSecret
 $students = Invoke-Api -BaseUrl $sourceUrl -Token $token -Resource '/ed-fi/students' -Query '?limit=1'
 if ($students.Count -lt 1) { throw "The Northridge API answered an empty students page; check the OdsInstances connection string (host SQL Server reachable as $($variables.host_server) with login $hostUser?)." }
+
+# Arm B's clients are associated only with the top-level education organizations of its own source (Grand Bend), so its
+# target refuses every Northridge document with 403 "No relationships have been established" until the target client
+# is associated with Northridge's as well (first Northridge run on the AWS host, 2026-10-06). An arm purged later loses
+# the association with its Admin database: re-run this script after Start-Arm.ps1 -Purge.
+$armForTarget = Get-Arm $TargetArm
+$armAdminRunning = @(& docker compose --env-file $armForTarget.EnvFile -f $armForTarget.ComposeFile ps --status running --services 2>$null) -contains 'db-admin'
+if ($armAdminRunning)
+{
+    $prefixes = @((Get-EnvValue $values 'NORTHRIDGE_NAMESPACE_PREFIXES' 'http://ed-fi.org,uri://northridge.org') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    Write-Host "  Associating arm $TargetArm's target client with the Northridge education organizations ($($edOrgs -join ', ')) and namespaces ($($prefixes -join ', ')) ..."
+    $grantOutput = @(Invoke-ArmPsql $armForTarget -Service db-admin -Database 'EdFi_Admin' -TuplesOnly -File (Join-Path $folder 'grant-arm-target-pgsql.sql') -Variables @{ edorgs = ($edOrgs -join ','); prefixes = ($prefixes -join ',') } |
+        ForEach-Object { "$_".Trim() } | Where-Object { $_ -and $_ -notmatch '^(INSERT|SELECT) ' })
+    if ($grantOutput.Count -lt 2) { throw "The grant on arm $TargetArm's Admin database did not report the associations back: $($grantOutput -join ' | ')" }
+    $granted = $grantOutput[0]
+    $registered = $grantOutput[1]
+    $missing = @($edOrgs | Where-Object { $_ -notin ($granted -split ',') }) + @($prefixes | Where-Object { $_ -notin ($registered -split ',') })
+    if ($missing) { throw "Arm $TargetArm's target is still missing $($missing -join ', ') (organizations: $granted; namespace prefixes: $registered)." }
+    # The API caches API clients and their education organizations; restart the target so the next token carries them.
+    & docker compose --env-file $armForTarget.EnvFile -f $armForTarget.ComposeFile restart api-target | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Restarting arm $TargetArm's api-target failed ($LASTEXITCODE)." }
+    Wait-Url $armForTarget.TargetUrl -TimeoutSeconds 300
+    Write-Host "  Arm $TargetArm's target client is associated with: $granted"
+    Write-Host "  Arm $TargetArm's vendor namespace prefixes: $registered"
+}
+else
+{
+    Write-Warning "Arm $TargetArm is not running, so its target client was not associated with the Northridge education organizations, and its target would refuse every Northridge document with 403. Start it (Start-Arm.ps1 -Arm $TargetArm, before writing arm-b.local.env) and run this script again."
+}
 
 Write-Host ''
 Write-Host "Northridge source is up: $sourceUrl ($clientKey -> $hostDb on the host SQL Server)"
