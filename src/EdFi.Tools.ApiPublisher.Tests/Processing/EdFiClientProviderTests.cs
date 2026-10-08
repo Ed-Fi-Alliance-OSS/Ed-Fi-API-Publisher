@@ -174,7 +174,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
         }
 
         [Test]
-        public void RefusesDependenciesUrl_WhenMetadataStillCarriesARoutePlaceholder()
+        public async Task RefusesDependenciesUrl_WhenMetadataStillCarriesARoutePlaceholder()
         {
             // An API that qualifies its routes answers the unqualified address with placeholders rather than
             // values. Requesting one draws a 404 naming a URL with '%7B' in it, because Uri escapes the braces.
@@ -199,7 +199,7 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
             Func<Task> resolvingTheUrl =
                 () => fakeClientProvider.GetEdFiUrlFromMetadataOrDefaultAsync("dependencies");
 
-            var exception = Assert.ThrowsAsync<InvalidConfigurationException>(resolvingTheUrl);
+            var exception = await Assert.ThrowsAsync<InvalidConfigurationException>(resolvingTheUrl);
 
             Assert.That(exception.Message, Does.Contain("route placeholder"));
             Assert.That(exception.Message, Does.Contain("districtId"));
