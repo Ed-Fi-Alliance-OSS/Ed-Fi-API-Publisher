@@ -1,5 +1,5 @@
 # Remediations
-Remediations allow you to extend the API Publisher with custom behavior to remediate failed POST requests against the target API. The remediations are defined in a JavaScript file whose file system path is provided using the `--remediationScriptFile` command-line argument (or the `remediationsScriptFile` setting in the `options` section of the _apiPublisherSettings.js_ file).
+Remediations allow you to extend the API Publisher with custom behavior to remediate failed POST requests against the target API. The remediations are defined in a JavaScript file whose file system path is provided using the `--remediationsScriptFile` command-line argument (or the `remediationsScriptFile` setting in the `options` section of the _apiPublisherSettings.js_ file).
 
 ⚠️**This feature uses Node.js for JavaScript execution, and the JavaScript code does not run in a sandbox. You must take appropriate steps to only allow trusted remediation scripts to be executed.**
 
