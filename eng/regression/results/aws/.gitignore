@@ -1,0 +1,4 @@
+# Per-run output (logs, memory samples, SQLite targets, run state) is not committed; only the results-<version>.md files are.
+runs/
+# Default results file of item scripts run by hand without -ResultsFile.
+results-local.md

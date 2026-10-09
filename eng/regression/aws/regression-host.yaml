@@ -1,0 +1,273 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  API Publisher regression host (APIPUB-125): one Windows Server instance that bootstraps itself with Hyper-V/WSL2,
+  Docker Desktop, SQL Server 2022 Developer, PowerShell 7, the .NET 10 SDK and the harness repositories. With an instance
+  profile it is reachable only through AWS Systems Manager (no inbound ports); without one (a deployer who may not pass
+  IAM roles) RDP is opened to one CIDR. Nested virtualization is switched on by Invoke-RegressionHost.ps1 after
+  creation, because CloudFormation's CpuOptions has no such property yet.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: r7i.2xlarge
+    Description: Only families that support nested virtualization (Hyper-V/WSL2 for Docker Desktop). 64 GB fits Northridge on the host SQL Server plus one arm.
+    AllowedValues:
+      - m7i.2xlarge
+      - m7i.4xlarge
+      - r7i.xlarge
+      - r7i.2xlarge
+      - r7i.4xlarge
+      - m8i.2xlarge
+      - m8i.4xlarge
+      - r8i.xlarge
+      - r8i.2xlarge
+      - r8i.4xlarge
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2025-English-Full-Base
+    Description: Public SSM parameter of the Windows Server base AMI (2025; use Windows_Server-2022-English-Full-Base to fall back).
+  VolumeSizeGiB:
+    Type: Number
+    Default: 300
+    MinValue: 150
+    Description: Root volume (gp3). Northridge backup + restored database (about 50 GB), Docker's WSL disk, and the evidence under results/runs.
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Key pair used to decrypt the Administrator password (Invoke-RegressionHost.ps1 -Password).
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: A subnet with a route to the internet (Docker Hub, Microsoft downloads, Systems Manager endpoints).
+  BootstrapUrl:
+    Type: String
+    Description: >-
+      Where the instance gets eng/regression/aws/bootstrap-host.ps1 on every boot until it reports done: the raw GitHub URL at a
+      pinned commit, an https URL such as a presigned S3 URL (Invoke-RegressionHost.ps1 -BootstrapBucket makes one when the
+      instance has no profile), or s3://<BootstrapBucket>/<key> when the instance has a profile that may read it.
+  BootstrapBucket:
+    Type: String
+    Default: ''
+    Description: When BootstrapUrl is an s3:// URL, the bucket it points at; the created instance role gets read access to it.
+  RepositoryBranch:
+    Type: String
+    Default: main
+    Description: Branch of Ed-Fi-API-Publisher the bootstrap checks out.
+  InstanceProfileMode:
+    Type: String
+    Default: Create
+    AllowedValues: [Create, Existing, None]
+    Description: >-
+      Create: the stack creates the instance role and profile (needs iam:CreateRole and iam:PassRole). Existing: use
+      ExistingInstanceProfileName (needs iam:PassRole on its role). None: no profile at all, for a deployer who may not pass
+      IAM roles; then there is no Systems Manager access, RDP must be opened with RdpAllowedCidr, BootstrapUrl must be https,
+      and the SQL Server sa password is generated on the host (C:\regression-bootstrap\sa-password.txt).
+  ExistingInstanceProfileName:
+    Type: String
+    Default: ''
+    Description: >-
+      For InstanceProfileMode=Existing: an instance profile an administrator created with AmazonSSMManagedInstanceCore,
+      ssm:GetParameter on SaPasswordParameterName and (for an s3:// BootstrapUrl) s3:GetObject on the bucket.
+  RdpAllowedCidr:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$'
+    Description: Optional CIDR allowed to reach RDP (3389) directly, for example your public IP as a.b.c.d/32. Required when InstanceProfileMode is None; leave empty otherwise and use the Session Manager tunnel.
+  SaPasswordParameterName:
+    Type: String
+    Default: /apipub-regression/sql-sa-password
+    Description: SecureString parameter holding the SQL Server sa password (created by Invoke-RegressionHost.ps1 -Deploy); unused when InstanceProfileMode is None.
+  IdleStopHours:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 24
+    Description: Consecutive hours of average CPU below IdleCpuPercent after which the instance is stopped.
+  IdleCpuPercent:
+    Type: Number
+    Default: 5
+  OwnerTag:
+    Type: String
+    Default: ''
+    Description: Who to ask before stopping or deleting the host (an email or a name).
+
+Conditions:
+  HasBootstrapBucket: !Not [!Equals [!Ref BootstrapBucket, '']]
+  CreateInstanceRole: !Equals [!Ref InstanceProfileMode, Create]
+  UseExistingProfile: !Equals [!Ref InstanceProfileMode, Existing]
+  HasInstanceProfile: !Or [!Condition CreateInstanceRole, !Condition UseExistingProfile]
+  AllowRdp: !Not [!Equals [!Ref RdpAllowedCidr, '']]
+
+Rules:
+  NoProfileNeedsRdp:
+    RuleCondition: !Equals [!Ref InstanceProfileMode, None]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref RdpAllowedCidr, '']]
+        AssertDescription: Without an instance profile there is no Systems Manager access; set RdpAllowedCidr (your public IP/32).
+  ExistingNeedsName:
+    RuleCondition: !Equals [!Ref InstanceProfileMode, Existing]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ExistingInstanceProfileName, '']]
+        AssertDescription: InstanceProfileMode=Existing needs ExistingInstanceProfileName.
+
+Resources:
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Condition: CreateInstanceRole
+    Properties:
+      Description: Lets the regression host register with Systems Manager and read its SQL Server sa password.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: read-sql-sa-password
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SaPasswordParameterName}
+              - !If
+                - HasBootstrapBucket
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${BootstrapBucket}/*
+                - !Ref AWS::NoValue
+      Tags:
+        - Key: Project
+          Value: APIPUB-125
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: CreateInstanceRole
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: API Publisher regression host. No inbound rules unless RdpAllowedCidr is set; otherwise access goes through Systems Manager Session Manager.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - !If
+          - AllowRdp
+          - IpProtocol: tcp
+            FromPort: 3389
+            ToPort: 3389
+            CidrIp: !Ref RdpAllowedCidr
+            Description: RDP from the deployer address (no Systems Manager without an instance profile)
+          - !Ref AWS::NoValue
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+          Description: Docker Hub, Microsoft downloads, GitHub, Systems Manager
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+        - Key: Project
+          Value: APIPUB-125
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !If
+        - HasInstanceProfile
+        - !If [CreateInstanceRole, !Ref InstanceProfile, !Ref ExistingInstanceProfileName]
+        - !Ref AWS::NoValue
+      EbsOptimized: true
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: true
+          SubnetId: !Ref SubnetId
+          GroupSet:
+            - !Ref SecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: !Ref VolumeSizeGiB
+            DeleteOnTermination: true
+            Encrypted: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+        - Key: Project
+          Value: APIPUB-125
+        - Key: Owner
+          Value: !Ref OwnerTag
+      # Runs on every boot (persist) until the staged bootstrap writes 'done'; each stage that needs a reboot
+      # records the next stage first, so an interrupted stage is simply retried.
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            <powershell>
+            $ErrorActionPreference = 'Stop'
+            $root = 'C:\regression-bootstrap'
+            New-Item -ItemType Directory -Force -Path $root | Out-Null
+            Start-Transcript -Path (Join-Path $root 'userdata.log') -Append | Out-Null
+            try {
+                $stageFile = Join-Path $root 'stage.txt'
+                if ((Test-Path $stageFile) -and ((Get-Content $stageFile -Raw).Trim() -eq 'done')) {
+                    Write-Host 'Bootstrap already done.'
+                }
+                else {
+                    $url = '${BootstrapUrl}'
+                    $script = Join-Path $root 'bootstrap-host.ps1'
+                    if ($url -like 's3://*') {
+                        # The Windows AMIs ship the AWS Tools for PowerShell; the instance profile grants s3:GetObject.
+                        $parts = $url.Substring(5).Split('/', 2)
+                        Read-S3Object -BucketName $parts[0] -Key $parts[1] -File $script -Region '${AWS::Region}' | Out-Null
+                    }
+                    else {
+                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $script
+                    }
+                    & $script -Root $root -Region '${AWS::Region}' -SaPasswordParameter '${SaParameter}' -RepositoryBranch '${RepositoryBranch}'
+                }
+            }
+            finally {
+                Stop-Transcript | Out-Null
+            }
+            </powershell>
+            <persist>true</persist>
+          - SaParameter: !If [HasInstanceProfile, !Ref SaPasswordParameterName, '']
+
+  IdleStopAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: !Sub Stops the ${AWS::StackName} regression host after ${IdleStopHours} h of average CPU below ${IdleCpuPercent} percent (a forgotten box).
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref Instance
+      Statistic: Average
+      Period: 3600
+      EvaluationPeriods: !Ref IdleStopHours
+      Threshold: !Ref IdleCpuPercent
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Sub arn:${AWS::Partition}:automate:${AWS::Region}:ec2:stop
+
+Outputs:
+  InstanceId:
+    Value: !Ref Instance
+  PublicIp:
+    Value: !GetAtt Instance.PublicIp
+  SecurityGroupId:
+    Value: !Ref SecurityGroup
+  InstanceProfileMode:
+    Value: !Ref InstanceProfileMode

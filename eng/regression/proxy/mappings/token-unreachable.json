@@ -1,0 +1,12 @@
+{
+  "id": "a4010000-0000-4000-8000-000000000402",
+  "name": "regression harness: token endpoint unreachable (item 4, scenarios 2 and 3 in Ana's comment)",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPattern": "/oauth/token.*"
+  },
+  "response": {
+    "fault": "CONNECTION_RESET_BY_PEER"
+  }
+}

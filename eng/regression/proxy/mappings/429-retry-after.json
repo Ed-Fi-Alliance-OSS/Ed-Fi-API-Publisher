@@ -1,0 +1,14 @@
+{
+  "id": "a4290000-0000-4000-8000-000000000429",
+  "name": "regression harness: 429 with Retry-After on matching GETs (item 12)",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPattern": "__URL_PATTERN__"
+  },
+  "response": {
+    "status": 429,
+    "headers": { "Content-Type": "application/json", "Retry-After": "__RETRY_AFTER__" },
+    "jsonBody": { "message": "Injected throttling response from the regression harness (429-retry-after)." }
+  }
+}
