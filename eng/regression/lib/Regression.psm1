@@ -163,6 +163,10 @@ function Get-Arm
     }
 
     $proxyPort = Get-EnvValue $values 'PROXY_PORT'
+    # The path the source's Discovery document answers at behind the proxy: empty for an ODS/API, "api/" for a DMS
+    # (arm D with a DMS source, see arms/arm-d-dms.md).
+    $proxyBasePath = (Get-EnvValue $values 'PROXY_BASE_PATH' '').Trim('/')
+    if ($proxyBasePath) { $proxyBasePath += '/' }
 
     return [pscustomobject]@{
         Name               = $armName
@@ -177,9 +181,9 @@ function Get-Arm
         TargetUrl          = $targetUrl
         SourceUrlInNetwork = $sourceInNetwork
         TargetUrlInNetwork = $targetInNetwork
-        ProxyUrl           = if ($proxyPort) { "http://127.0.0.1:$proxyPort/" } else { $null }
+        ProxyUrl           = if ($proxyPort) { "http://127.0.0.1:$proxyPort/$proxyBasePath" } else { $null }
         ProxyAdminUrl      = if ($proxyPort) { "http://127.0.0.1:$proxyPort/__admin" } else { $null }
-        ProxyUrlInNetwork  = 'http://proxy:8080/'
+        ProxyUrlInNetwork  = "http://proxy:8080/$proxyBasePath"
         SourceKey          = Get-EnvValue $values 'SOURCE_KEY'
         SourceSecret       = Get-EnvValue $values 'SOURCE_SECRET'
         TargetKey          = Get-EnvValue $values 'TARGET_KEY'
@@ -406,6 +410,7 @@ function Reset-RegressionTarget
         & pwsh -NoProfile -Command $command
         if ($LASTEXITCODE -ne 0) { throw "TARGET_RESET_COMMAND failed ($LASTEXITCODE): $command" }
         Wait-Url $Arm.TargetUrl -TimeoutSeconds 300
+        if ((Get-ApiUrls $Arm.TargetUrl).IsDms) { Copy-SchoolYearTypes $Arm }
 
         return
     }
@@ -417,6 +422,44 @@ function Reset-RegressionTarget
     Invoke-ArmPsql $Arm -Service db-ods -Sql "create database `"$($Arm.TargetOdsDatabase)`" template `"EdFi_Ods_Minimal_Template`"" | Out-Null
     Invoke-ComposeArm $Arm @('start', 'api-target')
     Wait-Url $Arm.TargetUrl -TimeoutSeconds 300
+}
+
+<#
+.SYNOPSIS
+    Copies the source's school years into the target. The publisher never publishes schoolYearTypes (it drops them
+    from its dependency graph): an ODS/API database ships them, but a new DMS data store has none until its seed data
+    is loaded, and without them graduation plans and sessions fail and the failure cascades through every student
+    record (APIPUB-124 comment 99404). A POST of an existing school year updates it, so a repeat is harmless.
+#>
+function Copy-SchoolYearTypes
+{
+    param([Parameter(Mandatory)] $Arm)
+
+    $sourceToken = Get-BearerToken $Arm.SourceUrl $Arm.SourceKey $Arm.SourceSecret
+    $targetToken = Get-BearerToken $Arm.TargetUrl $Arm.TargetKey $Arm.TargetSecret
+    $years = @(Invoke-Api -BaseUrl $Arm.SourceUrl -Token $sourceToken -Resource '/ed-fi/schoolYearTypes' -Query '?limit=500')
+    foreach ($year in $years)
+    {
+        $body = [ordered]@{ schoolYear = $year.schoolYear; schoolYearDescription = $year.schoolYearDescription; currentSchoolYear = $year.currentSchoolYear }
+        Invoke-Api -BaseUrl $Arm.TargetUrl -Token $targetToken -Resource '/ed-fi/schoolYearTypes' -Method POST -Body $body | Out-Null
+    }
+
+    Write-Host "  Copied $($years.Count) school years from the source into the DMS target."
+}
+
+function Initialize-DmsTargetSchoolYears
+{
+    # Seeds the arm's DMS target with the source's school years when it has none. Reset-RegressionTarget seeds them
+    # after a reset, but D1, D2, D4 and D5 publish without resetting first, and a run into a target without school years
+    # fails every student record. Measured: the 409s this produces are retried with backoff, which turned D1 into a run
+    # of more than 30 minutes.
+    param([Parameter(Mandatory)] $Arm)
+
+    $targetToken = Get-BearerToken $Arm.TargetUrl $Arm.TargetKey $Arm.TargetSecret
+    $existing = Get-ResourceCount $Arm.TargetUrl $targetToken '/ed-fi/schoolYearTypes'
+    if ($existing -is [int] -and $existing -gt 0) { return }
+
+    Copy-SchoolYearTypes $Arm
 }
 
 <#
@@ -462,10 +505,13 @@ function Get-ApiUrls
     $result = [pscustomobject]@{
         BaseUrl           = "$key/"
         Version           = $discovery.version
-        Suite             = $discovery.suite
+        # The DMS Discovery document has no suite, and a missing property throws under strict mode.
+        Suite             = if ($discovery.PSObject.Properties['suite']) { $discovery.suite } else { $null }
         DataManagementApi = ("$($urls.dataManagementApi)").TrimEnd('/')
         Oauth             = "$($urls.oauth)"
         ChangeQueries     = if ($urls.PSObject.Properties['changeQueries']) { ("$($urls.changeQueries)").TrimEnd('/') } else { $null }
+        # The ODS/API reports version 7.x or earlier; the DMS (Ed-Fi API v8) reports 8.x.
+        IsDms             = $(try { ([version] "$($discovery.version)").Major -ge 8 } catch { $false })
         Discovery         = $discovery
     }
 
@@ -501,7 +547,10 @@ function Get-BearerToken
     if ($script:TokenCache.ContainsKey($cacheKey) -and $script:TokenCache[$cacheKey].Expires -gt (Get-Date)) { return $script:TokenCache[$cacheKey].Token }
 
     $urls = Get-ApiUrls $BaseUrl
-    $response = Invoke-RestMethod -Method Post -Uri $urls.Oauth -Body @{ grant_type = 'client_credentials'; client_id = $Key; client_secret = $Secret } -TimeoutSec 60
+    # HTTP Basic, as the publisher sends them: the DMS token endpoint rejects credentials in the form body with
+    # "Malformed Authorization header", and the ODS/API accepts either form.
+    $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$($Key):$($Secret)"))
+    $response = Invoke-RestMethod -Method Post -Uri $urls.Oauth -Headers @{ Authorization = "Basic $basic" } -Body @{ grant_type = 'client_credentials' } -TimeoutSec 60
     # Cached for half the lifetime the API reports (at most 20 minutes), so a short-lived token used by item 4 is not
     # served after it expired.
     $lifetimeSeconds = if ($response.PSObject.Properties['expires_in'] -and $response.expires_in) { [double] $response.expires_in } else { 2400 }
@@ -571,7 +620,9 @@ function Get-ApiResources
     $dependencies = Invoke-RestMethod -Uri $dependenciesUrl -Headers @{ Authorization = "Bearer $Token" } -TimeoutSec 120
 
     $resources = @($dependencies | ForEach-Object { $_.resource } | Where-Object { $_ } | Select-Object -Unique)
-    if ($ExcludeDescriptors) { $resources = @($resources | Where-Object { $_ -notmatch 'Descriptors$' }) }
+    # Also leaves out schoolYearTypes, which the publisher never publishes: every target holds them before a run (an
+    # ODS/API template ships them, a DMS target is seeded by Copy-SchoolYearTypes), so they are not publisher output.
+    if ($ExcludeDescriptors) { $resources = @($resources | Where-Object { $_ -notmatch 'Descriptors$' -and $_ -notmatch '/schoolYearTypes$' }) }
 
     return $resources
 }
@@ -799,6 +850,9 @@ function Invoke-Publisher
     $errorLog = [IO.Path]::ChangeExtension($log, '.err.log')
     $memoryCsv = [IO.Path]::ChangeExtension($log, '.memory.csv')
     $argumentsFile = [IO.Path]::ChangeExtension($log, '.args.txt')
+    $targetIsDms = try { (Get-ApiUrls $TargetUrl).IsDms } catch { $false }
+    $sourceIsDms = try { (Get-ApiUrls $SourceUrl).IsDms } catch { $false }
+    if ($targetIsDms -and $TargetUrl -eq $Arm.TargetUrl) { Initialize-DmsTargetSchoolYears $Arm }
 
     if ($Publisher.Mode -eq 'docker')
     {
@@ -822,6 +876,23 @@ function Invoke-Publisher
     # Use-Snapshot header answers 404 "Snapshot not found" (seen on the first live run of item 1). Isolation is
     # therefore off unless the item sets --ignoreIsolation itself (the pre-7 stub is the only case that wants it on).
     if (-not ($Arguments | Where-Object { $_ -like '--ignoreIsolation=*' })) { $Arguments = @('--ignoreIsolation=true') + $Arguments }
+    # Source records a DMS target rejects as invalid (KNOWN_TARGET_REJECTIONS) are left out of the run rather than
+    # tolerated: a tolerance also keeps the last change version from advancing (item 10) and would hide the rejection an
+    # item provokes on purpose (item 6). Only from an ODS/API source (a DMS source never accepted them) and only when
+    # the run is not already scoped to other resources by --include or --includeOnly.
+    # Resources a DMS source and an ODS/API target hold differently by design (KNOWN_DMS_TO_ODS_DIVERGENCES) are left
+    # out the same way, from a DMS source into an ODS/API target only.
+    # Both go to --excludeOnly, which keeps their dependents: --exclude would also drop every resource that references
+    # them (the tribal affiliation descriptors take staffs and student education organization associations with them).
+    $knownResources = @()
+    if ($targetIsDms -and -not $sourceIsDms) { $knownResources = @((Get-KnownTargetRejections $Arm).Keys) }
+    if ($sourceIsDms -and -not $targetIsDms) { $knownResources = @(Get-KnownDmsToOdsDivergences $Arm) }
+    if ($knownResources.Count -gt 0 -and -not ($Arguments | Where-Object { $_ -match '^--(include|includeOnly)=' }))
+    {
+        $existing = $Arguments | Where-Object { $_ -like '--excludeOnly=*' } | Select-Object -First 1
+        $excluded = @(if ($existing) { $existing.Substring('--excludeOnly='.Length).Split(',') }) + $knownResources | Select-Object -Unique
+        $Arguments = @($Arguments | Where-Object { $_ -notlike '--excludeOnly=*' }) + "--excludeOnly=$($excluded -join ',')"
+    }
     $allArguments = $connectionArguments + $Arguments
 
     # Secrets and passwords are not written to the args file; everything else is, so a run can be repeated by hand.
@@ -1032,8 +1103,28 @@ function Get-ProxyMappingFile
 
 <#
 .SYNOPSIS
+    The URL paths of the source's data and token endpoints as the proxy serves them, from the Discovery document the
+    source answers through the proxy: /data/v3 and /oauth/token for an ODS/API, /api/data and /api/oauth/token for a
+    DMS. Fault mappings and journal queries use these instead of assuming the ODS/API layout.
+#>
+function Get-ProxySourcePaths
+{
+    param([Parameter(Mandatory)] $Arm)
+
+    if (-not $Arm.ProxyUrl) { throw "Arm $($Arm.Name) has no PROXY_PORT; it has no proxy to read paths through." }
+    $urls = Get-ApiUrls $Arm.ProxyUrl
+
+    return [pscustomobject]@{
+        Data  = ([uri] $urls.DataManagementApi).AbsolutePath.TrimEnd('/')
+        Token = ([uri] $urls.Oauth).AbsolutePath.TrimEnd('/')
+    }
+}
+
+<#
+.SYNOPSIS
     Loads one fault mapping from proxy/mappings/<Name>.json into the arm's WireMock and returns its id.
     -Replace substitutes __TOKEN__ placeholders (URL_PATTERN, RETRY_AFTER, BASE_URL, ...) before loading.
+    __DATA_PATH__ and __TOKEN_PATH__ default to the source's paths (Get-ProxySourcePaths).
 #>
 function Enable-ProxyFault
 {
@@ -1042,6 +1133,13 @@ function Enable-ProxyFault
     if (-not $Arm.ProxyAdminUrl) { throw "Arm $($Arm.Name) has no PROXY_PORT; fault injection is unavailable." }
 
     $json = Get-Content (Get-ProxyMappingFile $Name) -Raw
+    if ($json -match '__(DATA|TOKEN)_PATH__')
+    {
+        $paths = Get-ProxySourcePaths $Arm
+        $Replace = $Replace.Clone()
+        if (-not $Replace.ContainsKey('DATA_PATH')) { $Replace['DATA_PATH'] = $paths.Data }
+        if (-not $Replace.ContainsKey('TOKEN_PATH')) { $Replace['TOKEN_PATH'] = $paths.Token }
+    }
     # -Literal replaces exact text (used to turn the quoted "__INVALID_ID__" placeholder into a JSON null, object or array).
     foreach ($text in $Literal.Keys) { $json = $json.Replace([string] $text, [string] $Literal[$text]) }
     foreach ($token in $Replace.Keys) { $json = $json.Replace("__${token}__", [string] $Replace[$token]) }
@@ -1120,8 +1218,9 @@ function Save-ProxyJournal
 #>
 function Get-ProxyCurrentAuthorization
 {
-    param([Parameter(Mandatory)] $Arm, [string] $UrlPattern = '^/data/v3/')
+    param([Parameter(Mandatory)] $Arm, [string] $UrlPattern)
 
+    if (-not $UrlPattern) { $UrlPattern = "^$([regex]::Escape((Get-ProxySourcePaths $Arm).Data))/" }
     $entries = @(Get-ProxyJournal $Arm $UrlPattern | Where-Object { $_.request.headers -and $_.request.headers.PSObject.Properties['Authorization'] })
     if ($entries.Count -eq 0) { return $null }
 
@@ -1328,6 +1427,32 @@ function Get-StreamedResources
     Compares Total-Count on source and target for every resource the run streamed (or -Resources).
     Works for ODS/API and DMS targets alike because it goes through each instance's Discovery URLs.
 #>
+function Get-KnownTargetRejections
+{
+    # The arm's KNOWN_TARGET_REJECTIONS as a resource -> count map: source records a DMS target rejects as invalid
+    # while an ODS/API accepts them (see arms/arm-d.env). Empty for every other arm.
+    param([Parameter(Mandatory)] $Arm)
+
+    $map = @{}
+    foreach ($pair in "$(Get-EnvValue $Arm.Env 'KNOWN_TARGET_REJECTIONS')".Split(',', [StringSplitOptions]::RemoveEmptyEntries))
+    {
+        $resource, $count = $pair.Trim().Split('=')
+        $map[$resource.Trim()] = [int] $count
+    }
+
+    return $map
+}
+
+function Get-KnownDmsToOdsDivergences
+{
+    # The arm's KNOWN_DMS_TO_ODS_DIVERGENCES as a list of resources: a DMS source and an ODS/API target hold them
+    # differently by design, so publishing them from a DMS into an ODS/API cannot make the counts match (see
+    # arms/arm-d.env). Empty for every other arm.
+    param([Parameter(Mandatory)] $Arm)
+
+    return @("$(Get-EnvValue $Arm.Env 'KNOWN_DMS_TO_ODS_DIVERGENCES')".Split(',', [StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { $_.Trim() })
+}
+
 function Compare-Counts
 {
     param(
@@ -1349,15 +1474,23 @@ function Compare-Counts
     if (-not $Resources) { $Resources = Get-StreamedResources $Log }
     if (-not $Resources) { throw "No streamed resources found in '$Log'; nothing to compare." }
 
-    $sourceToken = Get-BearerToken $SourceUrl $SourceKey $SourceSecret
-    $targetToken = Get-BearerToken $TargetUrl $TargetKey $TargetSecret
+    # Only a DMS target rejects these records, and only an ODS/API source holds them (a DMS source rejected them when
+    # it was loaded). Every other pairing must match exactly.
+    $knownRejections = if ((Get-ApiUrls $TargetUrl).IsDms -and -not (Get-ApiUrls $SourceUrl).IsDms) { Get-KnownTargetRejections $Arm } else { @{} }
 
     $rows = foreach ($resource in $Resources)
     {
+        # Tokens are fetched per resource (Get-BearerToken caches them for half their lifetime): counting every
+        # resource of a DMS takes longer than one token lives, and a token taken once up front ran out partway and
+        # turned the last resources into "ERR 401".
+        $sourceToken = Get-BearerToken $SourceUrl $SourceKey $SourceSecret
+        $targetToken = Get-BearerToken $TargetUrl $TargetKey $TargetSecret
         $source = Get-ResourceCount $SourceUrl $sourceToken $resource
         $target = Get-ResourceCount $TargetUrl $targetToken $resource
-        # A count that could not be read is a mismatch even when both sides fail the same way ("ERR 403" on both).
-        [pscustomobject]@{ Resource = $resource; Source = $source; Target = $target; Match = (($source -is [int]) -and ($target -is [int]) -and ($source -eq $target)) }
+        $expectedShortfall = if ($knownRejections.ContainsKey($resource)) { $knownRejections[$resource] } else { 0 }
+        # A count that could not be read is a mismatch even when both sides fail the same way ("ERR 403" on both). A
+        # known rejection must account for the difference exactly, so any other shortfall still shows.
+        [pscustomobject]@{ Resource = $resource; Source = $source; Target = $target; ExpectedShortfall = $expectedShortfall; Match = (($source -is [int]) -and ($target -is [int]) -and ($source - $expectedShortfall -eq $target)) }
     }
 
     if ($ReportCsv) { $rows | Export-Csv -NoTypeInformation -Path $ReportCsv }
@@ -1501,6 +1634,19 @@ function Get-PublishedErrorRecords
     return $records.ToArray()
 }
 
+function Get-StoreArm
+{
+    # The arm whose db-admin container holds the PostgreSQL configuration store: the arm itself for an ODS arm, or the
+    # arm STORE_ARM names for an external one (arm D has no database container of its own; it uses arm B's, on the
+    # network its publisher container already joins for the proxy, see arms/arm-d-dms.md).
+    param([Parameter(Mandatory)] $Arm)
+
+    $storeArm = Get-EnvValue $Arm.Env 'STORE_ARM'
+    if ($Arm.Type -eq 'ods' -or -not $storeArm) { return $Arm }
+
+    return Get-Arm $storeArm
+}
+
 <#
 .SYNOPSIS
     Creates the PostgreSQL configuration store of docs/ConfigurationStore/PostgreSql.md in the arm's db-admin container
@@ -1530,8 +1676,9 @@ function Initialize-PostgreSqlConfigurationStore
         $targetUrl = ConvertTo-NetworkUrl $Arm $targetUrl
     }
 
-    $exists = (Invoke-ArmPsql $Arm -Service db-admin -TuplesOnly -Sql "select 1 from pg_database where datname = '$Database'") -join ''
-    if ($exists.Trim() -ne '1') { Invoke-ArmPsql $Arm -Service db-admin -Sql "create database $Database" | Out-Null }
+    $storeArm = Get-StoreArm $Arm
+    $exists = (Invoke-ArmPsql $storeArm -Service db-admin -TuplesOnly -Sql "select 1 from pg_database where datname = '$Database'") -join ''
+    if ($exists.Trim() -ne '1') { Invoke-ArmPsql $storeArm -Service db-admin -Sql "create database $Database" | Out-Null }
 
     $prefix = '/ed-fi/apiPublisher/connections'
     $seed = if ($null -ne $LastChangeVersion) { "insert into dbo.configuration_value (configuration_key, configuration_value) values ('$prefix/$SourceName/lastChangeVersionsProcessed', '{`"$TargetName`": $LastChangeVersion}');" } else { '' }
@@ -1555,14 +1702,14 @@ $seed
 "@
     $setupFile = Join-Path $RunFolder 'store-setup.sql'
     Set-Content -Path $setupFile -Value $setup
-    Invoke-ArmPsql $Arm -Service db-admin -Database $Database -File $setupFile | Out-Null
+    Invoke-ArmPsql $storeArm -Service db-admin -Database $Database -File $setupFile | Out-Null
     Write-Host "  configuration store ready in db-admin/$Database ($SourceName -> $SourceUrl, $TargetName -> $targetUrl)"
 
-    $user = Get-EnvValue $Arm.Env 'POSTGRES_USER' 'postgres'
-    $password = Get-EnvValue $Arm.Env 'POSTGRES_PASSWORD'
+    $user = Get-EnvValue $storeArm.Env 'POSTGRES_USER' 'postgres'
+    $password = Get-EnvValue $storeArm.Env 'POSTGRES_PASSWORD'
     if ($Publisher.Mode -eq 'docker') { return "Host=db-admin;Port=5432;Database=$Database;Username=$user;Password=$password" }
 
-    return "Host=127.0.0.1;Port=$(Get-EnvValue $Arm.Env 'ADMIN_DB_PORT');Database=$Database;Username=$user;Password=$password"
+    return "Host=127.0.0.1;Port=$(Get-EnvValue $storeArm.Env 'ADMIN_DB_PORT');Database=$Database;Username=$user;Password=$password"
 }
 
 function Get-StoredLastChangeVersion
@@ -1570,7 +1717,7 @@ function Get-StoredLastChangeVersion
     # The change version the PostgreSQL configuration store records for one source and target pair, or $null.
     param([Parameter(Mandatory)] $Arm, [Parameter(Mandatory)] [string] $SourceName, [Parameter(Mandatory)] [string] $TargetName, [string] $Database = 'edfi_api_publisher_configuration')
 
-    $json = ((Invoke-ArmPsql $Arm -Service db-admin -Database $Database -TuplesOnly -Sql "select configuration_value from dbo.configuration_value where configuration_key = '/ed-fi/apiPublisher/connections/$SourceName/lastChangeVersionsProcessed'") -join '').Trim()
+    $json = ((Invoke-ArmPsql (Get-StoreArm $Arm) -Service db-admin -Database $Database -TuplesOnly -Sql "select configuration_value from dbo.configuration_value where configuration_key = '/ed-fi/apiPublisher/connections/$SourceName/lastChangeVersionsProcessed'") -join '').Trim()
     if (-not $json) { return $null }
 
     $values = ConvertFrom-Json $json
@@ -1741,7 +1888,7 @@ Export-ModuleMember -Function @(
     'Start-RegressionArm', 'Stop-RegressionArm', 'Reset-RegressionTarget', 'Reset-RegressionSource', 'Get-RootEducationOrganizationIds',
     'Get-ApiUrls', 'Get-JwtIssuer', 'Get-BearerToken', 'Invoke-Api', 'Get-ResourceCount', 'Get-ApiResources', 'Get-NewestChangeVersion',
     'Resolve-Publisher', 'Get-PublisherIdentity', 'Expand-PublisherPackage', 'New-RunFolder', 'Invoke-Publisher',
-    'Enable-ProxyFault', 'Disable-ProxyFault', 'Reset-ProxyMappings', 'Reset-ProxyJournal', 'Get-ProxyJournal', 'Save-ProxyJournal', 'Get-ProxyCurrentAuthorization', 'Get-ProxyPageReads', 'Test-ProxyPageReads', 'Measure-ProxyConcurrency',
+    'Get-ProxySourcePaths', 'Enable-ProxyFault', 'Disable-ProxyFault', 'Reset-ProxyMappings', 'Reset-ProxyJournal', 'Get-ProxyJournal', 'Save-ProxyJournal', 'Get-ProxyCurrentAuthorization', 'Get-ProxyPageReads', 'Test-ProxyPageReads', 'Measure-ProxyConcurrency',
     'Get-StreamedResources', 'Compare-Counts', 'Compare-RequestUrls', 'Get-RunSummaryTotal', 'Get-PublishedErrorRecords', 'Initialize-PostgreSqlConfigurationStore', 'Get-StoredLastChangeVersion', 'Test-LogContains', 'Get-LogMatchCount',
     'Format-Duration', 'Write-ResultRow', 'Complete-Item', 'Complete-ItemAfterError', 'New-FailureList', 'Assert-Condition'
 )

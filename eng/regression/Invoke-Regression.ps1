@@ -71,6 +71,9 @@ $applicability = @{
     '03' = @('B'); '04' = @('B'); '07' = @('B'); '08' = @('B'); '09' = @('B'); '11' = @('B')
 }
 $dmsItems = @('d1', 'd2', 'd3', 'd4', 'd5')
+# Numbered items a DMS arm cannot run: 09 diffs against the v1.3.0 image, which cannot publish to or from a DMS. Every
+# other numbered item also runs on a DMS arm (APIPUB-159), in the direction its arm-d.local.env profile sets.
+$notOnDmsArms = @('09')
 
 # Items that need one kind of publisher: a mismatch is a SKIP with the reason, not a FAIL.
 $requiredMode = @{
@@ -136,7 +139,7 @@ foreach ($armName in $armNames)
     foreach ($id in $requested)
     {
         $script = $itemScripts | Where-Object { ($_.BaseName -split '-')[0].ToLowerInvariant() -eq $id } | Select-Object -First 1
-        $applies = if ($id -in $dmsItems) { $arm.Type -eq 'dms' } elseif ($arm.Type -eq 'dms') { $false } elseif ($applicability.ContainsKey($id)) { $arm.Name -in $applicability[$id] } else { $true }
+        $applies = if ($id -in $dmsItems) { $arm.Type -eq 'dms' } elseif ($arm.Type -eq 'dms') { $id -notin $notOnDmsArms } elseif ($applicability.ContainsKey($id)) { $arm.Name -in $applicability[$id] } else { $true }
 
         if (-not $applies)
         {
