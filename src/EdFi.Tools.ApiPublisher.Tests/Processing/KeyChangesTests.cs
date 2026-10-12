@@ -251,6 +251,8 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
                 requestItem.ShouldSatisfyAllConditions(
                     // The main values of the object should match the target
                     () => request.RequestUri.LocalPath.Split('/').Last().ShouldBe(suppliedTargetResource.Id),
+                    // The body keeps the target id, matching the URL: a DMS requires it in a PUT (APIPUB-160)
+                    () => requestItem.Id.ShouldBe(suppliedTargetResource.Id),
                     () => requestItem.VehicleManufacturer.ShouldBe(suppliedTargetResource.VehicleManufacturer),
                     () => requestItem.VehicleYear.ShouldBe(suppliedTargetResource.VehicleYear),
                     // The key should match the source

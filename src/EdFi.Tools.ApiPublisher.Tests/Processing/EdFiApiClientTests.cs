@@ -167,7 +167,6 @@ namespace EdFi.Tools.ApiPublisher.Tests.Processing
 
             TestHelpers.InitializeLogging();
 
-            // Bound through an Action so the call is not ambiguous with the obsolete TestDelegate overload.
             Action buildClient = () => new EdFiApiClient(
                 "TestClient",
                 TestHelpers.GetSourceApiConnectionDetails(),

@@ -1,0 +1,14 @@
+{
+  "id": "a5000000-0000-4000-8000-000000000500",
+  "name": "regression harness: 500 on matching GETs (items 3 and 5)",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPattern": "__URL_PATTERN__"
+  },
+  "response": {
+    "status": 500,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "message": "Injected failure from the regression harness (500-window)." }
+  }
+}

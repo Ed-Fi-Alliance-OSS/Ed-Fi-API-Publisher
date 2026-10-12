@@ -1,0 +1,33 @@
+{
+  "id": "a1020000-0000-4000-8000-000000000102",
+  "name": "regression harness: one educationContents page whose second element has an invalid id (item 6, APIPUB-102)",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/data/v3/ed-fi/educationContents"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json", "Total-Count": "3" },
+    "jsonBody": [
+      {
+        "id": "8f0b6f7f-1111-4a5e-9d0c-000000000001",
+        "contentIdentifier": "regression-invalid-id-1",
+        "namespace": "uri://ed-fi.org/regression",
+        "description": "Regression harness item 6: valid sibling before the invalid element"
+      },
+      {
+        "id": "__INVALID_ID__",
+        "contentIdentifier": "regression-invalid-id-2",
+        "namespace": "uri://ed-fi.org/regression",
+        "description": "Regression harness item 6: invalid id, must not be published"
+      },
+      {
+        "id": "8f0b6f7f-1111-4a5e-9d0c-000000000003",
+        "contentIdentifier": "regression-invalid-id-3",
+        "namespace": "uri://ed-fi.org/regression",
+        "description": "Regression harness item 6: valid sibling after the invalid element"
+      }
+    ]
+  }
+}

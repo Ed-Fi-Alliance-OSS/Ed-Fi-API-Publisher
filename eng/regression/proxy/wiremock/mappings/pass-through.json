@@ -1,0 +1,11 @@
+{
+  "id": "a0000000-0000-4000-8000-000000000000",
+  "name": "regression harness: pass everything through to the arm's source API",
+  "priority": 10,
+  "request": {
+    "urlPattern": ".*"
+  },
+  "response": {
+    "proxyBaseUrl": "http://api-source"
+  }
+}

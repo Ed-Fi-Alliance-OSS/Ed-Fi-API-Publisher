@@ -202,9 +202,9 @@ namespace EdFi.Tools.ApiPublisher.Connections.Api.Processing.Target.Blocks
                         // Get the resource item
                         var existingResourceItem = getByKeyResults[0] as JObject;
 
-                        // Remove the id and etag properties
+                        // Keep the id: the DMS requires it in a PUT body, matching the id in the URL.
+                        // Remove the etag property.
                         string targetId = existingResourceItem["id"].Value<string>();
-                        existingResourceItem.Property("id")?.Remove();
                         existingResourceItem.Property("_etag")?.Remove();
 
                         var candidateProperties = existingResourceItem.Properties()
