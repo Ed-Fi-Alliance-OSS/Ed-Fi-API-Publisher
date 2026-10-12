@@ -15,7 +15,7 @@ v1.4 has four themes:
 
 | Theme                      | Summary                                                                                                                                                                      |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **DMS alignment**          | Either end of a publish may be an Ed-Fi Data Management Service (DMS) as well as an Ed-Fi ODS/API. The publisher takes the paths and the token endpoint from each API's Discovery document instead of assuming them. |
+| **Ed-Fi API v8 alignment** | Either end of a publish may be Ed-Fi API v8 (the Ed-Fi Data Management Service, DMS) as well as an Ed-Fi ODS/API, in all four combinations. The publisher takes the paths and the token endpoint from each API's Discovery document instead of assuming them. |
 | **Reliable run outcome**   | A run that lost documents no longer exits `0`. Exit codes distinguish the kinds of failure, and every run prints a per-resource summary. An expired bearer token is recovered from instead of silently voiding the rest of the run. |
 | **Scale and memory**       | Cursor paging with partitions against ODS/API 7.3+, resumable runs, bounded internal buffers, streamed page parsing, and more considerate behavior against a busy source API. |
 | **Platform**               | .NET 10 (LTS) for the binaries and the Docker image. .NET 8 reaches end of support on November 10, 2026.                                                                    |
@@ -34,13 +34,13 @@ When the publisher runs on a schedule, I want its exit code to tell a complete r
 
 **How API Publisher Helps**: The publisher exits non-zero when the target rejects more documents than a configurable tolerance allows (`--toleratedItemErrorCount`, default 0). It uses distinct exit codes for rejected documents, an incomplete run, an authentication failure and invalid configuration. Every run prints a per-resource summary of expected, attempted, failed and skipped documents.
 
-#### JTBD 10: Publishing Into or Out of the Ed-Fi Data Management Service
+#### JTBD 10: Publishing Into or Out of Ed-Fi API v8
 
 **Personas**: Data Integration Developer, Infrastructure/DevOps Engineer
 
-When piloting the Ed-Fi Data Management Service, I want to load data into it from an existing ODS/API, or read data out of it, with the same tool and configuration I already use, so that I do not need a separate loader.
+When adopting Ed-Fi API v8, I want to load data into it from an existing ODS/API, move data between v8 instances, or read data out of it into an ODS/API, with the same tool and configuration I already use, so that I do not need a separate loader.
 
-**How API Publisher Helps**: The publisher reads each connection's Discovery document and takes from it the data management path, the change queries path and the token endpoint. An ODS/API (`data/v3`, `oauth/token`) and a DMS (`data`, with Keycloak or self-contained authentication) are therefore both addressed correctly without product-specific settings. Each of these values can be overridden on the connection.
+**How API Publisher Helps**: The publisher reads each connection's Discovery document and takes from it the data management path, the change queries path and the token endpoint. An ODS/API (`data/v3`, `oauth/token`) and Ed-Fi API v8 (`data`, with Keycloak or self-contained authentication) are therefore both addressed correctly without product-specific settings. Each of these values can be overridden on the connection.
 
 #### JTBD 11: Recovering a Large Publish That Failed Partway
 
@@ -64,6 +64,7 @@ When a long full publish fails or is stopped after hours of work, I want to cont
 - **FR-PUB-12 (New):** The publisher SHALL skip delete and key change processing on a full publish (change window starting at version 1 or below) by default. It SHALL process them when `--processDeletesAndKeyChangesOnFullPublish=true` is set.
 - **FR-PUB-13 (New):** A source document with a missing or invalid `id` SHALL produce a logged error that is counted in the run's error set, without faulting the resource. The remaining documents SHALL continue to publish. The error record SHALL NOT retain the source document body.
 - **FR-PUB-14 (New):** Key change processing SHALL complete when exactly one resource is selected with `--includeOnly` and a last change version is supplied. Previously, this combination failed with "Unable to reduce resource dependencies for processing key changes".
+- **FR-PUB-15 (New):** The `PUT` request that publishes a key change SHALL include the target document's `id` in its body, matching the URL. Ed-Fi API v8 requires `id` in an update body and rejects a key change without it.
 
 ### FR-CHANGES: Change Query and Version Paging
 
@@ -133,7 +134,7 @@ When a long full publish fails or is stopped after hours of work, I want to cont
 
 ### NFR-COMPAT: Compatibility
 
-- **NFR-COMPAT-1 (Changed):** The publisher SHALL require the source and target APIs to be on the same Ed-Fi Data Standard version. Each end may be an Ed-Fi ODS/API or an Ed-Fi Data Management Service.
+- **NFR-COMPAT-1 (Changed):** The publisher SHALL require the source and target APIs to be on the same Ed-Fi Data Standard version. Each end may be an Ed-Fi ODS/API or Ed-Fi API v8 (DMS), in any combination. v1.4 is validated against Ed-Fi API v8.0.0 on Data Standard 5.2 and 6.1.
 - **NFR-COMPAT-2 (Changed):** The publisher SHALL target .NET 10 (LTS, supported through November 2028) in both the binaries and the Docker image.
 
 ### NFR-PERF: Performance
@@ -168,15 +169,17 @@ These changes can affect automation or operations that worked with v1.3:
 
 | Limitation | Detail | Resolution Status |
 | ---------- | ------ | ----------------- |
-| DMS support validation | End-to-end validation of publishing into a DMS target (Keycloak and self-contained authentication, change queries) is in progress under APIPUB-146. That ticket gates only the inclusion of DMS support: if it does not pass, DMS support moves to v1.5. | In progress. |
 | Resume scope | Only cursor-paged main resources from an ODS/API 7.3+ source are resumed. `/deletes`, `/keyChanges` and offset-paged reads are read in full. SQLite targets are not resumable, and both connections must be named. | By design. |
-| Target `429` responses | A `429 Too Many Requests` from the target on POST is not retried. Neither is a `429` on a token request. | No current timeline. |
+| Target `429` responses | A write answered with `429 Too Many Requests` is not retried: the document is reported as failed and the run exits `1`. Ed-Fi API v8.0.0 ships a rate limit of 5,000 requests per 10 seconds per host, which the publisher's default settings exceed, so a publish into a v8.0.0 target loses documents. The workaround is `--enableRateLimit=true --rateLimitNumberExecutions=400 --rateLimitTimeSeconds=1`. A `429` on a token request is not retried either. | Writes: planned for v1.5 (APIPUB-163). Token requests: no current timeline. |
+| Ed-Fi API v8.0.0 as a source: paging | Ed-Fi API v8.0.0 has no `/partitions` endpoint, so the publisher reads it with `offset`/`limit`, and a run from it cannot be resumed. | Depends on the API. |
+| Ed-Fi API v8.0.0 as a source: snapshots | Ed-Fi API v8.0.0 ignores `Use-Snapshot` and serves live data. The publisher does not check that a snapshot exists, so a run from a v8.0.0 source goes ahead without a warning and is not isolated from changes made during the run. | No ticket yet. |
 
 ### Deferred to v1.5
 
 - Non-blocking initialization of the Ed-Fi API client (APIPUB-147).
 - Regression harness automated in GitHub Actions (APIPUB-149).
 - NuGet lock files to pin transitive dependencies (APIPUB-152).
+- Retrying writes rejected with `429 Too Many Requests` (APIPUB-163).
 
 ## 7. Glossary Additions
 
@@ -184,14 +187,14 @@ These changes can affect automation or operations that worked with v1.3:
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Cursor Paging**      | An ODS/API 7.3+ paging mode that walks a resource with an opaque `pageToken` over partitions returned by `GET /{resource}/partitions`, instead of `offset`/`limit`. |
 | **Discovery Document** | The anonymous JSON document at an Ed-Fi API's root URL that declares its version and the URLs of its data management, change queries and `oauth` endpoints.        |
-| **DMS**                | The Ed-Fi Data Management Service, an implementation of the Ed-Fi API that serves data management resources under `data` rather than `data/v3`.                   |
+| **Ed-Fi API v8 (DMS)** | The Ed-Fi API as implemented by the Ed-Fi Data Management Service (DMS), released as v8.0.0. It serves data management resources under `data` rather than `data/v3`. |
 | **Run State**          | The local file (`--runStatePath`) holding the per-partition page tokens and change window that `--resumeLastRun` uses to continue a failed run.                    |
 
 ## 8. Traceability to Jira
 
 | Area                                 | Requirements                                              | Jira                                           |
 | ------------------------------------ | --------------------------------------------------------- | ---------------------------------------------- |
-| DMS alignment                        | JTBD 10, FR-CONN-7–9, NFR-SEC-5, NFR-COMPAT-1             | APIPUB-107, APIPUB-108, APIPUB-109, APIPUB-146 |
+| Ed-Fi API v8 alignment               | JTBD 10, FR-CONN-7–9, FR-PUB-15, NFR-SEC-5, NFR-COMPAT-1  | APIPUB-107, APIPUB-108, APIPUB-109, APIPUB-146, APIPUB-159, APIPUB-160 |
 | Run outcome and exit codes           | JTBD 9, FR-OUT-1–4, FR-PUB-8, NFR-OPS-5                   | APIPUB-120                                     |
 | Bearer token recovery                | FR-RETRY-3–5                                              | APIPUB-119                                     |
 | Busy source APIs                     | FR-RETRY-6–7                                              | APIPUB-140 (under APIPUB-135)                  |
