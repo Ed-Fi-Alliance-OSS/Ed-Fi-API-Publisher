@@ -25,21 +25,21 @@ For a walkthrough that sets up a local Ed-Fi ODS/API 7.3 sandbox and publishes i
 
 ### Use the API Publisher
 
-The API Publisher has three options to use the product.  The API Publisher requires [.NET 10.0](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) to run:
+The API Publisher has three options to use the product:
 
 #### Option 1 - From binaries
 
  1. Download the latest published API Publisher package here:  [Ed-Fi API Publisher v1.4.0](https://dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_artifacts/feed/EdFi/NuGet/EdFi.ApiPublisher/overview/1.4.0).  Visit the page and click download.
  2. This will download a NuGet package to your computer.  Rename this file, `EdFi.ApiPublisher.1.4.0.nupkg`, to include .zip extension: `EdFi.ApiPublisher.1.4.0.zip`.
- 3. The Windows binary is in the `EdFi.ApiPublisher.Win64` folder, as `EdFiApiPublisher.exe`.
+ 3. The package contains two folders: `EdFi.ApiPublisher.Win64` has `EdFiApiPublisher.exe` for Windows and includes the .NET runtime, so no separate installation is needed; `EdFi.ApiPublisher` runs on any operating system with `dotnet EdFiApiPublisher.dll` and requires the [.NET 10 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 
 #### Option 2 - From Docker images
 
-The Docker image for the Ed-Fi API Publisher is available here: [Ed-Fi API Publisher tag v1.4.0 on Docker Hub](https://hub.docker.com/r/edfialliance/ods-api-publisher/tags).  Use this to include in your Docker environment and alongside other components of the Ed-Fi stack.
+The Docker image for the Ed-Fi API Publisher is available here: [Ed-Fi API Publisher tag v1.4.0 on Docker Hub](https://hub.docker.com/r/edfialliance/ods-api-publisher/tags).  Use this to include in your Docker environment and alongside other components of the Ed-Fi stack. The image includes the .NET runtime.
 
 #### Option 3 - Build the API Publisher from source code
 
-If you would like to build the API Publisher from source, build the solution by running the following command from the repository's `src` directory:
+Building from source requires the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Build the solution by running the following command from the repository's `src` directory:
 
 `dotnet build`
 
