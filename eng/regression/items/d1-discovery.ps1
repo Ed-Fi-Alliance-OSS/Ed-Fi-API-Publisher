@@ -32,11 +32,14 @@ $run = New-RunFolder -Item $item -ArmName $armDef.Name -RunRoot $RunRoot
 $failures = New-FailureList
 Write-Host "Item $item DMS Discovery routing on arm $($armDef.Name) ($($armDef.Description)); publisher $($publisher.Label); run folder $run"
 
+# Arm D runs in the direction its arm-d.local.env profile sets; each side is named from its Discovery document, so
+# the result row says which direction ran.
+$direction = @(foreach ($url in $armDef.SourceUrl, $armDef.TargetUrl) { if ((Get-ApiUrls $url).IsDms) { 'DMS' } else { 'ODS/API' } }) -join ' -> '
 $target = Get-ApiUrls $armDef.TargetUrl
 Write-Host "  DMS Discovery: version $($target.Version); dataManagementApi $($target.DataManagementApi); oauth $($target.Oauth)"
 
 $result = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -Arguments @('--includeDescriptors=true') -LogLevel Debug
-Assert-Condition $failures ($result.ExitCode -eq 0) "the publish into the DMS exited with 0 (was $($result.ExitCode))"
+Assert-Condition $failures ($result.ExitCode -eq 0) "the publish ($direction) exited with 0 (was $($result.ExitCode))"
 
 $targetHost = ([uri] $armDef.TargetUrl).Authority
 $targetUrls = @(Select-String -Path $result.Log -Pattern "https?://$([regex]::Escape($targetHost))[^\s'`"\]\)]*" -AllMatches | ForEach-Object { $_.Matches.Value } | Sort-Object -Unique)
@@ -57,9 +60,9 @@ if (-not $target.DataManagementApi.Contains('/data/v3'))
 }
 
 $counts = Compare-Counts -Arm $armDef -Log $result.Log -ReportCsv (Join-Path $run 'counts.csv')
-Assert-Condition $failures ($counts.Mismatches.Count -eq 0) "counts match between the ODS source and the DMS ($($counts.Mismatches.Count) mismatch(es))"
+Assert-Condition $failures ($counts.Mismatches.Count -eq 0) "counts match between source and target ($($counts.Mismatches.Count) mismatch(es))"
 
-$notes = "DMS $($target.Version); dataManagementApi $($target.DataManagementApi)"
+$notes = "$direction; target $($target.Version); dataManagementApi $($target.DataManagementApi)"
 if ($Preliminary) { $notes = "PRELIMINARY (PR #174 not merged): $notes" }
 
 exit (Complete-Item -Item $item -Arm $armDef -ResultsFile $ResultsFile -Failures $failures -Counts $counts.Summary -Seconds $result.Seconds -Log $result.Log -Notes $notes)

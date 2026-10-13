@@ -32,6 +32,9 @@ Write-Host "Item $item full publish into the DMS on arm $($armDef.Name) ($($armD
 # The counts below only say something about this run if the DMS starts empty: earlier D items publish the same
 # source, and matching counts on their data would pass without this run having published anything.
 Reset-RegressionTarget $armDef
+# Arm D runs in the direction its arm-d.local.env profile sets; each side is named from its Discovery document, so
+# the result row says which direction ran.
+$direction = @(foreach ($url in $armDef.SourceUrl, $armDef.TargetUrl) { if ((Get-ApiUrls $url).IsDms) { 'DMS' } else { 'ODS/API' } }) -join ' -> '
 $sourceToken = Get-BearerToken $armDef.SourceUrl $armDef.SourceKey $armDef.SourceSecret
 $targetToken = Get-BearerToken $armDef.TargetUrl $armDef.TargetKey $armDef.TargetSecret
 $resources = Get-ApiResources $armDef.SourceUrl $sourceToken -ExcludeDescriptors
@@ -41,15 +44,15 @@ $notEmpty = @(foreach ($resource in $resources)
     if ($count -is [int] -and $count -gt 0) { "$resource ($count)" }
 })
 $notEmpty | Set-Content (Join-Path $run 'target-before.txt')
-Assert-Condition $failures ($notEmpty.Count -eq 0) "the DMS target started empty for the $($resources.Count) non-descriptor source resources ($($notEmpty.Count) not empty, first: $($notEmpty | Select-Object -First 3); set TARGET_RESET_COMMAND in arm-d.env, see arm-d-dms.md)"
+Assert-Condition $failures ($notEmpty.Count -eq 0) "the target started empty for the $($resources.Count) non-descriptor source resources ($($notEmpty.Count) not empty, first: $($notEmpty | Select-Object -First 3); set TARGET_RESET_COMMAND in arm-d.env, see arm-d-dms.md)"
 
 $result = Invoke-Publisher -Publisher $publisher -Arm $armDef -Arguments @('--includeDescriptors=true') -RunFolder $run
 Assert-Condition $failures ($result.ExitCode -eq 0) "the publish exited with 0 (was $($result.ExitCode))"
 Assert-Condition $failures (Test-LogContains $result.Log 'Publishing run summary') 'the log ends with the run summary'
 
 $counts = Compare-Counts -Arm $armDef -Log $result.Log -ReportCsv (Join-Path $run 'counts.csv')
-Assert-Condition $failures ($counts.Mismatches.Count -eq 0) "every streamed resource has the same count on the ODS source and the DMS ($($counts.Mismatches.Count) mismatch(es))"
-Assert-Condition $failures ($counts.TargetItems -gt 0) "the DMS received items ($($counts.TargetItems))"
+Assert-Condition $failures ($counts.Mismatches.Count -eq 0) "every streamed resource has the same count on source and target ($($counts.Mismatches.Count) mismatch(es))"
+Assert-Condition $failures ($counts.TargetItems -gt 0) "the target received items ($($counts.TargetItems))"
 
 $errors = Get-LogMatchCount $result.Log '\[(EROR|ERR)\]'
-exit (Complete-Item -Item $item -Arm $armDef -ResultsFile $ResultsFile -Failures $failures -Counts $counts.Summary -Seconds $result.Seconds -Log $result.Log -Notes "DMS target empty before the run for $($resources.Count - $notEmpty.Count) of $($resources.Count) resources; $errors error line(s) in the log")
+exit (Complete-Item -Item $item -Arm $armDef -ResultsFile $ResultsFile -Failures $failures -Counts $counts.Summary -Seconds $result.Seconds -Log $result.Log -Notes "$direction; target empty before the run for $($resources.Count - $notEmpty.Count) of $($resources.Count) resources; $errors error line(s) in the log")
