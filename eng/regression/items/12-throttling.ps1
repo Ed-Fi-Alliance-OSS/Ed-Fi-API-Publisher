@@ -20,7 +20,8 @@ param(
     [int] $RetryAfterSeconds = 3,
     [int] $FaultAfterSeconds = 15,
     [int] $FaultSeconds = 20,
-    [string] $ThrottledPattern = '/data/v3/ed-fi/.*'
+    # Default: every ed-fi resource below the source's data path (/data/v3 for an ODS/API, /api/data for a DMS).
+    [string] $ThrottledPattern
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +39,8 @@ Write-Host "Item $item source throttling on arm $($armDef.Name) ($($armDef.Descr
 Reset-RegressionTarget $armDef
 Reset-ProxyMappings $armDef
 Reset-ProxyJournal $armDef
+$dataPath = (Get-ProxySourcePaths $armDef).Data
+if (-not $ThrottledPattern) { $ThrottledPattern = "$dataPath/ed-fi/.*" }
 
 # A read is abandoned once its 429 retries run out (default: MaxRetryAttempts, 5), so the retry budget must outlast
 # the window: window / Retry-After plus a margin. With the default budget a 20 s window at 3 s exhausts reads.
@@ -65,7 +68,7 @@ if ($script:faultId -and -not $script:faultDone) { Disable-ProxyFault $armDef $s
 Assert-Condition $failures ($null -ne $script:faultId) "the run lasted long enough for the 429 window to start at ${FaultAfterSeconds}s (ran $($result.Seconds)s)"
 Assert-Condition $failures ($result.ExitCode -eq 0) "the run exited with 0 (was $($result.ExitCode))"
 
-$journal = Get-ProxyJournal $armDef '^/data/v3/'
+$journal = Get-ProxyJournal $armDef "^$([regex]::Escape($dataPath))/"
 $throttled = @($journal | Where-Object { $_.responseDefinition.status -eq 429 }).Count
 Assert-Condition $failures ($throttled -gt 0) "the source answered 429 during the window ($throttled responses)"
 

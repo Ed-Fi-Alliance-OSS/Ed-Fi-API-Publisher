@@ -36,8 +36,10 @@ Write-Host "Item $item exit code and error summary on arm $($armDef.Name) ($($ar
 Reset-RegressionTarget $armDef
 Reset-ProxyMappings $armDef
 Reset-ProxyJournal $armDef
+# /data/v3 for an ODS/API source, /api/data for a DMS source.
+$dataPath = (Get-ProxySourcePaths $armDef).Data
 
-$faultId = Enable-ProxyFault $armDef '500-window' -Replace @{ URL_PATTERN = "/data/v3$([regex]::Escape($FailingResource)).*" }
+$faultId = Enable-ProxyFault $armDef '500-window' -Replace @{ URL_PATTERN = "$dataPath$([regex]::Escape($FailingResource)).*" }
 try
 {
     $result = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -SourceUrl $armDef.ProxyUrl -Arguments @('--disableCursorPaging=true', '--includeDescriptors=true', '--maxRetryAttempts=2')
@@ -48,7 +50,7 @@ finally
 }
 
 Assert-Condition $failures ($result.ExitCode -in 1, 2) "the run exited non-zero with a documented code (was $($result.ExitCode); 1 = item errors, 2 = incomplete)"
-$injected = @(Get-ProxyJournal $armDef "^/data/v3$([regex]::Escape($FailingResource))" | Where-Object { $_.responseDefinition.status -eq 500 }).Count
+$injected = @(Get-ProxyJournal $armDef "^$([regex]::Escape($dataPath))$([regex]::Escape($FailingResource))" | Where-Object { $_.responseDefinition.status -eq 500 }).Count
 Assert-Condition $failures ($injected -gt 0) "the source answered 500 for $FailingResource ($injected responses)"
 Assert-Condition $failures (Test-LogContains $result.Log "\[(EROR|ERR|FATL)\].*$([regex]::Escape($FailingResource))") "an Error line names $FailingResource"
 # The summary is one multi-line entry under a "Publishing run summary" heading (not just any "summary": that word is

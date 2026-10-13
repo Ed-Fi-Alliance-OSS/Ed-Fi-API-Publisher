@@ -102,10 +102,12 @@ foreach ($scenario in ($Scenarios.Split(',') | ForEach-Object { $_.Trim() } | Wh
 
             # Every page read carries its window as minChangeVersion/maxChangeVersion; a small window size must give
             # several distinct windows, and change version paging runs on offset/limit, never on pageToken.
-            $pages = @(Get-ProxyJournal $armDef '^/data/v3/.*[?&]offset=' | Where-Object { $_.request.method -eq 'GET' })
+            # /data/v3 for an ODS/API source, /api/data for a DMS source.
+            $dataPattern = "^$([regex]::Escape((Get-ProxySourcePaths $armDef).Data))/"
+            $pages = @(Get-ProxyJournal $armDef "$dataPattern.*[?&]offset=" | Where-Object { $_.request.method -eq 'GET' })
             $pages | ForEach-Object { $_.request.url } | Set-Content (Join-Path $run 'changeversionpaging-page-urls.txt')
             $windows = @($pages | ForEach-Object { if ($_.request.url -match '[?&]minChangeVersion=(\d+).*[?&]maxChangeVersion=(\d+)') { "$($Matches[1])-$($Matches[2])" } } | Sort-Object -Unique)
-            $cursorReads = @(Get-ProxyJournal $armDef '^/data/v3/.*[?&]pageToken=').Count
+            $cursorReads = @(Get-ProxyJournal $armDef "$dataPattern.*[?&]pageToken=").Count
             Assert-Condition $failures ($windows.Count -gt 1) "ChangeVersionPaging: page reads span $($windows.Count) change version window(s) at window size $ChangeVersionWindowSize (more than 1 expected)"
             Assert-Condition $failures ($cursorReads -eq 0) "ChangeVersionPaging: no cursor page reads ($cursorReads)"
         }

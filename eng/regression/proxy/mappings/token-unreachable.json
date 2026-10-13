@@ -4,7 +4,7 @@
   "priority": 1,
   "request": {
     "method": "POST",
-    "urlPattern": "/oauth/token.*"
+    "urlPattern": "__TOKEN_PATH__.*"
   },
   "response": {
     "fault": "CONNECTION_RESET_BY_PEER"
