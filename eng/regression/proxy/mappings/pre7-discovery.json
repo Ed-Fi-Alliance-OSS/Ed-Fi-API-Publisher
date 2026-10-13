@@ -1,0 +1,31 @@
+{
+  "id": "a6200000-0000-4000-8000-000000000620",
+  "name": "regression harness (optional): Discovery document reporting ODS/API 6.2 so the pre-7 isolation branch runs",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "version": "6.2",
+      "informationalVersion": "6.2 (regression harness stub over a 7.x source)",
+      "suite": "3",
+      "build": "6.2.0.0",
+      "apiMode": "Sandbox",
+      "dataModels": [ { "name": "Ed-Fi", "version": "5.2.0", "informationalVersion": "stubbed by the regression harness" } ],
+      "urls": {
+        "dependencies": "__BASE_URL__metadata/data/v3/dependencies",
+        "openApiMetadata": "__BASE_URL__metadata/",
+        "oauth": "__BASE_URL__oauth/token",
+        "dataManagementApi": "__BASE_URL__data/v3/",
+        "xsdMetadata": "__BASE_URL__metadata/xsd",
+        "changeQueries": "__BASE_URL__changeQueries/v1/",
+        "composites": "__BASE_URL__composites/v1/",
+        "identity": "__BASE_URL__identity/v2/"
+      }
+    }
+  }
+}

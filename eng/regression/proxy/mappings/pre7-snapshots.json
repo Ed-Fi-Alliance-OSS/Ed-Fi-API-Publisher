@@ -1,0 +1,20 @@
+{
+  "id": "a6200000-0000-4000-8000-000000000621",
+  "name": "regression harness (optional): one available snapshot for the pre-7 snapshot-found path",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/changeQueries/v1/snapshots"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": [
+      {
+        "id": "8f0b6f7f-2222-4a5e-9d0c-000000000001",
+        "snapshotIdentifier": "regression-harness-snapshot",
+        "snapshotDateTime": "2026-09-24T00:00:00Z"
+      }
+    ]
+  }
+}

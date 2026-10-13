@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: Apache-2.0
+# Licensed to the Ed-Fi Alliance under one or more agreements.
+# The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
+# See the LICENSE and NOTICES files in the project root for more information.
+
+# Northridge source stack for the long runs (items 3 and 4). Source side only: the publisher's target is arm B's.
+#
+#   api-source  -> EdFi_Ods_Northridge on the HOST SQL Server (host.docker.internal:1433), published on 127.0.0.1:8001
+#   db-admin    EdFi_Admin + EdFi_Security on SQL Server Express, built from db-admin-mssql/ (no -mssql tag is published
+#               for ods-api-db-admin); bootstrap-northridge-mssql.sql adds the ODS instance and the API client
+#   swagger     optional (profile "swagger")
+#
+#   The Northridge backup has no 'changes' or 'tpdm' schema, so the API runs without the TPDM plugin and without
+#   Change Queries; the publisher reads it with --ignoreIsolation=true (the harness default).
+#
+#   ..\..\Start-NorthridgeSource.ps1      # restores the database on the host if needed, then does the compose up + bootstrap
+
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  db-admin:
+    build:
+      context: ./db-admin-mssql
+      dockerfile: Dockerfile
+      args:
+        ADMIN_VERSION: ${ADMIN_VERSION}
+        SECURITY_VERSION: ${SECURITY_VERSION}
+        STANDARD_VERSION: ${STANDARD_VERSION}
+        BASE_IMAGE: ${DB_ADMIN_BASE_IMAGE:-mcr.microsoft.com/mssql/server:2022-CU15-ubuntu-22.04@sha256:804e527187b16fe05c4321b58d76850966cbaf73e31942416ce0bbefe1b0eb63}
+    image: apipub-reg-northridge-db-admin:${ADMIN_VERSION}-${SECURITY_VERSION}
+    environment:
+      SQLSERVER_USER: ${SQLSERVER_USER}
+      SQLSERVER_PASSWORD: ${SQLSERVER_PASSWORD}
+      MSSQL_PID: Express
+    volumes:
+      - vol-db-admin-data:/var/opt/mssql/data
+      - vol-db-admin-log:/var/opt/mssql/log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -U ${SQLSERVER_USER} -P \"${SQLSERVER_PASSWORD}\" -d EdFi_Admin -Q \"SELECT 1\" > /dev/null || exit 1"]
+      start_period: "180s"
+      interval: 15s
+      retries: 20
+
+  api-source:
+    image: edfialliance/ods-api-web-api:${ODS_IMAGE_TAG}
+    environment:
+      SQLSERVER_USER: ${SQLSERVER_USER}
+      SQLSERVER_PASSWORD: ${SQLSERVER_PASSWORD}
+      SQLSERVER_ADMIN_DATASOURCE: db-admin
+      PATH_BASE: ""
+      TPDM_ENABLED: "false"
+      FeatureManagement__ChangeQueries: "false"
+      ODS_CONNECTION_STRING_ENCRYPTION_KEY: ${ODS_CONNECTION_STRING_ENCRYPTION_KEY}
+      ApiSettings__BearerTokenTimeoutMinutes: ${SOURCE_TOKEN_TIMEOUT_MINUTES:-30}
+      ApiSettings__BearerTokenPerClientLimit: ${BEARER_TOKEN_PER_CLIENT_LIMIT:-1000}
+    # Docker Desktop resolves this name to the host; the host-gateway alias gives a Linux engine the same name.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${LOGS_FOLDER:-./.logs}/${COMPOSE_PROJECT_NAME}/api-source:/app/logs
+    ports:
+      - "127.0.0.1:${NORTHRIDGE_PORT:-8001}:80"
+    depends_on:
+      db-admin:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --output-document=/dev/null http://localhost/health || exit 1"]
+      start_period: "90s"
+      interval: 15s
+      retries: 5
+
+  swagger:
+    image: edfialliance/ods-api-swaggerui:${ODS_IMAGE_TAG}
+    profiles: ["swagger"]
+    environment:
+      SAMPLE_KEY: ${NORTHRIDGE_KEY}
+      SAMPLE_SECRET: ${NORTHRIDGE_SECRET}
+      VERSION_URL: http://localhost:${NORTHRIDGE_PORT:-8001}
+    ports:
+      - "127.0.0.1:${NORTHRIDGE_SWAGGER_PORT:-8002}:80"
+    depends_on:
+      - api-source
+    restart: unless-stopped
+
+volumes:
+  vol-db-admin-data:
+  vol-db-admin-log:
