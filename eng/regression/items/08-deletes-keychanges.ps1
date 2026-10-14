@@ -77,11 +77,19 @@ $initial = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -
 $seconds += $initial.Seconds
 Assert-Condition $failures ($initial.ExitCode -eq 0) "initial full publish exited with 0 (was $($initial.ExitCode))"
 
+function Update-Tokens
+{
+    # A full publish into a DMS can outlast its 30-minute token, so every step after a publish takes fresh tokens.
+    $script:sourceToken = Get-BearerToken $armDef.SourceUrl $armDef.SourceKey $armDef.SourceSecret
+    $script:targetToken = Get-BearerToken $armDef.TargetUrl $armDef.TargetKey $armDef.TargetSecret
+}
+
 function Invoke-SourceEdit
 {
     # Deletes this round's calendar date and renames this round's class period on the source.
     param([int] $Round, $Documents)
 
+    Update-Tokens
     $edits = [pscustomobject]@{ CalendarDatesBefore = (Get-ResourceCount $armDef.TargetUrl $targetToken '/ed-fi/calendarDates'); OldName = $Documents.Period.Body.classPeriodName; NewName = "$($Documents.Period.Body.classPeriodName) renamed"; SchoolId = $Documents.Period.Body.schoolReference.schoolId }
 
     $delete = Invoke-Api -BaseUrl $armDef.SourceUrl -Token $sourceToken -Resource "/ed-fi/calendarDates/$($Documents.Date.Id)" -Method DELETE
@@ -89,6 +97,8 @@ function Invoke-SourceEdit
 
     $classPeriod = $Documents.Period.Body | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $classPeriod.classPeriodName = $edits.NewName
+    # A DMS requires the id in a PUT body; an ODS/API ignores it (the URL's id wins).
+    $classPeriod | Add-Member -NotePropertyName id -NotePropertyValue $Documents.Period.Id -Force
     $put = Invoke-Api -BaseUrl $armDef.SourceUrl -Token $sourceToken -Resource "/ed-fi/classPeriods/$($Documents.Period.Id)" -Method PUT -Body $classPeriod
     Assert-Condition $failures ([int] $put.StatusCode -in 200, 204) "round ${Round}: class period '$($edits.OldName)' re-keyed to '$($edits.NewName)' on the source (HTTP $($put.StatusCode))"
 
@@ -99,6 +109,7 @@ function Assert-TargetEdit
 {
     param([int] $Round, [string] $Leg, $Edits)
 
+    Update-Tokens
     $after = Get-ResourceCount $armDef.TargetUrl $targetToken '/ed-fi/calendarDates'
     Assert-Condition $failures ($after -is [int] -and $Edits.CalendarDatesBefore -is [int] -and $after -eq ($Edits.CalendarDatesBefore - 1)) "round ${Round} (${Leg}): the target lost exactly one calendar date ($($Edits.CalendarDatesBefore) -> $after)"
 
@@ -121,6 +132,7 @@ Assert-Condition $failures (-not (Test-LogContains $fullWithFlag.Log 'all values
 $round1Counts = Assert-TargetEdit -Round 1 -Leg 'full publish' -Edits $round1
 
 # Round 2: incremental publish from the change version recorded before this round's edits.
+Update-Tokens
 $before = Get-NewestChangeVersion $armDef.SourceUrl $sourceToken
 $round2 = Invoke-SourceEdit -Round 2 -Documents $created[1]
 $incremental = Invoke-Publisher -Publisher $publisher -Arm $armDef -RunFolder $run -LogName 'incremental.log' -Arguments @('--disableCursorPaging=true', "--lastChangeVersionProcessed=$before")

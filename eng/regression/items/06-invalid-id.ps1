@@ -49,6 +49,8 @@ $literals = @{
 }
 
 Reset-ProxyMappings $armDef
+# /data/v3 for an ODS/API source, /api/data for a DMS source.
+$dataPath = (Get-ProxySourcePaths $armDef).Data
 
 # The runs go through the PostgreSQL configuration store (as in item 10) because the plainText store never records a
 # change version: only a store that does can show that a run with an unpublishable document did not advance it.
@@ -108,7 +110,7 @@ foreach ($shape in ($Shapes.Split(',') | ForEach-Object { $_.Trim().ToLowerInvar
         $problems += "$shape -> " + (($errorLine.Line -replace '^.*index 1 ', '') -replace ' and will not be published.*$', '').Trim('"')
         $offset = $errorLine.Matches[0].Groups[1].Value
         $limit = $errorLine.Matches[0].Groups[2].Value
-        $served = @(Get-ProxyJournal $armDef "^/data/v3/ed-fi/educationContents\?.*offset=$offset&limit=$limit")
+        $served = @(Get-ProxyJournal $armDef "^$([regex]::Escape($dataPath))/ed-fi/educationContents\?.*offset=$offset&limit=$limit")
         Assert-Condition $failures ($served.Count -ge 1) "[$shape] the locator (offset $offset, limit $limit) matches a request the proxy served"
     }
 

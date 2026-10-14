@@ -3,7 +3,7 @@
   "name": "regression harness: 401 for one specific bearer token (item 4)",
   "priority": 1,
   "request": {
-    "urlPattern": "/data/v3/.*",
+    "urlPattern": "__DATA_PATH__/.*",
     "headers": {
       "Authorization": { "equalTo": "__AUTHORIZATION__" }
     }

@@ -103,7 +103,7 @@ foreach ($scenario in ($Scenarios.Split(',') | ForEach-Object { $_.Trim() } | Wh
             if ($script:faultId) { Disable-ProxyFault $armDef $script:faultId }
             $seconds += $result.Seconds
             Assert-Condition $failures ($null -ne $script:faultId) "the run lasted long enough for the token to be invalidated at ${FaultAfterSeconds}s (ran $($result.Seconds)s)"
-            $rejected = @(Get-ProxyJournal $armDef '^/data/v3/' | Where-Object { $_.responseDefinition.status -eq 401 }).Count
+            $rejected = @(Get-ProxyJournal $armDef "^$([regex]::Escape((Get-ProxySourcePaths $armDef).Data))/" | Where-Object { $_.responseDefinition.status -eq 401 }).Count
             Assert-Condition $failures ($rejected -gt 0) "the source rejected the invalidated token ($rejected x 401)"
             Assert-Condition $failures (Test-LogContains $result.Log 'rejected as unauthorized by the .* API\. Re-acquiring the bearer token and replaying') 'a 401 was reported and the request replayed with a fresh token'
             Assert-Condition $failures (Test-LogContains $result.Log 'Re-acquiring bearer token for .* API client after an unauthorized response') 'a new token was acquired after the 401'

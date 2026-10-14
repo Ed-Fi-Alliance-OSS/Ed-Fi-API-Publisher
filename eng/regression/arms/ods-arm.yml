@@ -133,11 +133,15 @@ services:
     # mappings reset from the item scripts restores it instead of dropping it. --preserve-host-header keeps the
     # Host the publisher used (localhost:<PROXY_PORT> or proxy:8080), so the URLs the ODS writes into its Discovery
     # document point back through the proxy and Discovery-based routing (APIPUB-108) does not bypass the faults.
-    # The journal is what proves the in-flight cap (item 12).
+    # The journal is what proves the in-flight cap (item 12). Response bodies are kept up to 8 KB: the journal only
+    # reads the /partitions bodies (a cut one falls back to the looser page-count check), and on a Northridge run
+    # (about 21,000 pages of up to 1 MB) whole pages filled the Docker VM's memory and a 64 KB cap still made the
+    # journal too large for WireMock to return (500 on /__admin/requests).
     command: >-
       --preserve-host-header
       --disable-banner
       --max-request-journal-entries=1000000
+      --logged-response-body-size-limit=8192
     # PROXY_FORWARD_URL (a Northridge long run) forwards to the host; this name resolves on Linux engines too.
     extra_hosts:
       - "host.docker.internal:host-gateway"
