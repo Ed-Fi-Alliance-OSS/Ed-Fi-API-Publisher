@@ -9,6 +9,8 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+    <!-- Not used by this project's code. It pins the Pkcs version that Microsoft.Data.SqlClient would
+         otherwise bring in; see Directory.Packages.props for why and for when to remove it. -->
     <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
   <ItemGroup>
