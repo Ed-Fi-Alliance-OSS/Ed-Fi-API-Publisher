@@ -13,7 +13,7 @@ v1.4 has four themes:
 
 | Theme                      | Summary                                                                                                                                                                      |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Ed-Fi API v8 alignment** | Either end of a publish may be Ed-Fi API v8 (the Ed-Fi Data Management Service, DMS) as well as an Ed-Fi ODS/API, in all four combinations. The publisher takes the paths and the token endpoint from each API's Discovery document instead of assuming them. |
+| **Ed-Fi API v8 alignment** | Either end of a publish may be Ed-Fi API v8 or Ed-Fi ODS/API, in all four combinations. The publisher takes the paths and the token endpoint from each API's Discovery document instead of assuming them. |
 | **Reliable run outcome**   | A run that lost documents no longer exits `0`. Exit codes distinguish the kinds of failure, and every run prints a per-resource summary. An expired bearer token is recovered from instead of silently voiding the rest of the run. |
 | **Scale and memory**       | Cursor paging with partitions, resumable runs, bounded internal buffers, streamed page parsing, and more considerate behavior against a busy source API. |
 | **Platform**               | .NET 10 (LTS) for the binaries and the Docker image. .NET 8 reaches end of support on November 10, 2026.                                                                    |
