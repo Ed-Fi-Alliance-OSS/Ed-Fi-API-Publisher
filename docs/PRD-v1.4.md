@@ -46,7 +46,7 @@ When adopting Ed-Fi API v8, I want to load data into it from an existing ODS/API
 
 When a long full publish fails or is stopped after hours of work, I want to continue from where it stopped, so that I do not re-read everything that already reached the target.
 
-**How API Publisher Helps**: Against an ODS/API 7.3+ source, the publisher records, for each partition, the last page whose documents all reached the target. `--resumeLastRun=true` continues from that point and replays the original run's change window.
+**How API Publisher Helps**: Against a source that supports cursor paging (FR-CHG-5), the publisher records, for each partition, the last page whose documents all reached the target. `--resumeLastRun=true` continues from that point and replays the original run's change window.
 
 ### Changed
 
@@ -66,7 +66,7 @@ When a long full publish fails or is stopped after hours of work, I want to cont
 
 ### FR-CHANGES: Change Query and Version Paging
 
-- **FR-CHG-5 (New):** Against an ODS/API 7.3+ source, the publisher SHALL read main resources with partitioned cursor paging (`GET /{resource}/partitions`, `pageToken`/`pageSize`, `Next-Page-Token`). Support SHALL be detected automatically, and `--disableCursorPaging` SHALL force `offset`/`limit`. `/deletes` and `/keyChanges` SHALL always use `offset`/`limit`.
+- **FR-CHG-5 (New):** Against a source API that serves `/partitions`, such as ODS/API 7.3+, the publisher SHALL read main resources with partitioned cursor paging, reading the partitions in parallel. Support SHALL be detected automatically, and `--disableCursorPaging` SHALL force `offset`/`limit` paging. Deletes and key changes SHALL always be read with `offset`/`limit`.
 - **FR-CHG-6 (New):** The publisher SHALL request a configurable number of partitions per resource via `--cursorPagingPartitionCount` (1..200). The default is `--maxDegreeOfParallelismForStreamResourcePages`, capped at 200, the API maximum.
 - **FR-CHG-7 (New):** For each cursor-paged resource and partition, the publisher SHALL persist the last page token whose documents all reached the target, together with the run's change window. This lets `--resumeLastRun` continue a failed run without re-reading the pages before that point. A page that lost a document SHALL NOT be treated as completed. State SHALL be kept in a local file whose path is configurable via `--runStatePath`, and SHALL be removed by a run that loses no documents.
 
@@ -89,7 +89,7 @@ When a long full publish fails or is stopped after hours of work, I want to cont
 ### FR-RETRY: Resilience and Retry
 
 - **FR-RETRY-3 (Changed):** The publisher SHALL periodically refresh bearer tokens before expiry, configurable via `--bearerTokenRefreshMinutes` (the shipped settings set 28 minutes). When the API reports the token's lifetime, the interval SHALL be capped at half of that lifetime.
-- **FR-RETRY-4 (New):** A failed token refresh SHALL be retried on a short backoff (5 seconds, doubling, capped at 60 seconds) while the current token is still usable. Once the token has expired, or when the API reports no lifetime, five consecutive failures SHALL end the run with a `FATAL` log entry. The run SHALL NOT keep sending requests the API will reject.
+- **FR-RETRY-4 (New):** A failed token refresh SHALL be retried with increasing backoff while the current token is still usable. Once the token has expired, or when the API reports no lifetime, repeated consecutive failures SHALL end the run with a `FATAL` log entry. The run SHALL NOT keep sending requests the API will reject.
 - **FR-RETRY-5 (New):** When the API responds `401 Unauthorized`, the request SHALL wait while the token is re-acquired and SHALL then be sent again.
 - **FR-RETRY-6 (New):** A source read rejected with `429 Too Many Requests` SHALL be retried after the wait given in the `Retry-After` header. When that header is absent or cannot be read, it SHALL be retried after exponential backoff. The number of attempts SHALL be configurable via `--tooManyRequestsRetryAttempts`: the default `-1` follows `--maxRetryAttempts`, and `0` restores the earlier behavior of failing on the first rejection. A `429` from the target API SHALL be reported on the first response, as before.
 - **FR-RETRY-7 (New):** The publisher SHALL optionally cap the number of requests in flight against the source API, counted across all resources, via `--maxConcurrentSourceRequests` (default `0`, uncapped).
@@ -137,9 +137,9 @@ When a long full publish fails or is stopped after hours of work, I want to cont
 
 ### NFR-PERF: Performance
 
-- **NFR-PERF-3 (New):** Peak memory under cursor paging SHALL NOT exceed that of the `offset`/`limit` path at the same `StreamingPageSize`. Partitions are streamed page by page through the bounded item buffer.
-- **NFR-PERF-4 (New):** The resource-processing and error-publishing buffers SHALL be bounded, so that a slow target applies backpressure to source page streaming instead of letting memory grow without limit. The bound is configured via `--processingBlockBoundedCapacity`: `0` (the default) sizes it automatically, `-1` disables it as a rollback lever, and a positive number sets an explicit item capacity. The bound SHALL also apply to the authorization-failure retry pass.
-- **NFR-PERF-5 (New):** Pages read from an API source SHALL be parsed in a single forward-only pass, one document at a time, without buffering the whole page as a string. The SQLite connector is exempt because it stores whole pages.
+- **NFR-PERF-3 (New):** Peak memory when reading with cursor paging SHALL NOT exceed peak memory when reading the same source with `offset`/`limit` paging at the same `--streamingPageSize`.
+- **NFR-PERF-4 (New):** Memory use SHALL remain bounded regardless of source size or page count. This includes runs where the target accepts documents more slowly than the source serves them, and resources configured for authorization-failure handling. A slower target SHALL slow reading from the source rather than increase memory use. The bound SHALL be configurable via `--processingBlockBoundedCapacity`, which can also disable it.
+- **NFR-PERF-5 (New):** The memory needed to read a page from an API source SHALL NOT grow with the size of the whole page, so that resources with large documents do not need proportionally more memory.
 - **NFR-PERF-6 (New):** Memory SHALL stay stable over a long run against a large resource, including in cloud environments that use server GC.
 
 ### NFR-OPS: Operations
@@ -157,7 +157,7 @@ These changes can affect automation or operations that worked with v1.3:
 | Authentication failure mid-run | A run that can no longer authenticate now ends with a non-zero exit code, where it used to continue and exit `0`. | FR-RETRY-4 |
 | `429` on source reads | These reads are now waited out and retried, so a run against a busy source can take longer before it succeeds or fails. `--tooManyRequestsRetryAttempts=0` restores the earlier behavior. | FR-RETRY-6 |
 | Paths from the Discovery document | Paths are no longer assumed. An ODS/API is unaffected because it declares the same `data/v3` path the publisher used before. | FR-CONN-7, FR-CONN-8 |
-| Cursor paging on ODS/API 7.3+ | Cursor paging is on by default when the source supports it. It adds one request per resource, which can make sources made up of small resources slightly slower. `--disableCursorPaging=true` restores `offset`/`limit`. | FR-CHG-5 |
+| Cursor paging on sources that support it | Cursor paging is on by default when the source supports it. It adds one request per resource, which can make sources made up of small resources slightly slower. `--disableCursorPaging=true` restores `offset`/`limit`. | FR-CHG-5 |
 | Authorization-failure default | The shipped default now targets Data Standard 5.x (`/ed-fi/contacts`). Sources on Data Standard 4.0 or earlier need the `/ed-fi/parents` entry. | FR-AUTH-4 |
 | Runtime | The framework-dependent build now requires the .NET 10 runtime. The self-contained Windows build carries its own runtime, and the Docker image has moved to a .NET 10 base. | NFR-COMPAT-2 |
 
@@ -167,7 +167,7 @@ These changes can affect automation or operations that worked with v1.3:
 
 | Limitation | Detail | Resolution Status |
 | ---------- | ------ | ----------------- |
-| Resume scope | Only cursor-paged main resources from an ODS/API 7.3+ source are resumed. `/deletes`, `/keyChanges` and offset-paged reads are read in full. SQLite targets are not resumable, and both connections must be named. | By design. |
+| Resume scope | Only cursor-paged main resources are resumed, so a source without `/partitions`, such as Ed-Fi API v8.0.0, cannot be resumed. `/deletes`, `/keyChanges` and offset-paged reads are read in full. SQLite targets are not resumable, and both connections must be named. | By design. |
 | Target `429` responses | A write answered with `429 Too Many Requests` is not retried: the document is reported as failed and the run exits `1`. Ed-Fi API v8.0.0 ships a rate limit of 5,000 requests per 10 seconds per host, which the publisher's default settings exceed, so a publish into a v8.0.0 target loses documents. The workaround is `--enableRateLimit=true --rateLimitNumberExecutions=400 --rateLimitTimeSeconds=1`. A `429` on a token request is not retried either. | Writes: planned for v1.5 (APIPUB-163). Token requests: no current timeline. |
 | Ed-Fi API v8.0.0 as a source: paging | Ed-Fi API v8.0.0 has no `/partitions` endpoint, so the publisher reads it with `offset`/`limit`, and a run from it cannot be resumed. | Depends on the API. |
 | Ed-Fi API v8.0.0 as a source: snapshots | Ed-Fi API v8.0.0 ignores `Use-Snapshot` and serves live data. The publisher does not check that a snapshot exists, so a run from a v8.0.0 source goes ahead without a warning and is not isolated from changes made during the run. | No ticket yet. |
@@ -183,7 +183,7 @@ These changes can affect automation or operations that worked with v1.3:
 
 | Term                   | Definition                                                                                                                                                         |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Cursor Paging**      | An ODS/API 7.3+ paging mode that walks a resource with an opaque `pageToken` over partitions returned by `GET /{resource}/partitions`, instead of `offset`/`limit`. |
+| **Cursor Paging**      | An Ed-Fi API paging mode, available on ODS/API 7.3+ and on Ed-Fi API v8 builds that serve `/partitions`, that walks a resource with an opaque `pageToken` over partitions returned by `GET /{resource}/partitions`, instead of `offset`/`limit`. |
 | **Discovery Document** | The anonymous JSON document at an Ed-Fi API's root URL that declares its version and the URLs of its data management, change queries and `oauth` endpoints.        |
 | **Ed-Fi API v8 (DMS)** | The Ed-Fi API as implemented by the Ed-Fi Data Management Service (DMS), released as v8.0.0. It serves data management resources under `data` rather than `data/v3`. |
 | **Run State**          | The local file (`--runStatePath`) holding the per-partition page tokens and change window that `--resumeLastRun` uses to continue a failed run.                    |
