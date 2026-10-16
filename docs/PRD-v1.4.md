@@ -1,10 +1,8 @@
 # Ed-Fi API Publisher v1.4 Product Requirements Document
 
-> **Status:** draft \
-> **Release:** v1.4 (Jira release "API Publisher v1.4", target date 2026-10-14) \
-> **Jira Epic:** APIPUB-115 \
-> **Jira Project:** APIPUB \
-> **Repository:** `Ed-Fi-Alliance-OSS/Ed-Fi-API-Publisher` \
+> **Status:** published \
+> **Owner:** Steven Arnold \
+> **Release:** v1.4 \
 > **Baseline:** [PRD.md](PRD.md)
 
 This document describes only what v1.4 changes. Everything in the baseline [PRD.md](PRD.md) still applies unless a requirement here changes it. Requirement IDs continue the baseline's numbering, so each ID refers to one requirement across both documents. Each requirement is marked **New** (not in the baseline) or **Changed** (replaces the baseline requirement with the same ID).
