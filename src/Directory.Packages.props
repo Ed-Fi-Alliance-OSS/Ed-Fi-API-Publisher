@@ -63,7 +63,7 @@
          only project that references SqlClient, and it references this package directly so that this version
          wins over the one it would otherwise inherit. Once a SqlClient release depends on a patched Pkcs,
          remove this entry and that reference. -->
-    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="9.0.21" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.13" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.12" />
   </ItemGroup>
